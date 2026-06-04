@@ -718,6 +718,12 @@
     clearBtn.addEventListener('click', () => {
         balls = [];
         foods = [];
+        // Remove extra ducks, keep only the original yellow duck
+        ducks = [ducks[0]];
+        friendBtn.textContent = '🐥 Add Friend';
+        friendBtn.style.background = '';
+        draggedDuck = null;
+        dragTargetLimb = null;
         for (const d of ducks) {
             d.mutations.fat = 1.0;
             d.mutations.muscle = 1.0;
@@ -3221,12 +3227,15 @@
         const globalSquashY = ducks[0].squash.y;
 
         // Show/hide clear reset button
-        const hasMutations = Math.abs(duckMutations.currentFat - 1.0) > 0.05 || 
-                             Math.abs(duckMutations.currentMuscle - 1.0) > 0.05 || 
-                             duckMutations.currentEnergy > 0.05 ||
-                             duckMutations.currentGum > 0.05;
+        const hasMutations = ducks.some(d =>
+            Math.abs(d.mutations.currentFat - 1.0) > 0.05 ||
+            Math.abs(d.mutations.currentMuscle - 1.0) > 0.05 ||
+            d.mutations.currentEnergy > 0.05 ||
+            d.mutations.currentGum > 0.05
+        );
+        const hasFriends = ducks.length > 1;
         const hasWeapon = currentTool === 'freeze' || taserArmed || flameArmed || fanActive || frozenTimeRemaining > 0;
-        if (balls.length > 0 || foods.length > 0 || hasMutations || hasWeapon) {
+        if (balls.length > 0 || foods.length > 0 || hasMutations || hasWeapon || hasFriends) {
             clearBtn.style.display = 'block';
         } else {
             clearBtn.style.display = 'none';
