@@ -647,8 +647,9 @@
         currentTool = 'hand'; canvas.style.cursor = 'crosshair';
         freezeWeaponBtn.style.background = '';
         taserActive = false; taserTimer = 0; taserWeaponBtn.style.background = '';
-        flameActive = false; flameTimer = 0; flameDuckX = 0; flameWeaponBtn.style.background = '';
+        flameActive = false; flameArmed = false; flameShooting = false; flameTimer = 0; flameDuckX = 0; flameWeaponBtn.style.background = '';
         frozenTimeRemaining = 0;
+        taserArmed = false; taserShooting = false; taserOnDuck = false;
     });
 
     // Party Balls & Food States
@@ -3453,24 +3454,25 @@
             flameDuckOffsetX = 0;
         }
 
-        // Giant Fan logic — angle-based wind force on duck
-        let fanOffsetY = 0, fanOffsetX = 0;
+        // Giant Fan logic — apply physics force to each duck
         if (fanActive && fanAnchored) {
-            const duckScreenX2 = width / 2 + physics.x;
-            const duckScreenY2 = height / 2 + 50 + physics.y;
             const windDx = Math.cos(fanAngle);
             const windDy = Math.sin(fanAngle);
-            const toDuckDx = duckScreenX2 - fanX;
-            const toDuckDy = duckScreenY2 - fanY;
-            const dist = Math.hypot(toDuckDx, toDuckDy) || 1;
-            const dot = (toDuckDx / dist) * windDx + (toDuckDy / dist) * windDy;
-            const inStream = Math.max(0, dot);
-            const gravity = parseFloat(gravitySlider.value) / 100;
-            const windStr = 110 * inStream;
-            fanHoverX += (windDx * windStr - fanHoverX) * 0.04;
-            fanHoverY += (windDy * windStr * (1 - gravity * 0.55) - fanHoverY) * 0.04;
-            fanOffsetX = fanHoverX;
-            fanOffsetY = fanHoverY;
+            const gravityPct = parseFloat(gravitySlider.value) / 100;
+            // Moon float (gravityPct~0) = strong blow-away; Heavy (gravityPct~1) = barely moves
+            const windStrength = 1.8 * (1 - gravityPct * 0.85);
+            for (const d of ducks) {
+                const dsx = width / 2 + d.physics.x;
+                const dsy = height / 2 + 50 + d.physics.y;
+                const toDx = dsx - fanX, toDy = dsy - fanY;
+                const dist = Math.hypot(toDx, toDy) || 1;
+                const dot = (toDx / dist) * windDx + (toDy / dist) * windDy;
+                const inStream = Math.max(0, dot);
+                if (inStream > 0.1 && !d.physics.isDragging) {
+                    d.physics.vx += windDx * windStrength * inStream;
+                    d.physics.vy += windDy * windStrength * inStream;
+                }
+            }
             for (let i = 0; i < 3; i++) {
                 const spread = (Math.random() - 0.5) * 30;
                 const perpX = -windDy * spread, perpY = windDx * spread;
@@ -3481,11 +3483,6 @@
                     life: 1.0, size: 4 + Math.random() * 9
                 });
             }
-        } else {
-            fanHoverX += (0 - fanHoverX) * 0.06;
-            fanHoverY += (0 - fanHoverY) * 0.06;
-            fanOffsetX = fanHoverX;
-            fanOffsetY = fanHoverY;
         }
 
         if (!isFrozen) {
@@ -3686,7 +3683,7 @@
             const shakeX = taserActive ? (Math.random()-0.5)*26 : 0;
             const shakeY = taserActive ? (Math.random()-0.5)*26 : 0;
             ctx.save();
-            ctx.translate(shakeX + flameDuckOffsetX + (d.fanOffsetX||0), shakeY + (d.fanOffsetY||0));
+            ctx.translate(shakeX + flameDuckOffsetX, shakeY);
             drawDuck(d, duckTime, isFrozen, taserActive, flameActive);
             ctx.restore();
         }
