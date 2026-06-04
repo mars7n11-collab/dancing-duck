@@ -378,6 +378,7 @@
         </div>
         
         <div class="flex gap-3 items-center pointer-events-auto">
+            <button id="fightModeBtn" class="bg-button">🥊 Fight!</button>
             <button id="skateModeBtn" class="bg-button">🛹 Skate Mode</button>
             <button id="bgBtn" class="bg-button">🌍 Scene: Club</button>
         </div>
@@ -1710,6 +1711,9 @@
         );
         
         ctx.rotate(bodyRot + globalTransform.physicsRot + mv.extraBodyRot);
+
+        // Fighting mode: mirror duck to face opponent
+        if (duck.fighter && !duck.fighter.facingRight) ctx.scale(-1, 1);
 
         // PROCEDURAL DUCK
         let legTuck = 0;
@@ -3286,6 +3290,24 @@
             return;
         }
 
+        if (isFightingMode) {
+            updateFight(dt, now);
+            drawBackground(now);
+            drawFightArena();
+            duckTime += dt * 0.4;
+            for (const d of ducks) {
+                const dFrozen = d.fighter && d.fighter.state === 'hitstun';
+                ctx.save();
+                drawDuck(d, duckTime, dFrozen, false, false);
+                ctx.restore();
+            }
+            drawFightFireballs();
+            drawFightHUD(now);
+            if (fightWinner) drawWinScreen();
+            requestAnimationFrame(animate);
+            return;
+        }
+
         const cx = width / 2;
         const cy = height / 2 + 50;
 
@@ -3742,6 +3764,357 @@
 
     // Start Loop
     requestAnimationFrame(animate);
+
+    // =============================================
+    // FIGHTING MODE
+    // =============================================
+    const FIGHT = {
+        FLOOR: 80, WALL_L: -360, WALL_R: 360,
+        SPEED: 3.5, JUMP: -14, GRAV: 0.55,
+        PUNCH_RANGE: 95, KICK_RANGE: 115,
+        PUNCH_DMG: 7, KICK_DMG: 12, FIREBALL_DMG: 25,
+        SPECIAL_COST: 35, SP_GAIN_DEAL: 8, SP_GAIN_RECV: 14,
+        HITSTUN_MS: 380, ATTACK_MS: 280, ROUND_SEC: 99,
+    };
+
+    let isFightingMode = false;
+    let fightWinner = null;
+    let fightRoundMs = FIGHT.ROUND_SEC * 1000;
+    let fightFireballs = [];
+
+    const p1In = {left:false,right:false,jump:false,crouch:false,punch:false,kick:false,special:false};
+    const p2In = {left:false,right:false,jump:false,crouch:false,punch:false,kick:false,special:false};
+    const P1_MAP = {KeyA:'left',KeyD:'right',KeyW:'jump',KeyS:'crouch',KeyF:'punch',KeyG:'kick',KeyQ:'special'};
+    const P2_MAP = {ArrowLeft:'left',ArrowRight:'right',ArrowUp:'jump',ArrowDown:'crouch',
+                    Numpad1:'punch',Numpad3:'kick',Numpad0:'special'};
+
+    function initFighter(duck, startX, facingRight) {
+        duck.fighter = {
+            hp: 100, maxHp: 100, sp: 0,
+            state: 'idle', stateEnd: 0, facingRight,
+            vy: 0, grounded: true, invincible: 0,
+            attackLanded: false, jumpPressed: false,
+        };
+        duck.physics.x = startX; duck.physics.y = -FIGHT.FLOOR;
+        duck.physics.vx = 0; duck.physics.vy = 0;
+        for (const k in duck.limbs) { duck.limbs[k].ox=0; duck.limbs[k].oy=0; duck.limbs[k].vx=0; duck.limbs[k].vy=0; }
+    }
+
+    function startFightMode() {
+        isFightingMode = true;
+        fightWinner = null;
+        fightRoundMs = FIGHT.ROUND_SEC * 1000;
+        fightFireballs = [];
+        while (ducks.length < 2) ducks.push(createDuck(DUCK_COLORS.blue, 0, 0));
+        while (ducks.length > 2) ducks.pop();
+        ducks[0].color = DUCK_COLORS.yellow;
+        ducks[1].color = DUCK_COLORS.blue;
+        initFighter(ducks[0], -150, true);
+        initFighter(ducks[1],  150, false);
+        document.querySelector('.controls').style.display = 'none';
+        document.getElementById('fightModeBtn').textContent = '🏃 Exit Fight';
+        document.getElementById('fightModeBtn').style.background = 'rgba(239,68,68,0.35)';
+        canvas.style.cursor = 'default';
+        currentTool = 'hand'; isShooting = false;
+    }
+
+    function stopFightMode() {
+        isFightingMode = false;
+        ducks.forEach(d => { delete d.fighter; });
+        if (ducks.length > 1) { ducks.splice(1); friendBtn.textContent='🐥 Add Friend'; friendBtn.style.background=''; }
+        document.querySelector('.controls').style.display = '';
+        document.getElementById('fightModeBtn').textContent = '🥊 Fight!';
+        document.getElementById('fightModeBtn').style.background = '';
+        canvas.style.cursor = 'grab';
+    }
+
+    document.getElementById('fightModeBtn').addEventListener('click', () => {
+        if (isFightingMode) stopFightMode(); else startFightMode();
+    });
+
+    function applyDamage(duck, dmg, attackerIdx) {
+        const f = duck.fighter;
+        if (f.invincible > 0 || f.state === 'ko') return;
+        f.hp = Math.max(0, f.hp - dmg);
+        f.sp = Math.min(100, f.sp + FIGHT.SP_GAIN_RECV);
+        if (dmg > 1) {
+            f.state = 'hitstun'; f.stateEnd = performance.now() + FIGHT.HITSTUN_MS;
+            f.invincible = FIGHT.HITSTUN_MS * 0.6;
+        }
+        const dir = duck.physics.x > ducks[attackerIdx].physics.x ? 1 : -1;
+        duck.physics.x = Math.max(FIGHT.WALL_L+45, Math.min(FIGHT.WALL_R-45, duck.physics.x + dir*18));
+    }
+
+    function updateFighter(duck, input, opponent, now) {
+        const f = duck.fighter;
+        if (f.state === 'ko') return;
+        if (f.invincible > 0) f.invincible -= 16;
+
+        if (['punch','kick','special','hitstun'].includes(f.state) && now >= f.stateEnd) {
+            f.state = 'idle'; f.attackLanded = false;
+        }
+
+        const canAct = ['idle','walk','crouch'].includes(f.state);
+        const canActAir = f.state === 'jump';
+
+        // Horizontal movement
+        if (canAct || canActAir) {
+            let dx = 0;
+            if (input.left) dx -= FIGHT.SPEED;
+            if (input.right) dx += FIGHT.SPEED;
+            if (dx !== 0) {
+                duck.physics.x = Math.max(FIGHT.WALL_L+45, Math.min(FIGHT.WALL_R-45, duck.physics.x + dx));
+                if (canAct) f.state = 'walk';
+            } else if (canAct) {
+                f.state = input.crouch ? 'crouch' : 'idle';
+            }
+        }
+
+        // Jump
+        if (input.jump && f.grounded && !f.jumpPressed && canAct) {
+            f.vy = FIGHT.JUMP; f.grounded = false; f.state = 'jump'; f.jumpPressed = true;
+        }
+        if (!input.jump) f.jumpPressed = false;
+
+        // Gravity
+        if (!f.grounded) {
+            f.vy += FIGHT.GRAV;
+            duck.physics.y += f.vy;
+            if (duck.physics.y >= -FIGHT.FLOOR) {
+                duck.physics.y = -FIGHT.FLOOR; f.vy = 0; f.grounded = true;
+                if (f.state === 'jump') f.state = 'idle';
+            }
+        }
+
+        // Attacks
+        if (canAct || canActAir) {
+            if (input.punch && !['punch','kick','special'].includes(f.state)) {
+                f.state = 'punch'; f.stateEnd = now + FIGHT.ATTACK_MS; f.attackLanded = false;
+            } else if (input.kick && !['punch','kick','special'].includes(f.state)) {
+                f.state = 'kick'; f.stateEnd = now + FIGHT.ATTACK_MS; f.attackLanded = false;
+            } else if (input.special && f.sp >= FIGHT.SPECIAL_COST && !['punch','kick','special'].includes(f.state)) {
+                f.state = 'special'; f.stateEnd = now + FIGHT.ATTACK_MS + 100; f.attackLanded = false;
+                f.sp -= FIGHT.SPECIAL_COST;
+                const dir = f.facingRight ? 1 : -1;
+                fightFireballs.push({ x: duck.physics.x + dir*65, y: duck.physics.y - 10,
+                    vx: dir * FIGHT.FIREBALL_SPEED, owner: ducks.indexOf(duck), life: 2500,
+                    angle: 0 });
+            }
+        }
+
+        // Melee hit detection
+        if (['punch','kick'].includes(f.state) && !f.attackLanded) {
+            const range = f.state === 'punch' ? FIGHT.PUNCH_RANGE : FIGHT.KICK_RANGE;
+            const dir = f.facingRight ? 1 : -1;
+            const hitX = duck.physics.x + dir * range * 0.55;
+            const oppF = opponent.fighter;
+            if (oppF && oppF.state !== 'ko' && oppF.invincible <= 0) {
+                const dist = Math.abs(hitX - opponent.physics.x);
+                if (dist < range * 0.5 + 35) {
+                    const blocking = oppF.state === 'crouch';
+                    const dmg = blocking ? 1 : (f.state === 'punch' ? FIGHT.PUNCH_DMG : FIGHT.KICK_DMG);
+                    applyDamage(opponent, dmg, ducks.indexOf(duck));
+                    f.sp = Math.min(100, f.sp + FIGHT.SP_GAIN_DEAL);
+                    f.attackLanded = true;
+                }
+            }
+        }
+
+        // Push apart
+        const sep = duck.physics.x - opponent.physics.x;
+        if (Math.abs(sep) < 75) {
+            const push = (75 - Math.abs(sep)) / 2;
+            duck.physics.x += sep > 0 ? push : -push;
+            opponent.physics.x += sep > 0 ? -push : push;
+        }
+
+        // Face opponent
+        if (!['hitstun','ko'].includes(f.state)) {
+            f.facingRight = duck.physics.x < opponent.physics.x;
+        }
+
+        // Animate limbs for fight moves
+        const prog = f.stateEnd > 0 ? Math.min(1, Math.max(0, 1-(f.stateEnd-now)/FIGHT.ATTACK_MS)) : 0;
+        const ext = Math.sin(prog * Math.PI);
+        if (f.state === 'punch') {
+            duck.limbs.wingR.ox = ext * 85; duck.limbs.wingR.oy = -5;
+            duck.limbs.wingL.ox = -ext * 15;
+        } else if (f.state === 'kick') {
+            duck.limbs.footR.ox = ext * 75; duck.limbs.footR.oy = -35;
+        } else if (f.state === 'special') {
+            duck.limbs.wingL.ox = -25; duck.limbs.wingR.ox = -25;
+            duck.limbs.wingL.oy = 10; duck.limbs.wingR.oy = 10;
+        } else if (f.state === 'hitstun') {
+            duck.limbs.wingL.ox=(Math.random()-.5)*50; duck.limbs.wingL.oy=(Math.random()-.5)*50;
+            duck.limbs.wingR.ox=(Math.random()-.5)*50; duck.limbs.wingR.oy=(Math.random()-.5)*50;
+        }
+    }
+
+    function updateFight(dt, now) {
+        if (fightWinner) return;
+        fightRoundMs -= dt;
+        if (fightRoundMs <= 0) {
+            fightRoundMs = 0;
+            const p1=ducks[0].fighter, p2=ducks[1].fighter;
+            fightWinner = p1.hp > p2.hp ? 'P1' : p2.hp > p1.hp ? 'P2' : 'DRAW';
+            return;
+        }
+        updateFighter(ducks[0], p1In, ducks[1], now);
+        updateFighter(ducks[1], p2In, ducks[0], now);
+
+        for (let i = fightFireballs.length-1; i >= 0; i--) {
+            const fb = fightFireballs[i];
+            fb.x += fb.vx; fb.life -= dt; fb.angle += 0.15;
+            if (fb.life <= 0 || fb.x < FIGHT.WALL_L || fb.x > FIGHT.WALL_R) { fightFireballs.splice(i,1); continue; }
+            const target = ducks[1 - fb.owner];
+            const tf = target.fighter;
+            if (tf && tf.state !== 'ko' && tf.invincible <= 0 && Math.abs(fb.x - target.physics.x) < 55) {
+                applyDamage(target, FIGHT.FIREBALL_DMG, fb.owner);
+                fightFireballs.splice(i, 1);
+            }
+        }
+
+        for (const d of ducks) {
+            if (d.fighter && d.fighter.hp <= 0 && d.fighter.state !== 'ko') {
+                d.fighter.state = 'ko';
+                fightWinner = d === ducks[0] ? 'P2' : 'P1';
+            }
+        }
+    }
+
+    function drawFightArena() {
+        const floorScreenY = height/2 + 50 - FIGHT.FLOOR + 55;
+        ctx.fillStyle = 'rgba(10,5,30,0.7)';
+        ctx.fillRect(0, floorScreenY, width, height - floorScreenY);
+        // Glowing floor line
+        const grad = ctx.createLinearGradient(0, floorScreenY, 0, floorScreenY+4);
+        grad.addColorStop(0, 'rgba(99,102,241,0.9)');
+        grad.addColorStop(1, 'rgba(99,102,241,0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, floorScreenY, width, 6);
+        // Wall shadows
+        const wallLX = width/2 + FIGHT.WALL_L, wallRX = width/2 + FIGHT.WALL_R;
+        ctx.fillStyle = 'rgba(99,102,241,0.15)';
+        ctx.fillRect(wallLX-3, 80, 3, floorScreenY-80);
+        ctx.fillRect(wallRX, 80, 3, floorScreenY-80);
+    }
+
+    function drawFightFireballs() {
+        for (const fb of fightFireballs) {
+            const sx = width/2 + fb.x, sy = height/2 + 50 + fb.y - 20;
+            ctx.save();
+            ctx.translate(sx, sy);
+            // Rotating spiky fireball
+            for (let s = 0; s < 6; s++) {
+                ctx.save(); ctx.rotate(fb.angle + s * Math.PI/3);
+                ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,-22);
+                ctx.strokeStyle = `hsla(${30+s*8},100%,65%,0.6)`; ctx.lineWidth=3; ctx.lineCap='round'; ctx.stroke();
+                ctx.restore();
+            }
+            const grd = ctx.createRadialGradient(0,0,0,0,0,26);
+            grd.addColorStop(0,'rgba(255,230,100,0.95)');
+            grd.addColorStop(0.4,'rgba(255,100,20,0.7)');
+            grd.addColorStop(1,'rgba(255,50,0,0)');
+            ctx.beginPath(); ctx.arc(0,0,26,0,Math.PI*2); ctx.fillStyle=grd; ctx.fill();
+            ctx.beginPath(); ctx.arc(0,0,10,0,Math.PI*2); ctx.fillStyle='#fffbeb'; ctx.fill();
+            // Trail
+            for (let t=1; t<=4; t++) {
+                ctx.globalAlpha = 0.3/t;
+                ctx.beginPath(); ctx.arc(-fb.vx*t*2.5, 0, 10-t*1.5, 0, Math.PI*2);
+                ctx.fillStyle=`hsl(${20+t*5},100%,55%)`; ctx.fill();
+            }
+            ctx.restore();
+        }
+    }
+
+    function drawFightHUD(now) {
+        if (!isFightingMode) return;
+        const p1=ducks[0].fighter, p2=ducks[1].fighter;
+        if (!p1 || !p2) return;
+        const barW=Math.min(300, width*0.28), barH=22, spH=9, m=18;
+
+        // P1 health
+        ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.beginPath(); ctx.roundRect(m,m,barW,barH,6); ctx.fill();
+        const p1c = p1.hp>50?'#22c55e':p1.hp>25?'#eab308':'#ef4444';
+        ctx.fillStyle=p1c; ctx.beginPath(); ctx.roundRect(m,m,barW*(p1.hp/100),barH,6); ctx.fill();
+        ctx.strokeStyle='rgba(255,255,255,0.2)'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.roundRect(m,m,barW,barH,6); ctx.stroke();
+        ctx.fillStyle='#fde047'; ctx.font='bold 12px "Segoe UI"'; ctx.textAlign='left';
+        ctx.fillText('P1 🦆', m+5, m+15);
+
+        // P1 special
+        ctx.fillStyle='rgba(0,0,0,0.4)'; ctx.fillRect(m, m+barH+4, barW*0.7, spH);
+        ctx.fillStyle=p1.sp>=FIGHT.SPECIAL_COST?'#818cf8':'rgba(129,140,248,0.45)';
+        ctx.fillRect(m, m+barH+4, barW*0.7*(p1.sp/100), spH);
+        if (p1.sp>=FIGHT.SPECIAL_COST) {
+            ctx.fillStyle='#a5b4fc'; ctx.font='bold 8px "Segoe UI"'; ctx.textAlign='left';
+            ctx.fillText('✨ SPECIAL  [Q]', m, m+barH+4+spH+10);
+        }
+
+        // P2 health (right-aligned, fills left)
+        ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.beginPath(); ctx.roundRect(width-m-barW,m,barW,barH,6); ctx.fill();
+        const p2c = p2.hp>50?'#22c55e':p2.hp>25?'#eab308':'#ef4444';
+        const p2FillW = barW*(p2.hp/100);
+        ctx.fillStyle=p2c; ctx.beginPath(); ctx.roundRect(width-m-p2FillW,m,p2FillW,barH,6); ctx.fill();
+        ctx.strokeStyle='rgba(255,255,255,0.2)'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.roundRect(width-m-barW,m,barW,barH,6); ctx.stroke();
+        ctx.fillStyle='#93c5fd'; ctx.font='bold 12px "Segoe UI"'; ctx.textAlign='right';
+        ctx.fillText('🐥 P2', width-m-5, m+15);
+
+        // P2 special
+        const sp2X = width-m-barW*0.7;
+        ctx.fillStyle='rgba(0,0,0,0.4)'; ctx.fillRect(sp2X, m+barH+4, barW*0.7, spH);
+        ctx.fillStyle=p2.sp>=FIGHT.SPECIAL_COST?'#fbbf24':'rgba(251,191,36,0.45)';
+        const sp2FillW = barW*0.7*(p2.sp/100);
+        ctx.fillRect(sp2X+barW*0.7-sp2FillW, m+barH+4, sp2FillW, spH);
+        if (p2.sp>=FIGHT.SPECIAL_COST) {
+            ctx.fillStyle='#fde68a'; ctx.font='bold 8px "Segoe UI"'; ctx.textAlign='right';
+            ctx.fillText('[NUM0]  ✨ SPECIAL', width-m, m+barH+4+spH+10);
+        }
+
+        // Timer
+        const sec = Math.ceil(fightRoundMs/1000);
+        ctx.fillStyle = sec<=10?'#ef4444':'white';
+        ctx.font = 'bold 30px "Segoe UI"'; ctx.textAlign='center';
+        ctx.shadowBlur=10; ctx.shadowColor='rgba(0,0,0,0.5)';
+        ctx.fillText(sec, width/2, m+22);
+        ctx.shadowBlur=0;
+        ctx.fillStyle='rgba(255,255,255,0.25)'; ctx.font='bold 10px "Segoe UI"';
+        ctx.fillText('VS', width/2, m+barH+14);
+
+        // Controls hint
+        ctx.fillStyle='rgba(255,255,255,0.2)'; ctx.font='8px "Segoe UI"';
+        ctx.textAlign='left'; ctx.fillText('WASD move · F punch · G kick · Q special', m, m+barH+4+spH+22);
+        ctx.textAlign='right'; ctx.fillText('Arrows move · Num1 punch · Num3 kick · Num0 special', width-m, m+barH+4+spH+22);
+    }
+
+    function drawWinScreen() {
+        if (!fightWinner) return;
+        ctx.save();
+        ctx.fillStyle='rgba(0,0,0,0.7)'; ctx.fillRect(0,0,width,height);
+        ctx.textAlign='center';
+        ctx.font='bold 70px "Segoe UI"'; ctx.fillStyle='#fde047';
+        ctx.shadowBlur=40; ctx.shadowColor='#f59e0b';
+        ctx.fillText(fightWinner==='DRAW'?'DRAW!':`${fightWinner} WINS! 🏆`, width/2, height/2-10);
+        ctx.shadowBlur=0;
+        ctx.font='20px "Segoe UI"'; ctx.fillStyle='rgba(255,255,255,0.65)';
+        ctx.fillText('Enter to rematch  ·  Escape to exit', width/2, height/2+45);
+        ctx.restore();
+    }
+
+    // Fight mode keydown/keyup
+    window.addEventListener('keydown', e => {
+        if (!isFightingMode) return;
+        if (P1_MAP[e.code]) { p1In[P1_MAP[e.code]] = true; e.preventDefault(); }
+        if (P2_MAP[e.code]) { p2In[P2_MAP[e.code]] = true; e.preventDefault(); }
+        if (fightWinner) {
+            if (e.code === 'Enter') { startFightMode(); }
+            if (e.code === 'Escape') { stopFightMode(); }
+        }
+    }, true);
+    window.addEventListener('keyup', e => {
+        if (!isFightingMode) return;
+        if (P1_MAP[e.code]) p1In[P1_MAP[e.code]] = false;
+        if (P2_MAP[e.code]) p2In[P2_MAP[e.code]] = false;
+    }, true);
 
     // =============================================
     // MUSIC PLAYER
