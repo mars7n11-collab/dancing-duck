@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dancing Duck Widget</title>
+    <title>Dancing Duck 🦆</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
@@ -718,10 +718,12 @@
     clearBtn.addEventListener('click', () => {
         balls = [];
         foods = [];
-        duckMutations.fat = 1.0;
-        duckMutations.muscle = 1.0;
-        duckMutations.energy = 0.0;
-        duckMutations.gum = 0.0;
+        for (const d of ducks) {
+            d.mutations.fat = 1.0;
+            d.mutations.muscle = 1.0;
+            d.mutations.energy = 0.0;
+            d.mutations.gum = 0.0;
+        }
         // Deactivate all weapons
         currentTool = 'hand';
         isShooting = false;
