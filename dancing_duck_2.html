@@ -1609,8 +1609,8 @@
         const duckYellow = lerpColor(baseYellow, duck.color.gum,      duckMutations.currentGum);
         const duckOrange = lerpColor(baseOrange, duck.color.gumOrange, duckMutations.currentGum);
         
-        // --- Torso Physics Update ---
-        if (!physics.isDragging) {
+        // --- Torso Physics Update (skipped in fight mode — fighter handles it) ---
+        if (!physics.isDragging && !isFightingMode) {
             // Apply bounciness modifier for gum
             let currentGravity = gravityValue;
             physics.vy += currentGravity; 
@@ -3800,13 +3800,12 @@
         for (const k in duck.limbs) { duck.limbs[k].ox=0; duck.limbs[k].oy=0; duck.limbs[k].vx=0; duck.limbs[k].vy=0; }
     }
 
-    const FIGHT_HIDE = () => [
-        document.querySelector('.left-controls'),
-        document.querySelector('.controls'),
-        document.getElementById('skateModeBtn'),
-        document.getElementById('bgBtn'),
-        document.querySelector('.top-bar').parentElement.querySelector('div[style*="left:24px"]'),
-    ].filter(Boolean);
+    // Floating exit button shown only during fight mode
+    const fightExitBtn = document.createElement('button');
+    fightExitBtn.textContent = '🏃 Exit Fight';
+    fightExitBtn.style.cssText = 'display:none;position:fixed;top:72px;left:50%;transform:translateX(-50%);z-index:9999;background:rgba(239,68,68,0.35);border:2px solid rgba(239,68,68,0.6);color:white;padding:6px 18px;border-radius:16px;cursor:pointer;font-weight:700;font-size:12px;backdrop-filter:blur(8px);';
+    fightExitBtn.addEventListener('click', stopFightMode);
+    document.body.appendChild(fightExitBtn);
 
     function startFightMode() {
         isFightingMode = true;
@@ -3819,9 +3818,12 @@
         ducks[1].color = DUCK_COLORS.blue;
         initFighter(ducks[0], -150, true);
         initFighter(ducks[1],  150, false);
-        FIGHT_HIDE().forEach(el => el.style.display = 'none');
-        document.getElementById('fightModeBtn').textContent = '🏃 Exit Fight';
-        document.getElementById('fightModeBtn').style.background = 'rgba(239,68,68,0.35)';
+        document.querySelector('.top-bar').style.display = 'none';
+        document.querySelector('.controls').style.display = 'none';
+        document.querySelector('#canvas-container > div[style*="left:24px"]') &&
+            (document.querySelector('#canvas-container > div[style*="left:24px"]').style.display = 'none');
+        fightExitBtn.style.display = '';
+        document.getElementById('fightModeBtn').textContent = '🥊 Fight!';
         canvas.style.cursor = 'default';
         currentTool = 'hand'; isShooting = false;
     }
@@ -3830,7 +3832,11 @@
         isFightingMode = false;
         ducks.forEach(d => { delete d.fighter; });
         if (ducks.length > 1) { ducks.splice(1); friendBtn.textContent='🐥 Add Friend'; friendBtn.style.background=''; }
-        FIGHT_HIDE().forEach(el => el.style.display = '');
+        document.querySelector('.top-bar').style.display = '';
+        document.querySelector('.controls').style.display = '';
+        document.querySelector('#canvas-container > div[style*="left:24px"]') &&
+            (document.querySelector('#canvas-container > div[style*="left:24px"]').style.display = '');
+        fightExitBtn.style.display = 'none';
         document.getElementById('fightModeBtn').textContent = '🥊 Fight!';
         document.getElementById('fightModeBtn').style.background = '';
         canvas.style.cursor = 'grab';
