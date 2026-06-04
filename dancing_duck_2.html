@@ -882,6 +882,17 @@
         return { x: rx * cos - ry * sin, y: rx * sin + ry * cos };
     }
 
+    // Module-scope helper so pointerUp and animate can both use it
+    function closestDuck(px, py) {
+        const cxg = width / 2, cyg = height / 2 + 50;
+        let best = ducks[0], bestDist = Infinity;
+        for (const d of ducks) {
+            const dist = Math.hypot(px - (cxg + d.physics.x), py - (cyg + d.physics.y - 30));
+            if (dist < bestDist) { bestDist = dist; best = d; }
+        }
+        return { duck: best, dist: bestDist };
+    }
+
     function pointerDown(e) {
         if (isSkateMode) return;
         const p = getPointerPos(e);
@@ -1013,7 +1024,10 @@
         if (fanDraggingAngle) { fanDraggingAngle = false; return; }
         if (currentTool === 'freeze' && isShooting) {
             isShooting = false;
-            if (freezeCharge > 300) frozenTimeRemaining = Math.min(4000, freezeCharge * 1.5);
+            if (freezeCharge > 300 && lastPointer) {
+                const { duck: fd } = closestDuck(lastPointer.x, lastPointer.y);
+                fd.frozenTimeRemaining = Math.min(4000, freezeCharge * 1.5);
+            }
         } else if (taserShooting) {
             taserShooting = false; taserOnDuck = false;
         } else if (flameShooting) {
@@ -3270,7 +3284,18 @@
 
         const cx = width / 2;
         const cy = height / 2 + 50;
-        // Weapon targeting uses duck[0] as primary target
+
+        // Reset per-duck weapon states each frame
+        for (const d of ducks) {
+            d.taserActive = false;
+            d.flameActive = false;
+            if (d.frozenTimeRemaining > 0) {
+                d.frozenTimeRemaining -= dt;
+                if (d.frozenTimeRemaining <= 0) d.frozenTimeRemaining = 0;
+            }
+        }
+
+        // Backward-compat refs (still used for particle targeting etc.)
         const physics = ducks[0].physics;
         const duckScreenX = cx + physics.x;
         const duckScreenY = cy + physics.y - 30;
@@ -3326,50 +3351,47 @@
             }
         }
 
-        // Freeze calculations
-        if (isShooting) {
+        // Freeze ray — target closest duck to cursor
+        let freezeTargetDuck = null;
+        if (isShooting && lastPointer) {
+            const { duck: fd, dist: fdist } = closestDuck(lastPointer.x, lastPointer.y);
+            freezeTargetDuck = fd;
             freezeCharge += dt;
-            for(let i=0; i<3; i++) {
+            const ftx = cx + fd.physics.x, fty = cy + fd.physics.y - 30;
+            for (let i = 0; i < 3; i++) {
                 rayParticles.push({
                     x: lastPointer.x + (Math.random()-0.5)*20,
                     y: lastPointer.y + (Math.random()-0.5)*20,
-                    vx: (duckScreenX - lastPointer.x) * 0.05 + (Math.random()-0.5)*25,
-                    vy: (duckScreenY - lastPointer.y) * 0.05 + (Math.random()-0.5)*25,
+                    vx: (ftx - lastPointer.x) * 0.05 + (Math.random()-0.5)*25,
+                    vy: (fty - lastPointer.y) * 0.05 + (Math.random()-0.5)*25,
                     life: 1.0
                 });
             }
+            // Keep target duck frozen while shooting
+            if (freezeCharge > 300) fd.frozenTimeRemaining = 200;
         } else {
-            if (frozenTimeRemaining > 0) {
-                frozenTimeRemaining -= dt;
-                if (frozenTimeRemaining <= 0) { frozenTimeRemaining = 0; freezeCharge = 0; }
-            } else {
-                freezeCharge = 0;
-            }
+            freezeCharge = 0;
         }
-        const isFrozen = (isShooting && freezeCharge > 0) || frozenTimeRemaining > 0;
 
-        // Taser logic — only zaps when tip is on the duck
-        let taserShakeX = 0, taserShakeY = 0;
+        // Taser logic — zaps whichever duck the tip touches
         if (taserArmed && lastPointer) {
-            // Check if taser tip (cursor) is touching the duck body
-            const taserDist = Math.hypot(lastPointer.x - duckScreenX, lastPointer.y - duckScreenY);
-            taserOnDuck = taserShooting && taserDist < 90;
-
-            if (taserOnDuck) {
-                taserActive = true;
-                // Violent shake proportional to contact
-                taserShakeX = (Math.random()-0.5) * 26;
-                taserShakeY = (Math.random()-0.5) * 26;
-                for (let i = 0; i < 2; i++) {
-                    taserParticles.push({
-                        x: duckScreenX + (Math.random()-0.5)*70,
-                        y: duckScreenY - 60 - Math.random()*100,
-                        vx: (Math.random()-0.5)*6, vy: -2 - Math.random()*4,
-                        life: 1.0, size: 3 + Math.random()*5
-                    });
+            taserOnDuck = false;
+            if (taserShooting) {
+                for (const d of ducks) {
+                    const tsx = cx + d.physics.x, tsy = cy + d.physics.y - 30;
+                    if (Math.hypot(lastPointer.x - tsx, lastPointer.y - tsy) < 90) {
+                        d.taserActive = true;
+                        taserOnDuck = true;
+                        for (let i = 0; i < 2; i++) {
+                            taserParticles.push({
+                                x: tsx + (Math.random()-0.5)*70,
+                                y: tsy - 60 - Math.random()*100,
+                                vx: (Math.random()-0.5)*6, vy: -2 - Math.random()*4,
+                                life: 1.0, size: 3 + Math.random()*5
+                            });
+                        }
+                    }
                 }
-            } else {
-                taserActive = false;
             }
 
             // Draw taser device at cursor
@@ -3420,32 +3442,28 @@
             taserActive = false;
         }
 
-        // Flamethrower logic — active while holding, shoots flame from cursor toward duck
+        // Flamethrower logic — targets closest duck to cursor
         let flameDuckOffsetX = 0;
         if (flameArmed && lastPointer) {
-            flameActive = flameShooting;
+            const { duck: flameTgt } = closestDuck(lastPointer.x, lastPointer.y);
+            const ftx = cx + flameTgt.physics.x, fty = cy + flameTgt.physics.y - 30;
             if (flameShooting) {
                 flameTimer = FLAME_DURATION;
-                // Duck runs left-right frantically
-                flameDuckX += Math.sin(now * 0.012) * 5;
-                flameDuckX = Math.max(-width * 0.3, Math.min(width * 0.3, flameDuckX));
-                flameDuckOffsetX = flameDuckX;
-                // Spawn flame particles from cursor streaming toward duck
+                flameTgt.flameActive = true;
+                flameTgt.flameDuckX = (flameTgt.flameDuckX || 0) + Math.sin(now * 0.012) * 5;
+                flameTgt.flameDuckX = Math.max(-width * 0.3, Math.min(width * 0.3, flameTgt.flameDuckX));
                 for (let i = 0; i < 5; i++) {
                     const t2 = Math.random();
                     flameParticles.push({
-                        x: lastPointer.x + (duckScreenX - lastPointer.x) * t2 * 0.5 + (Math.random()-0.5)*20,
-                        y: lastPointer.y + (duckScreenY - lastPointer.y) * t2 * 0.5 + (Math.random()-0.5)*20,
-                        vx: (duckScreenX - lastPointer.x) * 0.02 + (Math.random()-0.5)*3,
-                        vy: (duckScreenY - lastPointer.y) * 0.02 - 2 - Math.random()*3,
-                        life: 1.0,
-                        hue: 10 + Math.random() * 40,
-                        size: 10 + Math.random() * 18
+                        x: lastPointer.x + (ftx - lastPointer.x) * t2 * 0.5 + (Math.random()-0.5)*20,
+                        y: lastPointer.y + (fty - lastPointer.y) * t2 * 0.5 + (Math.random()-0.5)*20,
+                        vx: (ftx - lastPointer.x) * 0.02 + (Math.random()-0.5)*3,
+                        vy: (fty - lastPointer.y) * 0.02 - 2 - Math.random()*3,
+                        life: 1.0, hue: 10 + Math.random() * 40, size: 10 + Math.random() * 18
                     });
                 }
             } else {
-                flameDuckX += (0 - flameDuckX) * 0.05;
-                flameDuckOffsetX = flameDuckX;
+                if (flameTgt.flameDuckX) flameTgt.flameDuckX += (0 - flameTgt.flameDuckX) * 0.05;
             }
             // Draw crosshair at cursor for flamethrower
             ctx.save();
@@ -3467,7 +3485,8 @@
             ctx.globalAlpha = 1;
             ctx.restore();
         } else if (!flameArmed) {
-            flameActive = false; flameDuckX = 0;
+            // Weapon disarmed — clear per-duck flame state
+            for (const d of ducks) { d.flameActive = false; d.flameDuckX = 0; }
             flameDuckOffsetX = 0;
         }
 
@@ -3502,7 +3521,7 @@
             }
         }
 
-        if (!isFrozen) {
+        if (!ducks.some(d => d.frozenTimeRemaining > 0)) {
             const speedUpMultiplier = 1.0 + (duckMutations.currentEnergy * 1.5);
             duckTime += dt * speedUpMultiplier;
         }
@@ -3695,13 +3714,17 @@
             }
         }
 
-        // Draw each duck
+        // Draw each duck using per-duck weapon state
         for (const d of ducks) {
-            const shakeX = taserActive ? (Math.random()-0.5)*26 : 0;
-            const shakeY = taserActive ? (Math.random()-0.5)*26 : 0;
+            const dFrozen = d.frozenTimeRemaining > 0;
+            const dTased  = d.taserActive;
+            const dOnFire = d.flameActive;
+            const shakeX  = dTased ? (Math.random()-0.5)*26 : 0;
+            const shakeY  = dTased ? (Math.random()-0.5)*26 : 0;
+            const offsetX = d.flameDuckX || 0;
             ctx.save();
-            ctx.translate(shakeX + flameDuckOffsetX, shakeY);
-            drawDuck(d, duckTime, isFrozen, taserActive, flameActive);
+            ctx.translate(shakeX + offsetX, shakeY);
+            drawDuck(d, duckTime, dFrozen, dTased, dOnFire);
             ctx.restore();
         }
         
