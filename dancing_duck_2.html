@@ -437,36 +437,38 @@
     </div>
 </div>
 
-<!-- Music Player — outside canvas-container so the canvas never intercepts its pointer events -->
-<button id="musicToggleTab" onclick="window.toggleMusicPlayer()" style="position:fixed;bottom:calc(30px + var(--music-player-height, 0px));right:48px;background:rgba(15,23,42,0.95);border:1px solid rgba(255,255,255,0.2);color:#a5b4fc;cursor:pointer;padding:6px 14px;border-radius:10px 10px 0 0;font-size:12px;font-weight:700;letter-spacing:0.5px;z-index:9999;">🎵 Music Player ▼</button>
-<div id="musicPlayer">
-    <div id="musicHeader">
-        <span style="font-size:13px;font-weight:700;color:#a5b4fc;">🎵 Music Player</span>
-        <div style="display:flex;gap:6px;align-items:center;">
-            <span id="vizToggleBtn" class="mc-btn" title="Let music drive duck intensity" style="font-size:10px;width:auto;border-radius:8px;padding:2px 8px;">🦆 Drive</span>
+<!-- Music Player wrapper — fixed column so tab always sits flush on top of the panel -->
+<div id="musicWrapper" style="position:fixed;bottom:30px;right:24px;display:flex;flex-direction:column;align-items:stretch;z-index:9999;">
+    <button id="musicToggleTab" onclick="window.toggleMusicPlayer()" style="background:rgba(15,23,42,0.95);border:1px solid rgba(255,255,255,0.2);border-bottom:none;color:#a5b4fc;cursor:pointer;padding:6px 14px;border-radius:10px 10px 0 0;font-size:12px;font-weight:700;letter-spacing:0.5px;align-self:flex-start;">🎵 Music Player ▼</button>
+    <div id="musicPlayer" style="position:static;bottom:auto;right:auto;">
+        <div id="musicHeader">
+            <span style="font-size:13px;font-weight:700;color:#a5b4fc;">🎵 Music Player</span>
+            <div style="display:flex;gap:6px;align-items:center;">
+                <span id="vizToggleBtn" class="mc-btn" title="Let music drive duck intensity" style="font-size:10px;width:auto;border-radius:8px;padding:2px 8px;">🦆 Drive</span>
+            </div>
         </div>
-    </div>
-    <div id="musicBody">
-        <canvas id="vizCanvas" height="96"></canvas>
-        <div id="trackName">No track loaded</div>
-        <div id="progressBar"><div id="progressFill"></div></div>
-        <div class="music-controls">
-            <button class="mc-btn" id="shuffleBtn" title="Shuffle">⇄</button>
-            <button class="mc-btn" id="prevBtn" title="Previous">⏮</button>
-            <button class="mc-btn play-btn" id="playBtn" title="Play/Pause">▶</button>
-            <button class="mc-btn" id="nextBtn" title="Next">⏭</button>
-            <button class="mc-btn" id="repeatBtn" title="Repeat">↺</button>
+        <div id="musicBody">
+            <canvas id="vizCanvas" height="96"></canvas>
+            <div id="trackName">No track loaded</div>
+            <div id="progressBar"><div id="progressFill"></div></div>
+            <div class="music-controls">
+                <button class="mc-btn" id="shuffleBtn" title="Shuffle">⇄</button>
+                <button class="mc-btn" id="prevBtn" title="Previous">⏮</button>
+                <button class="mc-btn play-btn" id="playBtn" title="Play/Pause">▶</button>
+                <button class="mc-btn" id="nextBtn" title="Next">⏭</button>
+                <button class="mc-btn" id="repeatBtn" title="Repeat">↺</button>
+            </div>
+            <div id="volumeRow">
+                <span style="font-size:12px;">🔈</span>
+                <input type="range" id="volumeSlider" min="0" max="100" value="80">
+                <span style="font-size:12px;">🔊</span>
+            </div>
+            <div id="playlist"></div>
+            <label id="uploadLabel" for="musicUpload">
+                ➕ Add music files (MP3 / WAV / OGG)
+                <input type="file" id="musicUpload" accept="audio/*" multiple style="display:none;">
+            </label>
         </div>
-        <div id="volumeRow">
-            <span style="font-size:12px;">🔈</span>
-            <input type="range" id="volumeSlider" min="0" max="100" value="80">
-            <span style="font-size:12px;">🔊</span>
-        </div>
-        <div id="playlist"></div>
-        <label id="uploadLabel" for="musicUpload">
-            ➕ Add music files (MP3 / WAV / OGG)
-            <input type="file" id="musicUpload" accept="audio/*" multiple style="display:none;">
-        </label>
     </div>
 </div>
 
@@ -3756,22 +3758,13 @@
 
     // Collapse / expand via the floating tab button above the panel
     const musicToggleTab = document.getElementById('musicToggleTab');
-    const musicPlayerEl  = document.getElementById('musicPlayer');
     let collapsed = false;
 
     window.toggleMusicPlayer = function() {
         collapsed = !collapsed;
         musicBody.classList.toggle('collapsed', collapsed);
         musicToggleTab.textContent = collapsed ? '🎵 Music Player ▲' : '🎵 Music Player ▼';
-        // Keep tab flush against top of panel
-        const h = collapsed ? 0 : musicPlayerEl.offsetHeight;
-        musicToggleTab.style.bottom = (30 + h) + 'px';
     };
-
-    // Initialise tab position after a paint so offsetHeight is available
-    requestAnimationFrame(() => {
-        musicToggleTab.style.bottom = (30 + musicPlayerEl.offsetHeight) + 'px';
-    });
 
     // File upload
     musicUpload.addEventListener('change', e => {
