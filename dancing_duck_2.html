@@ -177,17 +177,23 @@
             text-shadow: 0 2px 4px rgba(0,0,0,0.5);
         }
         /* Music Player Panel */
-        #musicPlayer {
-            position: absolute;
+        #musicWrapper {
+            position: fixed;
             bottom: 30px;
             right: 24px;
             width: 300px;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            z-index: 9999;
+        }
+        #musicPlayer {
+            width: 100%;
             background: rgba(10, 15, 35, 0.92);
             backdrop-filter: blur(16px);
             border: 1px solid rgba(255,255,255,0.15);
-            border-radius: 20px;
+            border-radius: 0 0 20px 20px;
             box-shadow: 0 10px 40px rgba(0,0,0,0.5);
-            z-index: 50;
             overflow: hidden;
         }
 
@@ -286,7 +292,14 @@
         }
         #volumeSlider::-webkit-slider-thumb {
             -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%;
-            background: #818cf8; cursor: pointer;
+            background: #818cf8; cursor: pointer; margin-top: -4px;
+        }
+        #volumeSlider::-webkit-slider-runnable-track {
+            height: 4px; background: rgba(255,255,255,0.15); border-radius: 2px;
+        }
+        #volumeSlider::-moz-range-thumb {
+            width: 12px; height: 12px; border-radius: 50%;
+            background: #818cf8; cursor: pointer; border: none;
         }
 
         #playlist {
@@ -327,6 +340,7 @@
         #uploadLabel:hover { background: rgba(255,255,255,0.12); color: #e2e8f0; }
 
         #vizToggleBtn { font-size: 10px; color: #64748b; padding: 2px 8px; }
+
     </style>
 </head>
 <body>
@@ -423,13 +437,16 @@
             </div>
         </div>
     </div>
-    <!-- Music Player -->
+</div>
+
+<!-- Music Player wrapper — fixed column so tab always sits flush on top of the panel -->
+<div id="musicWrapper" style="position:fixed;bottom:30px;right:24px;display:flex;flex-direction:column;align-items:stretch;z-index:9999;">
+    <button id="musicToggleTab" onclick="window.toggleMusicPlayer()" style="background:rgba(15,23,42,0.95);border:1px solid rgba(255,255,255,0.2);border-bottom:none;color:#a5b4fc;cursor:pointer;padding:6px 14px;border-radius:10px 10px 0 0;font-size:12px;font-weight:700;letter-spacing:0.5px;align-self:flex-start;">🎵 Music Player ▼</button>
     <div id="musicPlayer">
         <div id="musicHeader">
             <span style="font-size:13px;font-weight:700;color:#a5b4fc;">🎵 Music Player</span>
             <div style="display:flex;gap:6px;align-items:center;">
                 <span id="vizToggleBtn" class="mc-btn" title="Let music drive duck intensity" style="font-size:10px;width:auto;border-radius:8px;padding:2px 8px;">🦆 Drive</span>
-                <span id="collapseBtn" style="font-size:11px;color:#64748b;cursor:pointer;padding:4px;">▲</span>
             </div>
         </div>
         <div id="musicBody">
@@ -3741,15 +3758,15 @@
         gainNode.connect(audioCtx.destination);
     }
 
-    // Collapse / expand — click anywhere on header
+    // Collapse / expand via the floating tab button above the panel
+    const musicToggleTab = document.getElementById('musicToggleTab');
     let collapsed = false;
-    document.getElementById('musicHeader').addEventListener('click', (e) => {
-        // Don't collapse when clicking the drive button
-        if (e.target === vizToggleBtn || vizToggleBtn.contains(e.target)) return;
+
+    window.toggleMusicPlayer = function() {
         collapsed = !collapsed;
         musicBody.classList.toggle('collapsed', collapsed);
-        collapseBtn.textContent = collapsed ? '▼' : '▲';
-    });
+        musicToggleTab.textContent = collapsed ? '🎵 Music Player ▲' : '🎵 Music Player ▼';
+    };
 
     // File upload
     musicUpload.addEventListener('change', e => {
