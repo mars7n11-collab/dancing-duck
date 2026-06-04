@@ -3800,6 +3800,14 @@
         for (const k in duck.limbs) { duck.limbs[k].ox=0; duck.limbs[k].oy=0; duck.limbs[k].vx=0; duck.limbs[k].vy=0; }
     }
 
+    const FIGHT_HIDE = () => [
+        document.querySelector('.left-controls'),
+        document.querySelector('.controls'),
+        document.getElementById('skateModeBtn'),
+        document.getElementById('bgBtn'),
+        document.querySelector('.top-bar').parentElement.querySelector('div[style*="left:24px"]'),
+    ].filter(Boolean);
+
     function startFightMode() {
         isFightingMode = true;
         fightWinner = null;
@@ -3811,7 +3819,7 @@
         ducks[1].color = DUCK_COLORS.blue;
         initFighter(ducks[0], -150, true);
         initFighter(ducks[1],  150, false);
-        document.querySelector('.controls').style.display = 'none';
+        FIGHT_HIDE().forEach(el => el.style.display = 'none');
         document.getElementById('fightModeBtn').textContent = '🏃 Exit Fight';
         document.getElementById('fightModeBtn').style.background = 'rgba(239,68,68,0.35)';
         canvas.style.cursor = 'default';
@@ -3822,7 +3830,7 @@
         isFightingMode = false;
         ducks.forEach(d => { delete d.fighter; });
         if (ducks.length > 1) { ducks.splice(1); friendBtn.textContent='🐥 Add Friend'; friendBtn.style.background=''; }
-        document.querySelector('.controls').style.display = '';
+        FIGHT_HIDE().forEach(el => el.style.display = '');
         document.getElementById('fightModeBtn').textContent = '🥊 Fight!';
         document.getElementById('fightModeBtn').style.background = '';
         canvas.style.cursor = 'grab';
