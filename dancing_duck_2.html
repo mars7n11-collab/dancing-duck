@@ -286,7 +286,14 @@
         }
         #volumeSlider::-webkit-slider-thumb {
             -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%;
-            background: #818cf8; cursor: pointer;
+            background: #818cf8; cursor: pointer; margin-top: -4px;
+        }
+        #volumeSlider::-webkit-slider-runnable-track {
+            height: 4px; background: rgba(255,255,255,0.15); border-radius: 2px;
+        }
+        #volumeSlider::-moz-range-thumb {
+            width: 12px; height: 12px; border-radius: 50%;
+            background: #818cf8; cursor: pointer; border: none;
         }
 
         #playlist {
@@ -3741,14 +3748,20 @@
         gainNode.connect(audioCtx.destination);
     }
 
-    // Collapse / expand — click anywhere on header
+    // Collapse / expand
     let collapsed = false;
-    document.getElementById('musicHeader').addEventListener('click', (e) => {
-        // Don't collapse when clicking the drive button
-        if (e.target === vizToggleBtn || vizToggleBtn.contains(e.target)) return;
+    function toggleCollapse() {
         collapsed = !collapsed;
         musicBody.classList.toggle('collapsed', collapsed);
         collapseBtn.textContent = collapsed ? '▼' : '▲';
+    }
+    // Direct listener on the button so it always fires regardless of bubbling
+    collapseBtn.addEventListener('click', e => { e.stopPropagation(); toggleCollapse(); });
+    // Click anywhere else on the header also collapses
+    document.getElementById('musicHeader').addEventListener('click', (e) => {
+        if (e.target === vizToggleBtn || vizToggleBtn.contains(e.target)) return;
+        if (e.target === collapseBtn || collapseBtn.contains(e.target)) return;
+        toggleCollapse();
     });
 
     // File upload
