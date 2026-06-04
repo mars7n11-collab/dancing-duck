@@ -177,17 +177,23 @@
             text-shadow: 0 2px 4px rgba(0,0,0,0.5);
         }
         /* Music Player Panel */
-        #musicPlayer {
-            position: absolute;
+        #musicWrapper {
+            position: fixed;
             bottom: 30px;
             right: 24px;
             width: 300px;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            z-index: 9999;
+        }
+        #musicPlayer {
+            width: 100%;
             background: rgba(10, 15, 35, 0.92);
             backdrop-filter: blur(16px);
             border: 1px solid rgba(255,255,255,0.15);
-            border-radius: 20px;
+            border-radius: 0 0 20px 20px;
             box-shadow: 0 10px 40px rgba(0,0,0,0.5);
-            z-index: 50;
             overflow: hidden;
         }
 
@@ -335,10 +341,6 @@
 
         #vizToggleBtn { font-size: 10px; color: #64748b; padding: 2px 8px; }
 
-        /* Music player lives outside canvas-container so the canvas never intercepts its events */
-        #musicPlayer {
-            position: fixed !important;
-        }
     </style>
 </head>
 <body>
@@ -440,7 +442,7 @@
 <!-- Music Player wrapper — fixed column so tab always sits flush on top of the panel -->
 <div id="musicWrapper" style="position:fixed;bottom:30px;right:24px;display:flex;flex-direction:column;align-items:stretch;z-index:9999;">
     <button id="musicToggleTab" onclick="window.toggleMusicPlayer()" style="background:rgba(15,23,42,0.95);border:1px solid rgba(255,255,255,0.2);border-bottom:none;color:#a5b4fc;cursor:pointer;padding:6px 14px;border-radius:10px 10px 0 0;font-size:12px;font-weight:700;letter-spacing:0.5px;align-self:flex-start;">🎵 Music Player ▼</button>
-    <div id="musicPlayer" style="position:static;bottom:auto;right:auto;">
+    <div id="musicPlayer">
         <div id="musicHeader">
             <span style="font-size:13px;font-weight:700;color:#a5b4fc;">🎵 Music Player</span>
             <div style="display:flex;gap:6px;align-items:center;">
