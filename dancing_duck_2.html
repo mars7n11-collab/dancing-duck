@@ -360,9 +360,7 @@
                     <button class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors" id="fanWeaponBtn">💨 Giant Fan</button>
                 </div>
             </div>
-            <button id="ballBtn" class="bg-button">🎈 Party Balls</button>
-            <button id="friendBtn" class="bg-button">🐥 Add Friend</button>
-            
+
             <!-- Food Dropdown Container -->
             <div class="relative inline-block text-left">
                 <button id="foodDropdownBtn" class="bg-button flex items-center gap-1">
@@ -385,6 +383,12 @@
         </div>
     </div>
     
+    <!-- Left-side panel: Party Balls + Add Friend -->
+    <div style="position:absolute;left:24px;top:80px;display:flex;flex-direction:column;gap:10px;z-index:50;pointer-events:auto;">
+        <button id="ballBtn" class="bg-button">🎈 Party Balls</button>
+        <button id="friendBtn" class="bg-button">🐥 Add Friend</button>
+    </div>
+
     <!-- Game overlay for Quit confirmation -->
     <div id="quitOverlay" class="absolute inset-0 bg-black/80 flex flex-col justify-center items-center z-50 hidden">
         <div class="bg-slate-800 p-8 rounded-3xl border border-white/10 shadow-2xl text-center max-w-sm w-11/12">
