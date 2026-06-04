@@ -438,12 +438,12 @@
 </div>
 
 <!-- Music Player — outside canvas-container so the canvas never intercepts its pointer events -->
+<button id="musicToggleTab" onclick="window.toggleMusicPlayer()" style="position:fixed;bottom:calc(30px + var(--music-player-height, 0px));right:48px;background:rgba(15,23,42,0.95);border:1px solid rgba(255,255,255,0.2);color:#a5b4fc;cursor:pointer;padding:6px 14px;border-radius:10px 10px 0 0;font-size:12px;font-weight:700;letter-spacing:0.5px;z-index:9999;">🎵 Music Player ▼</button>
 <div id="musicPlayer">
     <div id="musicHeader">
         <span style="font-size:13px;font-weight:700;color:#a5b4fc;">🎵 Music Player</span>
         <div style="display:flex;gap:6px;align-items:center;">
             <span id="vizToggleBtn" class="mc-btn" title="Let music drive duck intensity" style="font-size:10px;width:auto;border-radius:8px;padding:2px 8px;">🦆 Drive</span>
-            <button id="collapseBtn" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#94a3b8;cursor:pointer;width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">▲</button>
         </div>
     </div>
     <div id="musicBody">
@@ -3754,20 +3754,23 @@
         gainNode.connect(audioCtx.destination);
     }
 
-    // Collapse / expand
+    // Collapse / expand via the floating tab button above the panel
+    const musicToggleTab = document.getElementById('musicToggleTab');
+    const musicPlayerEl  = document.getElementById('musicPlayer');
     let collapsed = false;
-    function toggleCollapse() {
+
+    window.toggleMusicPlayer = function() {
         collapsed = !collapsed;
         musicBody.classList.toggle('collapsed', collapsed);
-        collapseBtn.textContent = collapsed ? '▼' : '▲';
-    }
-    // Direct listener on the button so it always fires regardless of bubbling
-    collapseBtn.addEventListener('click', e => { e.stopPropagation(); toggleCollapse(); });
-    // Click anywhere else on the header also collapses
-    document.getElementById('musicHeader').addEventListener('click', (e) => {
-        if (e.target === vizToggleBtn || vizToggleBtn.contains(e.target)) return;
-        if (e.target === collapseBtn || collapseBtn.contains(e.target)) return;
-        toggleCollapse();
+        musicToggleTab.textContent = collapsed ? '🎵 Music Player ▲' : '🎵 Music Player ▼';
+        // Keep tab flush against top of panel
+        const h = collapsed ? 0 : musicPlayerEl.offsetHeight;
+        musicToggleTab.style.bottom = (30 + h) + 'px';
+    };
+
+    // Initialise tab position after a paint so offsetHeight is available
+    requestAnimationFrame(() => {
+        musicToggleTab.style.bottom = (30 + musicPlayerEl.offsetHeight) + 'px';
     });
 
     // File upload
