@@ -3106,78 +3106,112 @@
             ctx.fill(); ctx.restore();
         }
 
+        // ── Carriage + wheels (flat, never rotates) ──
         ctx.save();
         ctx.translate(drawX, drawY);
-        ctx.rotate(cannonAngle + Math.PI/2); // barrel points "up" in local space
-
-        // Recoil offset along barrel axis (pull body back)
-        const recoilOffset = cannonRecoil * 14;
-        ctx.translate(0, recoilOffset);
 
         // Shadow
-        ctx.save(); ctx.rotate(-Math.PI/2);
-        ctx.beginPath(); ctx.ellipse(0, 38, 38, 10, 0, 0, Math.PI*2);
-        ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fill(); ctx.restore();
+        ctx.beginPath(); ctx.ellipse(0, 30, 50, 11, 0, 0, Math.PI*2);
+        ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fill();
 
-        // Wheels
-        for (const wx of [-22, 22]) {
-            ctx.beginPath(); ctx.arc(wx, 28, 16, 0, Math.PI*2);
-            const wg = ctx.createRadialGradient(wx-4, 20, 2, wx, 28, 16);
-            wg.addColorStop(0, '#64748b'); wg.addColorStop(1, '#1e293b');
+        // Two large wooden wheels
+        for (const wx of [-32, 32]) {
+            ctx.beginPath(); ctx.arc(wx, 18, 22, 0, Math.PI*2);
+            const wg = ctx.createRadialGradient(wx - 5, 9, 2, wx, 18, 22);
+            wg.addColorStop(0, '#5c3317'); wg.addColorStop(0.75, '#3b1f0a'); wg.addColorStop(1, '#1c0d03');
             ctx.fillStyle = wg; ctx.fill();
-            ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 2; ctx.stroke();
+            ctx.strokeStyle = '#4a2810'; ctx.lineWidth = 3; ctx.stroke();
             // Spokes
-            ctx.save(); ctx.translate(wx, 28);
-            for (let s = 0; s < 4; s++) {
-                ctx.rotate(Math.PI/4);
-                ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0, 13);
-                ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 1.5; ctx.stroke();
+            ctx.save(); ctx.translate(wx, 18);
+            for (let s = 0; s < 6; s++) {
+                ctx.rotate(Math.PI / 3);
+                ctx.beginPath(); ctx.moveTo(0, 4); ctx.lineTo(0, 18);
+                ctx.strokeStyle = '#4a2810'; ctx.lineWidth = 2.5; ctx.stroke();
             }
+            // Hub
+            ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI*2);
+            ctx.fillStyle = '#7a4520'; ctx.fill();
+            ctx.strokeStyle = '#3b1f0a'; ctx.lineWidth = 1.5; ctx.stroke();
             ctx.restore();
         }
 
-        // Axle
-        ctx.beginPath(); ctx.roundRect(-22, 22, 44, 8, 4);
-        ctx.fillStyle = '#334155'; ctx.fill();
+        // Wooden carriage body between wheels
+        ctx.beginPath(); ctx.roundRect(-30, 4, 60, 18, 5);
+        const cg = ctx.createLinearGradient(0, 4, 0, 22);
+        cg.addColorStop(0, '#a16207'); cg.addColorStop(1, '#451a03');
+        ctx.fillStyle = cg; ctx.fill();
+        ctx.strokeStyle = '#ca8a04'; ctx.lineWidth = 2; ctx.stroke();
+        // Plank lines on carriage
+        ctx.strokeStyle = '#78350f'; ctx.lineWidth = 1;
+        for (const lx of [-10, 10]) {
+            ctx.beginPath(); ctx.moveTo(lx, 4); ctx.lineTo(lx, 22); ctx.stroke();
+        }
 
-        // Body / chassis
-        ctx.beginPath(); ctx.roundRect(-26, -8, 52, 34, 8);
-        const bg = ctx.createLinearGradient(0, -8, 0, 26);
-        bg.addColorStop(0, '#475569'); bg.addColorStop(1, '#1e293b');
-        ctx.fillStyle = bg; ctx.fill();
-        ctx.strokeStyle = '#64748b'; ctx.lineWidth = 2; ctx.stroke();
+        ctx.restore();
 
-        // Barrel
-        const barrelLocal = -CANNON_BARREL_LEN; // extends upward in local space
-        ctx.beginPath(); ctx.roundRect(-13, barrelLocal, 26, CANNON_BARREL_LEN + 4, 6);
-        const barrG = ctx.createLinearGradient(-13, 0, 13, 0);
-        barrG.addColorStop(0, '#334155'); barrG.addColorStop(0.4, '#64748b'); barrG.addColorStop(1, '#1e293b');
+        // ── Barrel (rotates with cannonAngle) ──
+        ctx.save();
+        ctx.translate(drawX, drawY);
+        // Recoil: slide barrel back along its own axis
+        ctx.translate(-Math.cos(cannonAngle) * cannonRecoil * 12, -Math.sin(cannonAngle) * cannonRecoil * 12);
+        ctx.rotate(cannonAngle);
+
+        // Tapered iron barrel — wide at breech (x=0), narrower at muzzle (x=BARREL_LEN)
+        const bW = 24, tW = 16; // breech half-width, tip half-width — thicker than before
+        ctx.beginPath();
+        ctx.moveTo(2, -bW / 2);
+        ctx.lineTo(CANNON_BARREL_LEN, -tW / 2);
+        ctx.lineTo(CANNON_BARREL_LEN, tW / 2);
+        ctx.lineTo(2, bW / 2);
+        ctx.closePath();
+        const barrG = ctx.createLinearGradient(0, -bW, 0, bW);
+        barrG.addColorStop(0, '#111827'); barrG.addColorStop(0.4, '#374151'); barrG.addColorStop(1, '#060a10');
         ctx.fillStyle = barrG; ctx.fill();
-        ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 2; ctx.stroke();
-        // Barrel rings
-        for (const ry of [-20, -48, -76]) {
-            ctx.beginPath(); ctx.roundRect(-15, ry, 30, 7, 3);
-            ctx.fillStyle = '#475569'; ctx.fill();
-            ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 1; ctx.stroke();
-        }
-        // Muzzle flare ring
-        ctx.beginPath(); ctx.roundRect(-16, barrelLocal - 4, 32, 12, 4);
-        ctx.fillStyle = '#64748b'; ctx.fill();
-        ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 2; ctx.stroke();
+        ctx.strokeStyle = '#374151'; ctx.lineWidth = 2; ctx.stroke();
 
-        // Duck silhouette inside barrel when loaded
+        // Reinforcement rings
+        for (const rx of [12, 38, 65]) {
+            const frac = rx / CANNON_BARREL_LEN;
+            const hw = (bW + (tW - bW) * frac) / 2 + 4;
+            ctx.beginPath(); ctx.roundRect(rx - 5, -hw, 10, hw * 2, 2);
+            ctx.fillStyle = '#374151'; ctx.fill();
+            ctx.strokeStyle = '#6b7280'; ctx.lineWidth = 1.5; ctx.stroke();
+        }
+
+        // Breech knob (round cap at base)
+        ctx.beginPath(); ctx.arc(0, 0, bW / 2 + 2, 0, Math.PI * 2);
+        ctx.fillStyle = '#1f2937'; ctx.fill();
+        ctx.strokeStyle = '#4b5563'; ctx.lineWidth = 2; ctx.stroke();
+
+        // Fuse — small skinny rectangle on top of breech, slightly angled
+        ctx.save();
+        ctx.translate(8, -bW / 2 - 2);
+        ctx.rotate(-0.35);
+        ctx.beginPath(); ctx.roundRect(-2, -14, 4, 14, 2);
+        ctx.fillStyle = '#d97706'; ctx.fill();
+        ctx.strokeStyle = '#92400e'; ctx.lineWidth = 1; ctx.stroke();
+        // Fuse tip spark (small glow dot)
+        ctx.beginPath(); ctx.arc(0, -14, 3, 0, Math.PI * 2);
+        ctx.fillStyle = '#fde68a'; ctx.fill();
+        ctx.restore();
+
+        // Muzzle opening
+        ctx.beginPath(); ctx.arc(CANNON_BARREL_LEN, 0, tW / 2 + 2, 0, Math.PI * 2);
+        ctx.fillStyle = '#020617'; ctx.fill();
+        ctx.strokeStyle = '#6b7280'; ctx.lineWidth = 2; ctx.stroke();
+
+        // Duck peeking inside barrel when loaded
         if (cannonLoadedDuck) {
-            const pulse = Math.sin(performance.now() * 0.008) * 2;
+            const pulse = Math.sin(performance.now() * 0.008) * 1.5;
             ctx.save();
-            ctx.translate(0, barrelLocal + 30 + pulse);
-            ctx.fillStyle = 'rgba(255,220,50,0.7)';
-            ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI*2); ctx.fill();
-            ctx.font = 'bold 13px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            ctx.fillStyle = '#1e293b'; ctx.fillText('🦆', 0, 1);
+            ctx.translate(CANNON_BARREL_LEN * 0.55 + pulse, 0);
+            ctx.font = '15px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.globalAlpha = 0.9;
+            ctx.fillText('🦆', 0, 0);
             ctx.restore();
         }
 
-        ctx.restore(); // end cannon transform
+        ctx.restore(); // end barrel transform
 
         // "Press P" label / placing hint (unrotated)
         ctx.save(); ctx.textAlign = 'center';
