@@ -347,7 +347,7 @@
 <body>
 
 <div id="canvas-container">
-    <div class="top-bar">
+    <div class="top-bar" id="topBar">
         <div class="left-controls">
             <!-- Weapons Dropdown -->
             <div class="relative inline-block text-left">
@@ -396,7 +396,7 @@
             <div class="relative inline-block text-left">
                 <button id="targetsDropdownBtn" class="bg-button flex items-center gap-1">🎯 Targets <span class="text-[10px]">▼</span></button>
                 <div id="targetsDropdown" class="dropdown-menu">
-                    <button class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors border-b border-white/5" onclick="spawnTarget('dummy')">🪆 Practice Dummy</button>
+                    <button class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors border-b border-white/5" onclick="spawnTarget('dummy')">🤺 Practice Dummy</button>
                     <button class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors border-b border-white/5" onclick="spawnTarget('brick')">🧱 Brick Wall</button>
                     <button class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors" onclick="spawnTarget('punching_bag')">👊 Punching Bag</button>
                 </div>
@@ -418,10 +418,23 @@
             <button id="timeMachineBtn" class="bg-button">⏱️ Time Machine</button>
             <button id="skateModeBtn" class="bg-button">🛹 Skate Mode</button>
             <button id="driveModeBtn" class="bg-button">🚗 Drive Mode</button>
+            <div class="relative inline-block text-left">
+                <button id="pingPongBtn" class="bg-button flex items-center gap-1">🏓 Duck Pong <span class="text-[10px]">▼</span></button>
+                <div id="pingPongDropdown" class="dropdown-menu" style="right:0;left:auto;min-width:180px;">
+                    <button id="classicPongBtn" class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors border-b border-white/5">🏓 OG Duck Pong</button>
+                    <button id="dingDongBtn" class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors">🔔 Ding Dong Gone</button>
+                </div>
+            </div>
             <button id="bgBtn" class="bg-button">🌍 Scene: Club</button>
         </div>
     </div>
     
+    <!-- Ping Pong floating exit button -->
+    <button id="pingPongExitBtn" style="display:none;position:absolute;top:14px;right:16px;z-index:60;background:rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.25);color:white;font-size:13px;font-weight:600;padding:6px 14px;border-radius:10px;cursor:pointer;">🏓 Exit Ping Pong</button>
+
+    <!-- Drive mode floating exit button -->
+    <button id="driveExitBtn" style="display:none;position:absolute;top:14px;right:16px;z-index:60;background:rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.25);color:white;font-size:13px;font-weight:600;padding:6px 14px;border-radius:10px;cursor:pointer;">🛑 Exit Drive</button>
+
     <!-- Left-side panel: Add Friend -->
     <div id="leftPanel" style="position:absolute;left:24px;top:80px;display:flex;flex-direction:column;gap:10px;z-index:40;pointer-events:auto;">
         <div class="relative inline-block text-left">
@@ -806,8 +819,8 @@
     let cannonSmokeParticles = [];
 
     // ── Time Machine ─────────────────────────────────────────────────────────
-    const DECADES = [null, '1930s', '1970s', '1980s'];
-    const DECADE_LABELS = { '1930s': '1930s — Chaplin 🎩', '1970s': '1970s — Disco 🕺', '1980s': '1980s — Rockstar 🎸' };
+    const DECADES = [null, '1930s', '1950s', '1970s', '1980s', '2099'];
+    const DECADE_LABELS = { '1930s': '1930s — Chaplin 🎩', '1950s': '1950s — Rock & Roll 🎸', '1970s': '1970s — Disco 🕺', '1980s': '1980s — Rockstar 🎸', '2099': '2099 — CyberDuck 🤖' };
     let currentDecadeIdx = 0;
     let currentDecade = null;
     let timeMachineTraveling = false;
@@ -877,6 +890,7 @@
         weaponsDropdown.style.display = 'none';
         foodDropdown.style.display = 'none';
         partyDropdown.style.display = 'none';
+        pingPongDropdown.style.display = 'none';
     });
 
     // Freeze Ray weapon
@@ -4023,46 +4037,181 @@
             ctx.fillStyle = '#111'; ctx.fill();
             ctx.restore();
 
-        } else if (currentDecade === '1970s') {
-            // Afro — fluffy cloud/cotton-candy puffs sitting on top of the head
+        } else if (currentDecade === '1950s') {
+            // ── Pompadour ──
             ctx.save();
-            const afroPuffs = [
-                // [cx, cy, radius]  — all above head crown (y < -50)
-                [  0, -68, 24],
-                [-22, -62, 20],
-                [ 22, -62, 20],
-                [-40, -54, 16],
-                [ 40, -54, 16],
-                [-14, -82, 18],
-                [ 14, -82, 18],
-                [  0, -92, 17],
-            ];
-            // Shadow / base circle that ties it to the head
-            ctx.beginPath(); ctx.ellipse(0, -52, 36, 8, 0, 0, Math.PI*2);
+            // Main pompadour wave — sweeps up from forehead and curls forward
+            ctx.beginPath();
+            ctx.moveTo(-20, -50);
+            ctx.bezierCurveTo(-24, -70, -8, -90, 10, -86);    // left arc up
+            ctx.bezierCurveTo(22, -83, 28, -70, 22, -58);     // peak curves right
+            ctx.bezierCurveTo(14, -48, -2, -46, -20, -50);    // back to base
+            ctx.closePath();
             ctx.fillStyle = '#1a0900'; ctx.fill();
-            // Puff circles
+            // Depth shadow on right side of wave
+            ctx.beginPath();
+            ctx.moveTo(8, -62);
+            ctx.bezierCurveTo(16, -60, 22, -66, 22, -58);
+            ctx.bezierCurveTo(14, -50, 2, -47, 8, -62);
+            ctx.fillStyle = '#0d0400'; ctx.fill();
+            // Shine streak
+            ctx.beginPath();
+            ctx.moveTo(-14, -58);
+            ctx.bezierCurveTo(-10, -76, 4, -87, 14, -80);
+            ctx.strokeStyle = 'rgba(255,220,150,0.28)'; ctx.lineWidth = 3;
+            ctx.lineCap = 'round'; ctx.stroke();
+            ctx.restore();
+
+            // ── Wayfarers (classic black frames) ──
+            ctx.save();
+            const ey50 = -10;
+            // Left lens
+            ctx.beginPath(); ctx.roundRect(-26, ey50-10, 22, 16, 3);
+            ctx.fillStyle = 'rgba(8,8,8,0.88)'; ctx.fill();
+            ctx.strokeStyle = '#222'; ctx.lineWidth = 2.5; ctx.stroke();
+            // Thin top-edge highlight
+            ctx.beginPath(); ctx.moveTo(-24, ey50-9); ctx.lineTo(-6, ey50-9);
+            ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1; ctx.stroke();
+            // Right lens
+            ctx.beginPath(); ctx.roundRect(-2, ey50-10, 22, 16, 3);
+            ctx.fillStyle = 'rgba(8,8,8,0.88)'; ctx.fill();
+            ctx.strokeStyle = '#222'; ctx.lineWidth = 2.5; ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, ey50-9); ctx.lineTo(18, ey50-9);
+            ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1; ctx.stroke();
+            // Bridge
+            ctx.beginPath(); ctx.moveTo(-4, ey50-4); ctx.lineTo(-2, ey50-4);
+            ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.stroke();
+            // Temples
+            ctx.beginPath(); ctx.moveTo(-26, ey50-4); ctx.lineTo(-44, ey50+4);
+            ctx.strokeStyle = '#2a2a2a'; ctx.lineWidth = 2; ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(20, ey50-4); ctx.lineTo(38, ey50+4);
+            ctx.strokeStyle = '#2a2a2a'; ctx.lineWidth = 2; ctx.stroke();
+            ctx.restore();
+
+        } else if (currentDecade === '2099') {
+            // ── Chrome dome highlight ──
+            ctx.save();
+            const chromeGrad = ctx.createRadialGradient(-8, -56, 4, -5, -44, 22);
+            chromeGrad.addColorStop(0, 'rgba(180,240,255,0.35)');
+            chromeGrad.addColorStop(1, 'rgba(80,180,255,0.0)');
+            ctx.beginPath(); ctx.arc(4, -44, 22, 0, Math.PI*2);
+            ctx.fillStyle = chromeGrad; ctx.fill();
+            ctx.restore();
+
+            // ── Holographic visor ──
+            ctx.save();
+            const visorPulse = 0.72 + 0.28 * Math.sin(t * 0.006);
+            // Visor body
+            ctx.beginPath(); ctx.roundRect(-28, -22, 52, 13, 4);
+            const visorGrad = ctx.createLinearGradient(-28, -22, 24, -9);
+            visorGrad.addColorStop(0,   `rgba(0,220,255,${0.75*visorPulse})`);
+            visorGrad.addColorStop(0.5, `rgba(80,255,230,${0.60*visorPulse})`);
+            visorGrad.addColorStop(1,   `rgba(0,180,255,${0.75*visorPulse})`);
+            ctx.fillStyle = visorGrad; ctx.fill();
+            ctx.strokeStyle = `rgba(0,240,255,${visorPulse})`; ctx.lineWidth = 1.5; ctx.stroke();
+            // Scanline streaks inside visor
+            ctx.save(); ctx.clip();
+            ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1;
+            for (let vl = -28; vl < 24; vl += 7) {
+                ctx.beginPath(); ctx.moveTo(vl, -22); ctx.lineTo(vl + 4, -9); ctx.stroke();
+            }
+            ctx.restore();
+            // Glow shadow
+            ctx.shadowColor = '#00dfff'; ctx.shadowBlur = 14 * visorPulse;
+            ctx.strokeStyle = `rgba(0,240,255,${0.5*visorPulse})`; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.roundRect(-28, -22, 52, 13, 4); ctx.stroke();
+            ctx.shadowBlur = 0;
+            // Temple arms
+            ctx.strokeStyle = '#334155'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(-28, -17); ctx.lineTo(-46, -14); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(24, -17); ctx.lineTo(42, -14); ctx.stroke();
+            ctx.restore();
+
+            // ── LED dots on forehead ──
+            ctx.save();
+            const ledCols = ['#00ffff','#a855f7','#00ffff'];
+            for (let li = 0; li < 3; li++) {
+                const lx = -8 + li * 10;
+                const ledOn = Math.sin(t * 0.009 + li * 1.8) > 0;
+                ctx.beginPath(); ctx.arc(lx, -38, 2.5, 0, Math.PI*2);
+                ctx.fillStyle = ledOn ? ledCols[li] : '#1e293b'; ctx.fill();
+                if (ledOn) { ctx.shadowColor = ledCols[li]; ctx.shadowBlur = 8; ctx.fill(); }
+            }
+            ctx.shadowBlur = 0;
+            ctx.restore();
+
+        } else if (currentDecade === '1970s') {
+            // ── Afro — dense puff grid shaped into a full rounded dome ──
+            ctx.save();
+            // The afro is built from many overlapping puffs arranged in concentric
+            // rings so the outer silhouette reads as a smooth sphere, not spiky.
+            // Center of the afro dome (above the duck's head crown at ~y=-51)
+            const afroCX = 2, afroCY = -78, afroR = 56;
+            // Generate puffs: pack them tightly across the dome area
+            const afroPuffs = [];
+            // Ring 0 — centre top
+            afroPuffs.push([afroCX,     afroCY,      20]);
+            // Ring 1 — inner ring (~20px from centre)
+            for (let a = 0; a < 6; a++) {
+                const ang = (a / 6) * Math.PI * 2;
+                afroPuffs.push([afroCX + Math.cos(ang)*20, afroCY + Math.sin(ang)*20, 18]);
+            }
+            // Ring 2 — mid ring (~38px from centre)
+            for (let a = 0; a < 11; a++) {
+                const ang = (a / 11) * Math.PI * 2 + 0.3;
+                afroPuffs.push([afroCX + Math.cos(ang)*38, afroCY + Math.sin(ang)*38, 16]);
+            }
+            // Ring 3 — outer ring (~54px from centre) — only the upper half so it
+            // doesn't go below the head on the sides
+            for (let a = 0; a < 15; a++) {
+                const ang = (a / 15) * Math.PI * 2 + 0.1;
+                const px = afroCX + Math.cos(ang) * 54;
+                const py = afroCY + Math.sin(ang) * 54;
+                if (py < -46) afroPuffs.push([px, py, 14]); // clip below crown
+            }
+
+            // Dark fill base circle — anchors afro to head
+            ctx.beginPath(); ctx.arc(afroCX, afroCY, afroR + 6, 0, Math.PI*2);
+            ctx.fillStyle = '#140800'; ctx.fill();
+
+            // Draw all puffs — base colour
             for (const [px, py, pr] of afroPuffs) {
                 ctx.beginPath(); ctx.arc(px, py, pr, 0, Math.PI*2);
                 ctx.fillStyle = '#3b1a06'; ctx.fill();
             }
-            // Lighter inner highlight on each puff for depth
+            // Inner highlight per puff
             for (const [px, py, pr] of afroPuffs) {
-                ctx.beginPath(); ctx.arc(px - pr*0.25, py - pr*0.25, pr * 0.45, 0, Math.PI*2);
+                ctx.beginPath(); ctx.arc(px - pr*0.22, py - pr*0.22, pr * 0.42, 0, Math.PI*2);
                 ctx.fillStyle = '#5c2e0f'; ctx.fill();
             }
+            // Soft overall highlight at the top of the dome
+            const afroShine = ctx.createRadialGradient(afroCX - 8, afroCY - 18, 2, afroCX, afroCY, afroR);
+            afroShine.addColorStop(0,   'rgba(140,80,20,0.30)');
+            afroShine.addColorStop(0.5, 'rgba(80,35,5,0.10)');
+            afroShine.addColorStop(1,   'rgba(0,0,0,0)');
+            ctx.beginPath(); ctx.arc(afroCX, afroCY, afroR + 6, 0, Math.PI*2);
+            ctx.fillStyle = afroShine; ctx.fill();
             ctx.restore();
-            // Round tinted sunglasses
+
+            // ── Round pink-tinted sunglasses ──
             ctx.save();
             const ey = -8;
-            for (const [lx] of [[-10], [20]]) {
+            for (const lx of [-10, 20]) {
                 ctx.beginPath(); ctx.arc(lx, ey, 14, 0, Math.PI*2);
-                ctx.fillStyle = 'rgba(160,100,0,0.55)'; ctx.fill();
+                ctx.fillStyle = 'rgba(255,100,160,0.52)'; ctx.fill();
                 ctx.strokeStyle = '#d4af37'; ctx.lineWidth = 2.5; ctx.stroke();
+                // Small lens glint
+                ctx.beginPath(); ctx.arc(lx - 5, ey - 5, 4, 0, Math.PI*2);
+                ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fill();
             }
+            // Bridge
             ctx.beginPath(); ctx.moveTo(-1, ey-1); ctx.lineTo(6, ey-1);
             ctx.strokeStyle = '#d4af37'; ctx.lineWidth = 2; ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(-24, ey); ctx.lineTo(-40, ey+6); ctx.strokeStyle = '#d4af37'; ctx.lineWidth = 2; ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(34, ey); ctx.lineTo(50, ey+6); ctx.strokeStyle = '#d4af37'; ctx.lineWidth = 2; ctx.stroke();
+            // Temples
+            ctx.beginPath(); ctx.moveTo(-24, ey); ctx.lineTo(-42, ey+6);
+            ctx.strokeStyle = '#d4af37'; ctx.lineWidth = 2; ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(34, ey); ctx.lineTo(52, ey+6);
+            ctx.strokeStyle = '#d4af37'; ctx.lineWidth = 2; ctx.stroke();
             ctx.restore();
 
         } else if (currentDecade === '1980s') {
@@ -4124,19 +4273,197 @@
             ctx.fillStyle = '#aaa'; ctx.fill();
             ctx.restore();
 
-        } else if (currentDecade === '1970s') {
-            // Peace sign — just the emblem on the chest, no chain
+        } else if (currentDecade === '1950s') {
+            // ── Leather jacket ──
+            const ty  = 20 * duck.mutations.muscle;
+            const tw  = 50 * duck.mutations.fat   * 0.96;
+            const th  = 55 * duck.mutations.muscle * 0.96;
             ctx.save();
-            ctx.translate(0, 20);
-            const nr = 18;
+            // Jacket body
+            ctx.beginPath(); ctx.ellipse(-5, ty, tw, th, 0, 0, Math.PI*2);
+            ctx.fillStyle = '#131313'; ctx.fill();
+            // White T-shirt triangle at collar
+            ctx.beginPath();
+            ctx.moveTo(-14, ty - th*0.78);
+            ctx.quadraticCurveTo(-5, ty - th*0.95, 4, ty - th*0.78);
+            ctx.lineTo(2,  ty - th*0.60);
+            ctx.quadraticCurveTo(-5, ty - th*0.73, -12, ty - th*0.60);
+            ctx.closePath();
+            ctx.fillStyle = '#f0f4f8'; ctx.fill();
+            // Left lapel
+            ctx.beginPath();
+            ctx.moveTo(-14, ty - th*0.78);
+            ctx.quadraticCurveTo(-24, ty - th*0.55, -20, ty - th*0.28);
+            ctx.lineTo(-8,  ty - th*0.56);
+            ctx.closePath();
+            ctx.fillStyle = '#1c1c1c'; ctx.fill();
+            ctx.strokeStyle = '#2e2e2e'; ctx.lineWidth = 1; ctx.stroke();
+            // Right lapel
+            ctx.beginPath();
+            ctx.moveTo(4,  ty - th*0.78);
+            ctx.quadraticCurveTo(14, ty - th*0.55, 10, ty - th*0.28);
+            ctx.lineTo(-2, ty - th*0.56);
+            ctx.closePath();
+            ctx.fillStyle = '#1c1c1c'; ctx.fill();
+            ctx.strokeStyle = '#2e2e2e'; ctx.lineWidth = 1; ctx.stroke();
+            // Zipper
+            ctx.beginPath(); ctx.moveTo(-5, ty - th*0.54); ctx.lineTo(-5, ty + th*0.55);
+            ctx.strokeStyle = '#555'; ctx.lineWidth = 1.5; ctx.stroke();
+            for (let zi = 0; zi < 9; zi++) {
+                const zy = ty - th*0.50 + zi * th*0.11;
+                ctx.beginPath(); ctx.moveTo(-7, zy); ctx.lineTo(-3, zy);
+                ctx.strokeStyle = '#666'; ctx.lineWidth = 1; ctx.stroke();
+            }
+            // Shoulder seam lines
+            ctx.strokeStyle = '#222'; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(-tw+2, ty - th*0.3); ctx.lineTo(-tw*0.4, ty - th*0.82); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(tw-12,  ty - th*0.3); ctx.lineTo( tw*0.3, ty - th*0.82); ctx.stroke();
+            ctx.restore();
+            // Guitar pick hanging from pocket — small flair detail
+            ctx.save();
+            ctx.translate(-28, ty + th*0.3);
+            ctx.rotate(0.3);
+            ctx.beginPath();
+            ctx.moveTo(0, -8); ctx.quadraticCurveTo(7, -3, 4, 7); ctx.quadraticCurveTo(0, 10, -4, 7);
+            ctx.quadraticCurveTo(-7, -3, 0, -8);
+            ctx.fillStyle = '#ef4444'; ctx.fill();
+            ctx.strokeStyle = '#dc2626'; ctx.lineWidth = 1; ctx.stroke();
+            ctx.restore();
+
+        } else if (currentDecade === '2099') {
+            // ── Metallic exosuit ──
+            const ty  = 20 * duck.mutations.muscle;
+            const tw  = 50 * duck.mutations.fat   * 0.96;
+            const th  = 55 * duck.mutations.muscle * 0.96;
+            ctx.save();
+            // Suit body — dark slate with metallic sheen
+            ctx.beginPath(); ctx.ellipse(-5, ty, tw, th, 0, 0, Math.PI*2);
+            const suitGrad = ctx.createLinearGradient(-tw, ty - th, tw, ty + th);
+            suitGrad.addColorStop(0,   '#1e293b');
+            suitGrad.addColorStop(0.4, '#0f172a');
+            suitGrad.addColorStop(1,   '#1e293b');
+            ctx.fillStyle = suitGrad; ctx.fill();
+            ctx.strokeStyle = '#334155'; ctx.lineWidth = 1.5; ctx.stroke();
+            // Shoulder armor plates
+            const drawPlate = (sx, sy, w, h) => {
+                ctx.beginPath(); ctx.roundRect(sx, sy, w, h, 3);
+                const pg = ctx.createLinearGradient(sx, sy, sx+w, sy+h);
+                pg.addColorStop(0, '#334155'); pg.addColorStop(1, '#1e293b');
+                ctx.fillStyle = pg; ctx.fill();
+                ctx.strokeStyle = '#475569'; ctx.lineWidth = 1; ctx.stroke();
+            };
+            drawPlate(-tw + 4, ty - th*0.68, tw*0.38, th*0.28);   // left shoulder
+            drawPlate( tw*0.18, ty - th*0.68, tw*0.38, th*0.28);  // right shoulder
+            // Glowing circuit traces
+            const pulse2099 = 0.5 + 0.5 * Math.sin(t * 0.007);
+            ctx.strokeStyle = `rgba(0,220,255,${0.4 + 0.4*pulse2099})`; ctx.lineWidth = 1.2;
+            ctx.shadowColor = '#00dfff'; ctx.shadowBlur = 6 * pulse2099;
+            // Left chest trace
+            ctx.beginPath(); ctx.moveTo(-24, ty - th*0.3); ctx.lineTo(-14, ty - th*0.1); ctx.lineTo(-14, ty + th*0.2); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(-14, ty); ctx.lineTo(-8, ty); ctx.stroke();
+            // Right chest trace
+            ctx.beginPath(); ctx.moveTo(14, ty - th*0.3); ctx.lineTo(4, ty - th*0.1); ctx.lineTo(4, ty + th*0.2); ctx.stroke();
+            ctx.shadowBlur = 0;
+            // Reactor core on chest
+            const rx = -5, ry = ty - th*0.08;
+            const reactPulse = 0.65 + 0.35 * Math.sin(t * 0.010);
+            // Outer ring
+            ctx.beginPath(); ctx.arc(rx, ry, 14, 0, Math.PI*2);
+            ctx.strokeStyle = `rgba(0,200,255,${0.5*reactPulse})`; ctx.lineWidth = 2; ctx.stroke();
+            // Mid ring
+            ctx.beginPath(); ctx.arc(rx, ry, 9, 0, Math.PI*2);
+            ctx.strokeStyle = `rgba(0,220,255,${0.8*reactPulse})`; ctx.lineWidth = 1.5; ctx.stroke();
+            // Core
+            ctx.beginPath(); ctx.arc(rx, ry, 5, 0, Math.PI*2);
+            const coreGrad = ctx.createRadialGradient(rx-1, ry-1, 1, rx, ry, 5);
+            coreGrad.addColorStop(0, `rgba(180,255,255,${reactPulse})`);
+            coreGrad.addColorStop(1, `rgba(0,180,255,${0.7*reactPulse})`);
+            ctx.fillStyle = coreGrad;
+            ctx.shadowColor = '#00ffff'; ctx.shadowBlur = 16 * reactPulse;
+            ctx.fill(); ctx.shadowBlur = 0;
+            ctx.restore();
+
+        } else if (currentDecade === '1970s') {
+            const ty  = 20 * duck.mutations.muscle;
+            const tw  = 50 * duck.mutations.fat   * 0.96;
+            const th  = 55 * duck.mutations.muscle * 0.96;
+            ctx.save();
+
+            // ── Open brown suede vest ──
+            const vestBrown = '#92400e';
+            const vestDark  = '#6b2d08';
+            const vestLight = '#b45309';
+
+            // Left panel — narrow strip from left shoulder down, stops well short of centre
+            ctx.beginPath();
+            ctx.moveTo(-22, ty - th*0.80);   // left shoulder top-inner
+            ctx.lineTo(-tw + 8, ty - th*0.72); // left shoulder top-outer (armhole edge)
+            ctx.lineTo(-tw + 6, ty + th*0.52); // bottom-outer
+            ctx.lineTo(-18, ty + th*0.55);     // bottom-inner (stops away from centre)
+            ctx.lineTo(-14, ty - th*0.30);     // inner edge curves inward (open lapel)
+            ctx.closePath();
+            ctx.fillStyle = vestBrown; ctx.fill();
+            ctx.strokeStyle = vestDark; ctx.lineWidth = 1.5; ctx.stroke();
+            // Suede highlight
+            ctx.strokeStyle = vestLight; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(-tw+14, ty-th*0.65); ctx.lineTo(-tw+12, ty+th*0.40); ctx.stroke();
+
+            // Right panel — mirror
+            ctx.beginPath();
+            ctx.moveTo(12,  ty - th*0.80);
+            ctx.lineTo( tw - 14, ty - th*0.72);
+            ctx.lineTo( tw - 12, ty + th*0.52);
+            ctx.lineTo(  8, ty + th*0.55);
+            ctx.lineTo(  4, ty - th*0.30);
+            ctx.closePath();
+            ctx.fillStyle = vestBrown; ctx.fill();
+            ctx.strokeStyle = vestDark; ctx.lineWidth = 1.5; ctx.stroke();
+            ctx.strokeStyle = vestLight; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(tw-20, ty-th*0.65); ctx.lineTo(tw-18, ty+th*0.40); ctx.stroke();
+
+            // ── Tassels along bottom hem ──
+            const tasselCol = '#a16207';
+            const tasselY   = ty + th*0.55;
+            ctx.strokeStyle = tasselCol; ctx.lineWidth = 1.5; ctx.lineCap = 'round';
+            // Left panel tassels (span the left panel width)
+            for (let ti = 0; ti < 5; ti++) {
+                const tx70 = -tw + 8 + ti * ((tw - 26) / 4);
+                const sway = Math.sin(t * 0.004 + ti * 0.9) * 4;
+                ctx.beginPath(); ctx.moveTo(tx70, tasselY);
+                ctx.quadraticCurveTo(tx70 + sway, tasselY + 10, tx70 + sway * 1.2, tasselY + 18);
+                ctx.stroke();
+                ctx.beginPath(); ctx.arc(tx70 + sway * 1.2, tasselY + 19, 2, 0, Math.PI*2);
+                ctx.fillStyle = '#fbbf24'; ctx.fill();
+            }
+            // Right panel tassels
+            for (let ti = 0; ti < 5; ti++) {
+                const tx70 = 8 + ti * ((tw - 26) / 4);
+                const sway = Math.sin(t * 0.004 + ti * 0.9 + 3) * 4;
+                ctx.beginPath(); ctx.moveTo(tx70, tasselY);
+                ctx.quadraticCurveTo(tx70 + sway, tasselY + 10, tx70 + sway * 1.2, tasselY + 18);
+                ctx.stroke();
+                ctx.beginPath(); ctx.arc(tx70 + sway * 1.2, tasselY + 19, 2, 0, Math.PI*2);
+                ctx.fillStyle = '#fbbf24'; ctx.fill();
+            }
+
+            // ── Peace sign pendant on chest ──
+            ctx.save();
+            ctx.translate(-5, ty - th*0.05);
+            const nr = 13;
+            // Chain
+            ctx.strokeStyle = '#d4af37'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(0, -nr - 10); ctx.lineTo(0, -nr); ctx.stroke();
+            // Pendant
             ctx.beginPath(); ctx.arc(0, 0, nr, 0, Math.PI*2);
             ctx.fillStyle = '#b8860b'; ctx.fill();
-            ctx.strokeStyle = '#f0c040'; ctx.lineWidth = 2.5; ctx.stroke();
-            ctx.strokeStyle = '#f0c040'; ctx.lineWidth = 2.2;
+            ctx.strokeStyle = '#f0c040'; ctx.lineWidth = 2; ctx.stroke();
+            ctx.strokeStyle = '#f0c040'; ctx.lineWidth = 1.8;
             ctx.beginPath(); ctx.arc(0, 0, nr-3, 0, Math.PI*2); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(0, -(nr-3)); ctx.lineTo(0, nr-3); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-(nr-3)*0.87, (nr-3)*0.5); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo( (nr-3)*0.87, (nr-3)*0.5); ctx.stroke();
+            ctx.restore();
+
             ctx.restore();
 
         } else if (currentDecade === '1980s') {
@@ -5652,7 +5979,14 @@
     let roadDashes     = [];  // white centre-line dashes
     let nextFarX = 0, nextMidX = 0, nextNearX = 0;
 
-    let carConfig = { type: 'sedan', color: '#e74c3c' };
+    let carConfig = { type: 'sports', color: '#ef4444' };
+
+    // Per-car special state
+    let lowRiderY = 0, lowRiderVY = 0;
+    let monsterObstacles = [], monsterObstacleTimer = 2000, monsterBumpY = 0, monsterBumpVY = 0;
+    let limoNotes = [], limoNoteTimer = 0;
+    let muscleFlames = [];
+    let iceCreamTrail = [];
 
     const BIOMES = [
         { name:'City',      skyA:'#1e3a8a', skyB:'#3b82f6', groundA:'#374151', groundB:'#6b7280', road:'#1f2937', roadLine:'#fbbf24', accent:'#60a5fa',  label:'🏙️ Downtown' },
@@ -5663,11 +5997,12 @@
     ];
 
     const CAR_TYPES = [
-        { id:'sedan',  label:'🚗 Sedan' },
-        { id:'sports', label:'🏎️ Sports' },
-        { id:'truck',  label:'🛻 Pickup' },
-        { id:'monster',label:'🚙 Monster' },
-        { id:'limo',   label:'🚐 Limo' },
+        { id:'sports',   label:'🏎️ Sports',   tip:'Fastest — top speed uncapped' },
+        { id:'lowrider', label:'🚗 Low Rider',  tip:'↑↓ keys to bounce the hydraulics' },
+        { id:'monster',  label:'🚛 Monster',    tip:'Crush cars on the road!' },
+        { id:'limo',     label:'🚐 Limo',       tip:'Party lights & music vibes' },
+        { id:'muscle',   label:'🔥 Muscle Car', tip:'Flames shoot on acceleration' },
+        { id:'icecream', label:'🍦 Ice Cream',  tip:'Leaves a sweet rainbow trail' },
     ];
     const CAR_COLORS = ['#ef4444','#3b82f6','#22c55e','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#f97316','#f8fafc','#1e293b'];
 
@@ -5705,12 +6040,10 @@
     });
 
     document.getElementById('driveModeBtn').onclick = () => {
-        if (isCarMode) exitCarMode();
-        else {
-            driveCustomizer.classList.remove('hidden');
-            document.querySelector('.controls').style.visibility = 'hidden';
-        }
+        driveCustomizer.classList.remove('hidden');
+        document.querySelector('.controls').style.visibility = 'hidden';
     };
+    document.getElementById('driveExitBtn').onclick = exitCarMode;
 
     driveStartBtn.onclick = () => {
         driveCustomizer.classList.add('hidden');
@@ -5721,6 +6054,7 @@
     function closeDriveCustomizer() {
         driveCustomizer.classList.add('hidden');
         document.querySelector('.controls').style.visibility = '';
+        if (!isCarMode) document.querySelector('.controls').style.visibility = '';
     }
     document.getElementById('driveCancelBtn').onclick = closeDriveCustomizer;
     driveCustomizer.addEventListener('click', e => { if (e.target === driveCustomizer) closeDriveCustomizer(); });
@@ -5734,35 +6068,29 @@
 
     function enterCarMode() {
         isCarMode = true;
-        document.getElementById('driveModeBtn').textContent = '🛑 Exit Drive';
+        document.getElementById('topBar').style.display = 'none';
         document.querySelector('.controls').style.display = 'none';
-        document.getElementById('weaponsDropdownBtn').style.display = 'none';
-        document.getElementById('partyDropdownWrapper').style.display = 'none';
-        document.getElementById('friendBtn').style.display = 'none';
-        document.getElementById('foodDropdownBtn').parentElement.style.display = 'none';
-        document.getElementById('clearBtn').style.display = 'none';
-        document.getElementById('bgBtn').style.display = 'none';
-        document.getElementById('fightModeBtn').style.display = 'none';
-        document.getElementById('skateModeBtn').style.display = 'none';
+        document.getElementById('leftPanel').style.display = 'none';
+        document.getElementById('driveExitBtn').style.display = 'block';
         // Reset state
         carSpeed = 3.5; carBobT = 0; carWheelAngle = 0; sceneDist = 0; biomeIndex = 0; biomeBlend = 0;
         driveLayerFar=[]; driveLayerMid=[]; driveLayerNear=[]; roadDashes=[];
         nextFarX = width; nextMidX = width; nextNearX = width;
         for (let x = 0; x < width + 200; x += 80) roadDashes.push({ x });
+        // Per-car state reset
+        lowRiderY=0; lowRiderVY=0;
+        monsterObstacles=[]; monsterObstacleTimer=2000; monsterBumpY=0; monsterBumpVY=0;
+        limoNotes=[]; limoNoteTimer=0;
+        muscleFlames=[];
+        iceCreamTrail=[];
     }
 
     function exitCarMode() {
         isCarMode = false;
-        document.getElementById('driveModeBtn').textContent = '🚗 Drive Mode';
+        document.getElementById('topBar').style.display = '';
         document.querySelector('.controls').style.display = 'flex';
-        document.getElementById('weaponsDropdownBtn').style.display = '';
-        document.getElementById('partyDropdownWrapper').style.display = '';
-        document.getElementById('friendBtn').style.display = '';
-        document.getElementById('foodDropdownBtn').parentElement.style.display = '';
-        document.getElementById('clearBtn').style.display = '';
-        document.getElementById('bgBtn').style.display = '';
-        document.getElementById('fightModeBtn').style.display = '';
-        document.getElementById('skateModeBtn').style.display = '';
+        document.getElementById('leftPanel').style.display = 'flex';
+        document.getElementById('driveExitBtn').style.display = 'none';
         updateBodyBackground();
     }
 
@@ -5993,73 +6321,208 @@
         const t    = carConfig.type;
 
         ctx.save(); ctx.translate(x, y + bobY);
+        ctx.scale(-1, 1); // flip so car faces right (drives forward)
 
         // Shadow
         ctx.save(); ctx.globalAlpha=0.25; ctx.fillStyle='#000';
         ctx.beginPath(); ctx.ellipse(0,2,t==='limo'?95:65,10,0,0,Math.PI*2); ctx.fill(); ctx.restore();
 
         // Helper: build window clip path and return the center Y of the window (in car-local coords)
-        // Returns { winCY } — the vertical midpoint of the window interior
         const buildWindowPath = () => {
             if (t === 'sedan') {
-                ctx.moveTo(-30,-28); ctx.lineTo(-38,-54); ctx.lineTo(28,-54); ctx.lineTo(36,-28); ctx.closePath();
+                ctx.moveTo(30,-28); ctx.lineTo(38,-54); ctx.lineTo(-28,-54); ctx.lineTo(-36,-28); ctx.closePath();
                 return -41;
             } else if (t === 'sports') {
-                ctx.moveTo(-16,-20); ctx.lineTo(-6,-31); ctx.lineTo(26,-31); ctx.lineTo(36,-20); ctx.closePath();
+                ctx.moveTo(16,-20); ctx.lineTo(6,-31); ctx.lineTo(-26,-31); ctx.lineTo(-36,-20); ctx.closePath();
                 return -26;
-            } else if (t === 'truck') {
+            } else if (t === 'monster') {
                 ctx.moveTo(-38,-40); ctx.lineTo(-28,-60); ctx.lineTo(28,-60); ctx.lineTo(38,-40); ctx.closePath();
                 return -50;
             } else if (t === 'limo') {
-                // driver window is the first pane on the left
                 ctx.rect(-90,-28,28,14);
                 return -21;
-            } else { // pickup
-                ctx.moveTo(-42,-30); ctx.lineTo(-30,-52); ctx.lineTo(0,-52); ctx.lineTo(0,-30); ctx.closePath();
-                return -41;
+            } else if (t === 'lowrider') {
+                ctx.rect(-42,-36,40,16);
+                return -28;
+            } else if (t === 'muscle') {
+                ctx.moveTo(-26,-28); ctx.lineTo(-34,-52); ctx.lineTo(22,-52); ctx.lineTo(30,-28); ctx.closePath();
+                return -40;
+            } else if (t === 'icecream') {
+                ctx.rect(10,-40,44,26);
+                return -27;
+            } else { // pickup — square window matching the rect above
+                ctx.rect(-59,-53,56,23);
+                return -42;
             }
         };
 
         if (t === 'sedan') {
-            // Body
+            // Body (symmetric)
             ctx.fillStyle=col; ctx.beginPath(); ctx.roundRect(-60,-28,120,35,[6]); ctx.fill();
             ctx.fillStyle=dark; ctx.beginPath(); ctx.roundRect(-60,-28,120,15,[6,6,0,0]); ctx.fill();
-            // Cabin frame
+            // Cabin — mirrored so after global flip windshield faces front-right
             ctx.fillStyle=lite; ctx.beginPath();
-            ctx.moveTo(-30,-28); ctx.lineTo(-38,-54); ctx.lineTo(28,-54); ctx.lineTo(36,-28); ctx.closePath(); ctx.fill();
-            // Lights
-            ctx.fillStyle='#fef9c3'; ctx.beginPath(); ctx.ellipse(58,-12,7,5,0,0,Math.PI*2); ctx.fill();
-            ctx.fillStyle='#ef4444'; ctx.beginPath(); ctx.ellipse(-58,-12,5,5,0,0,Math.PI*2); ctx.fill();
+            ctx.moveTo(30,-28); ctx.lineTo(38,-54); ctx.lineTo(-28,-54); ctx.lineTo(-36,-28); ctx.closePath(); ctx.fill();
+            // Headlight at front (negative x → appears on right after flip)
+            ctx.fillStyle='#fef9c3'; ctx.beginPath(); ctx.ellipse(-58,-12,7,5,0,0,Math.PI*2); ctx.fill();
+            // Taillight at rear (positive x → appears on left after flip)
+            ctx.fillStyle='#ef4444'; ctx.beginPath(); ctx.ellipse(58,-12,5,5,0,0,Math.PI*2); ctx.fill();
+
         } else if (t === 'sports') {
+            // Body — nose points LEFT (negative x), so after global ctx.scale(-1,1) it faces right
             ctx.fillStyle=col; ctx.beginPath();
-            ctx.moveTo(-65,0); ctx.lineTo(-55,-18); ctx.lineTo(-20,-32); ctx.lineTo(30,-32); ctx.lineTo(60,-16); ctx.lineTo(65,0); ctx.closePath(); ctx.fill();
-            ctx.fillStyle=dark; ctx.fillRect(-62,-22,10,5); ctx.fillRect(-62,-26,18,5);
+            ctx.moveTo(65,0); ctx.lineTo(55,-18); ctx.lineTo(20,-32); ctx.lineTo(-30,-32); ctx.lineTo(-60,-16); ctx.lineTo(-65,0); ctx.closePath(); ctx.fill();
+            // Spoiler at rear (positive x side → flipped to left/rear on screen)
+            ctx.fillStyle=dark; ctx.fillRect(52,-22,10,5); ctx.fillRect(44,-26,18,5);
+            // Cabin window
             ctx.fillStyle=lite; ctx.beginPath();
-            ctx.moveTo(-18,-20); ctx.lineTo(-8,-32); ctx.lineTo(28,-32); ctx.lineTo(38,-20); ctx.closePath(); ctx.fill();
-            ctx.fillStyle='#fef9c3'; ctx.beginPath(); ctx.moveTo(60,-8); ctx.lineTo(55,-16); ctx.lineTo(68,-12); ctx.closePath(); ctx.fill();
-            ctx.fillStyle='#ef4444'; ctx.beginPath(); ctx.ellipse(-60,-8,4,4,0,0,Math.PI*2); ctx.fill();
-        } else if (t === 'truck') {
+            ctx.moveTo(18,-20); ctx.lineTo(8,-32); ctx.lineTo(-28,-32); ctx.lineTo(-38,-20); ctx.closePath(); ctx.fill();
+            // Headlight at nose (negative x → flipped to right/front on screen)
+            ctx.fillStyle='#fef9c3'; ctx.beginPath(); ctx.moveTo(-60,-8); ctx.lineTo(-55,-16); ctx.lineTo(-68,-12); ctx.closePath(); ctx.fill();
+            // Brake light at rear
+            ctx.fillStyle='#ef4444'; ctx.beginPath(); ctx.ellipse(60,-8,4,4,0,0,Math.PI*2); ctx.fill();
+
+        } else if (t === 'pickup') {
+            // ── Pickup truck: square cab left, open bed right ──
+            // Open bed
+            ctx.fillStyle=lerpColor(col,'#000',0.45);
+            ctx.beginPath(); ctx.roundRect(0,-22,60,27,[0,6,6,0]); ctx.fill();
+            ctx.fillStyle=lerpColor(col,'#000',0.65);
+            ctx.fillRect(3,-19,54,22);
+            ctx.fillStyle=lerpColor(col,'#fff',0.15);
+            ctx.fillRect(0,-23,60,5);
+
+            // Cab lower body
+            ctx.fillStyle=col;
+            ctx.beginPath(); ctx.roundRect(-64,-28,66,33,[8,4,4,8]); ctx.fill();
+
+            // Cab roof — square block with only slight corner rounding
+            ctx.fillStyle=col;
+            ctx.beginPath(); ctx.roundRect(-63,-56,64,30,[4,4,0,0]); ctx.fill();
+
+            // Roof-to-body join (fill any gap)
+            ctx.fillRect(-63,-30,64,4);
+
+            // A-pillar lines (dark edge on front and rear of cab)
+            ctx.strokeStyle=dark; ctx.lineWidth=3;
+            ctx.beginPath(); ctx.moveTo(-63,-56); ctx.lineTo(-63,-28); ctx.stroke(); // front pillar
+            ctx.beginPath(); ctx.moveTo(1,-56); ctx.lineTo(1,-28); ctx.stroke();     // rear pillar
+
+            // Window opening inset (lighter fill = glass area)
+            ctx.fillStyle=lite;
+            ctx.beginPath(); ctx.roundRect(-59,-53,56,23,[3,3,0,0]); ctx.fill();
+
+            // Front fender arch over front wheel
+            ctx.fillStyle=col;
+            ctx.beginPath(); ctx.arc(-44, 4, 22, Math.PI, 0); ctx.fill();
+            // Rear fender arch over rear wheel (under bed)
+            ctx.fillStyle=lerpColor(col,'#000',0.15);
+            ctx.beginPath(); ctx.arc(44, 4, 20, Math.PI, 0); ctx.fill();
+
+            // Front bumper
+            ctx.fillStyle=lerpColor(col,'#000',0.35);
+            ctx.beginPath(); ctx.roundRect(-68,-12,6,22,[3]); ctx.fill();
+
+            // Headlight
+            ctx.fillStyle='#fef9c3'; ctx.beginPath(); ctx.ellipse(-64,-14,5,4,0,0,Math.PI*2); ctx.fill();
+            // Taillight
+            ctx.fillStyle='#ef4444'; ctx.beginPath(); ctx.ellipse(58,-10,4,4,0,0,Math.PI*2); ctx.fill();
+
+        } else if (t === 'monster') {
+            // High-clearance boxy body
             ctx.fillStyle=col; ctx.beginPath(); ctx.roundRect(-60,-40,120,45,[8]); ctx.fill();
             ctx.fillStyle=dark; ctx.beginPath(); ctx.roundRect(-60,-40,120,20,[8,8,0,0]); ctx.fill();
             ctx.fillStyle=lite; ctx.beginPath();
             ctx.moveTo(-38,-40); ctx.lineTo(-28,-60); ctx.lineTo(28,-60); ctx.lineTo(38,-40); ctx.closePath(); ctx.fill();
+            // Roll bar
+            ctx.strokeStyle=dark; ctx.lineWidth=5;
+            ctx.beginPath(); ctx.moveTo(-28,-40); ctx.lineTo(-28,-62); ctx.lineTo(28,-62); ctx.lineTo(28,-40); ctx.stroke();
             ctx.fillStyle='#fef9c3'; ctx.beginPath(); ctx.ellipse(62,-22,8,6,0,0,Math.PI*2); ctx.fill();
             ctx.fillStyle='#ef4444'; ctx.beginPath(); ctx.ellipse(-62,-22,6,6,0,0,Math.PI*2); ctx.fill();
+
         } else if (t === 'limo') {
             ctx.fillStyle=col; ctx.beginPath(); ctx.roundRect(-95,-28,190,35,[6]); ctx.fill();
             ctx.fillStyle=dark; ctx.beginPath(); ctx.roundRect(-95,-28,190,14,[6,6,0,0]); ctx.fill();
-            ctx.fillStyle=lite;
-            for(let wx=-80;wx<70;wx+=30){ ctx.beginPath(); ctx.roundRect(wx,-28,22,14,[3]); ctx.fill(); }
+            // Rainbow party windows — each a different cycling hue
+            for(let i=0,wx=-80; wx<70; wx+=30,i++){
+                const hue = (now*0.08 + i*55) % 360;
+                ctx.fillStyle=`hsla(${hue},100%,65%,0.9)`;
+                ctx.shadowColor=`hsl(${hue},100%,65%)`; ctx.shadowBlur=8;
+                ctx.beginPath(); ctx.roundRect(wx,-28,22,14,[3]); ctx.fill();
+                ctx.shadowBlur=0;
+            }
+            // Roof light bar
+            for(let i=0,wx=-90; wx<88; wx+=12,i++){
+                const hue2=(now*0.12+i*30)%360;
+                ctx.fillStyle=`hsla(${hue2},100%,65%,0.85)`;
+                ctx.beginPath(); ctx.arc(wx,-29,4,0,Math.PI*2); ctx.fill();
+            }
             ctx.fillStyle='#fef9c3'; ctx.beginPath(); ctx.ellipse(93,-12,7,5,0,0,Math.PI*2); ctx.fill();
             ctx.fillStyle='#ef4444'; ctx.beginPath(); ctx.ellipse(-93,-12,5,5,0,0,Math.PI*2); ctx.fill();
-        } else if (t === 'pickup') {
-            ctx.fillStyle=col; ctx.beginPath(); ctx.roundRect(-62,-30,120,35,[6]); ctx.fill();
-            ctx.fillStyle=dark; ctx.beginPath(); ctx.roundRect(-62,-30,55,30,[6,0,0,0]); ctx.fill();
-            ctx.fillStyle=lerpColor(col,'#000',0.5); ctx.fillRect(0,-26,58,26); ctx.strokeStyle=dark; ctx.lineWidth=2; ctx.strokeRect(0,-26,58,26);
+
+        } else if (t === 'lowrider') {
+            // Wide, low-slung body
+            ctx.fillStyle=col; ctx.beginPath(); ctx.roundRect(-72,-20,144,24,[4]); ctx.fill();
+            // Roof (low, flat)
+            ctx.fillStyle=dark; ctx.beginPath(); ctx.roundRect(-48,-38,96,20,[6,6,2,2]); ctx.fill();
+            // Windows
+            ctx.fillStyle=lite;
+            ctx.beginPath(); ctx.roundRect(-42,-36,40,16,[3]); ctx.fill();
+            ctx.beginPath(); ctx.roundRect(2,-36,38,16,[3]); ctx.fill();
+            // Chrome side trim stripe
+            ctx.strokeStyle='rgba(255,255,255,0.75)'; ctx.lineWidth=2.5;
+            ctx.beginPath(); ctx.moveTo(-72,-10); ctx.lineTo(72,-10); ctx.stroke();
+            // Flame / pinstripe decal
+            ctx.strokeStyle=`hsla(${(now*0.05)%360},100%,65%,0.7)`; ctx.lineWidth=1.5;
+            ctx.beginPath(); ctx.moveTo(-72,-14); ctx.bezierCurveTo(-50,-18,30,-6,72,-14); ctx.stroke();
+            // Chrome rims (drawn over normal wheels later, style via bigger wheel drawing)
+            ctx.fillStyle='#fef9c3'; ctx.beginPath(); ctx.ellipse(-70,-8,6,4,0,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle='#ef4444'; ctx.beginPath(); ctx.ellipse(70,-8,5,4,0,0,Math.PI*2); ctx.fill();
+
+        } else if (t === 'muscle') {
+            // Boxy aggressive body
+            ctx.fillStyle=col; ctx.beginPath(); ctx.roundRect(-62,-28,124,33,[4]); ctx.fill();
+            // Hood with centre scoop (at front = negative x side)
+            ctx.fillStyle=dark; ctx.beginPath(); ctx.roundRect(-60,-34,30,10,[4,4,0,0]); ctx.fill(); // hood scoop
+            ctx.fillStyle=lerpColor(col,'#000',0.2); ctx.beginPath(); ctx.roundRect(-60,-28,62,4,[0]); ctx.fill(); // hood stripe
+            // Cabin
             ctx.fillStyle=lite; ctx.beginPath();
-            ctx.moveTo(-42,-30); ctx.lineTo(-30,-52); ctx.lineTo(0,-52); ctx.lineTo(0,-30); ctx.closePath(); ctx.fill();
-            ctx.fillStyle='#fef9c3'; ctx.beginPath(); ctx.ellipse(60,-12,7,5,0,0,Math.PI*2); ctx.fill();
-            ctx.fillStyle='#ef4444'; ctx.beginPath(); ctx.ellipse(-60,-12,5,5,0,0,Math.PI*2); ctx.fill();
+            ctx.moveTo(-26,-28); ctx.lineTo(-34,-52); ctx.lineTo(22,-52); ctx.lineTo(30,-28); ctx.closePath(); ctx.fill();
+            // Exhaust pipes at rear (positive x)
+            ctx.fillStyle='#94a3b8';
+            ctx.beginPath(); ctx.roundRect(58,-7,14,5,[2]); ctx.fill();
+            ctx.beginPath(); ctx.roundRect(58,-14,14,5,[2]); ctx.fill();
+            // Flame decals on hood (negative x side)
+            for(let fi=0;fi<3;fi++){
+                ctx.fillStyle=`rgba(251,${146-fi*30},60,${0.6-fi*0.1})`;
+                ctx.beginPath(); ctx.moveTo(-58+fi*4,-18); ctx.bezierCurveTo(-64+fi*2,-28,-52+fi*4,-36,-46+fi*3,-26); ctx.bezierCurveTo(-44+fi*3,-20,-50+fi*3,-16,-46+fi*2,-10); ctx.bezierCurveTo(-52+fi*2,-12,-56+fi*2,-8,-58+fi*4,-18); ctx.closePath(); ctx.fill();
+            }
+            ctx.fillStyle='#fef9c3'; ctx.beginPath(); ctx.ellipse(-60,-12,7,5,0,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle='#ef4444'; ctx.beginPath(); ctx.ellipse(60,-10,7,6,0,0,Math.PI*2); ctx.fill();
+
+        } else if (t === 'icecream') {
+            // White van body
+            ctx.fillStyle='#f1f5f9'; ctx.beginPath(); ctx.roundRect(-66,-42,132,47,[8]); ctx.fill();
+            // Coloured stripes
+            ctx.fillStyle='#fb7185'; ctx.fillRect(-66,-22,132,7);
+            ctx.fillStyle='#60a5fa'; ctx.fillRect(-66,-30,132,8);
+            ctx.fillStyle='#4ade80'; ctx.fillRect(-66,-38,132,8);
+            // Serving window (right side of van, positive x)
+            ctx.fillStyle=lite; ctx.beginPath(); ctx.roundRect(10,-40,44,26,[4]); ctx.fill();
+            // Sprinkle dots on van side
+            const sprinkColors=['#f43f5e','#3b82f6','#22c55e','#f59e0b','#a855f7'];
+            for(let si=0;si<12;si++){
+                ctx.fillStyle=sprinkColors[si%sprinkColors.length];
+                ctx.save(); ctx.translate(-55+si*8, -35+Math.sin(si*1.5)*8); ctx.rotate(si*0.8);
+                ctx.fillRect(-3,-1,6,2); ctx.restore();
+            }
+            // Ice cream cone on roof
+            ctx.fillStyle='#f97316'; ctx.beginPath(); ctx.moveTo(-10,-42); ctx.lineTo(0,-62); ctx.lineTo(10,-42); ctx.closePath(); ctx.fill();
+            ctx.fillStyle='#fef9c3'; ctx.beginPath(); ctx.arc(0,-62,12,Math.PI,0,false); ctx.fill();
+            ctx.fillStyle='#fb7185'; ctx.globalAlpha=0.6; ctx.beginPath(); ctx.arc(0,-62,12,0,Math.PI,false); ctx.fill(); ctx.globalAlpha=1;
+            // Headlight
+            ctx.fillStyle='#fef9c3'; ctx.beginPath(); ctx.ellipse(-64,-18,6,5,0,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle='#ef4444'; ctx.beginPath(); ctx.ellipse(64,-18,5,5,0,0,Math.PI*2); ctx.fill();
         }
 
         // ── Duck clipped inside the window ───────────────────────────
@@ -6069,10 +6532,10 @@
         ctx.clip();
 
         // Duck head centered in window
-        const dkX = (t==='limo') ? -76 : (t==='pickup') ? -21 : -1;
+        const dkX = t==='limo' ? -76 : t==='pickup' ? -32 : t==='sports' ? -10 : t==='lowrider' ? -22 : t==='icecream' ? 32 : -1;
         ctx.save(); ctx.translate(dkX, winCY);
         const dkScale = (t==='limo'||t==='sports') ? 0.42 : 0.50;
-        ctx.scale(dkScale, dkScale);
+        ctx.scale(-dkScale, dkScale); // un-flip duck so it faces forward
         const dCol = ducks[0] ? (ducks[0].color.base || '#fbbf24') : '#fbbf24';
         // Shoulders/body bottom fill (so window doesn't look empty)
         ctx.fillStyle=dCol;
@@ -6109,9 +6572,9 @@
         ctx.restore();
 
         // Wheels
-        const wr = t==='monster' ? 28 : t==='limo' ? 20 : 18;
-        const wbY = t==='monster' ? 4 : 2;
-        const wPositions = t==='limo' ? [-68,68] : t==='monster' ? [-48,48] : [-44,44];
+        const wr = t==='monster' ? 28 : t==='limo' ? 20 : t==='lowrider' ? 22 : t==='icecream' ? 20 : t==='pickup' ? 19 : 18;
+        const wbY = t==='monster' ? 6 : t==='lowrider' ? 4 : 2;
+        const wPositions = t==='limo' ? [-68,68] : t==='monster' ? [-48,48] : t==='icecream' ? [-50,50] : [-44,44];
         for (const wx of wPositions) {
             ctx.save(); ctx.translate(wx, wbY);
             ctx.fillStyle='#1e293b'; ctx.beginPath(); ctx.arc(0,0,wr,0,Math.PI*2); ctx.fill();
@@ -6133,7 +6596,7 @@
             for(let i=0;i<8;i++){
                 const ly = -30 + i*10 + Math.random()*4;
                 const llen = 20 + Math.random()*40;
-                ctx.beginPath(); ctx.moveTo(-65-llen,ly); ctx.lineTo(-65,ly); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(65,ly); ctx.lineTo(65+llen,ly); ctx.stroke();
             }
             ctx.globalAlpha=1;
         }
@@ -6145,10 +6608,16 @@
         const groundY = height - 130;
         ctx.clearRect(0,0,width,height);
 
-        // Speed control
-        if (carKeys['arrowleft'] || carKeys['a'])  carSpeed = Math.max(0.5, carSpeed - 0.07);
-        else if (carKeys['arrowright'] || carKeys['d']) carSpeed = Math.min(10, carSpeed + 0.08);
-        else carSpeed += (3.5 - carSpeed) * 0.012;  // drift back to cruise
+        // Per-car speed caps & cruise speeds
+        const t = carConfig.type;
+        const maxSpd  = t==='sports' ? 20 : t==='muscle' ? 13 : t==='monster' ? 9 : t==='lowrider' ? 7 : t==='icecream' ? 4 : 6;
+        const cruise  = t==='icecream' ? 2 : t==='lowrider' ? 3 : 3.5;
+        const accelR  = t==='sports' ? 0.14 : t==='muscle' ? 0.10 : 0.08;
+
+        // Speed control (lowrider uses ←/→ or A/D only for speed; ↑↓ are hydraulics)
+        if (carKeys['arrowleft'] || carKeys['a'])   carSpeed = Math.max(0.5, carSpeed - 0.07);
+        else if (carKeys['arrowright'] || carKeys['d']) carSpeed = Math.min(maxSpd, carSpeed + accelR);
+        else carSpeed += (cruise - carSpeed) * 0.012;
 
         // Update distance & biome
         sceneDist += carSpeed;
@@ -6192,9 +6661,152 @@
         drawMidLayer(groundY, now);
         drawNearLayer(groundY, now);
 
-        // Car sits on the road
-        const carY = groundY - 8;
-        drawCar(width * 0.28, carY, bobY, now);
+        // ── Per-car special logic ────────────────────────────────────
+        const carCX = width * 0.28;
+        const carY  = groundY - 8;
+
+        // LOW RIDER — hydraulic bounce
+        // lowRiderY: negative = lifted, 0 = normal, positive (up to +12) = squatted/slammed
+        if (t === 'lowrider') {
+            const crouching = carKeys['arrowdown'] || carKeys['s'];
+            const hopping   = carKeys['arrowup']   || carKeys['w'];
+
+            if (hopping && lowRiderY >= -5) {
+                lowRiderVY = -14; // launch upward
+            }
+            if (crouching) {
+                // Pull toward squat (+10)
+                lowRiderVY += (10 - lowRiderY) * 0.2;
+                lowRiderVY *= 0.75; // dampen so it settles
+            } else {
+                lowRiderVY += 0.55; // gravity
+            }
+
+            lowRiderY += lowRiderVY * (dt / 16);
+
+            // Floor: rest at 0 when not crouching, squat limit at +10
+            if (!crouching && lowRiderY >= 0) {
+                lowRiderY = 0;
+                lowRiderVY *= -0.3; // small bounce on landing
+            }
+            if (crouching && lowRiderY >= 10) {
+                lowRiderY = 10; lowRiderVY = 0;
+            }
+            if (lowRiderY < -85) { lowRiderY = -85; lowRiderVY = 0; }
+        } else { lowRiderY = 0; lowRiderVY = 0; }
+
+        // MONSTER TRUCK — spawn & crush obstacle cars
+        if (t === 'monster') {
+            monsterObstacleTimer -= dt;
+            if (monsterObstacleTimer < 0) {
+                monsterObstacles.push({ x: width + 90, squished: false, squishT: 0, col: `hsl(${Math.random()*360},70%,50%)` });
+                monsterObstacleTimer = 2200 + Math.random() * 2000;
+            }
+            const frontX = carCX + 70; // front bumper screen position
+            for (const obs of monsterObstacles) {
+                obs.x -= carSpeed;
+                if (!obs.squished && obs.x < frontX && obs.x > frontX - 80) {
+                    obs.squished = true;
+                    monsterBumpVY = -6; // truck bounces up
+                }
+                if (obs.squished) obs.squishT = Math.min(obs.squishT + dt / 250, 1);
+            }
+            monsterObstacles = monsterObstacles.filter(o => o.x > -120);
+            monsterBumpVY += 0.35;
+            monsterBumpY  += monsterBumpVY * (dt / 16);
+            if (monsterBumpY >= 0) { monsterBumpY = 0; monsterBumpVY = 0; }
+
+            // Draw obstacle cars BEFORE truck
+            for (const obs of monsterObstacles) {
+                ctx.save(); ctx.translate(obs.x, carY);
+                const squishScale = obs.squished ? Math.max(0.08, 1 - obs.squishT) : 1;
+                ctx.scale(1, squishScale);
+                ctx.fillStyle=obs.col; ctx.beginPath(); ctx.roundRect(-22,-18,44,18,[4]); ctx.fill();
+                ctx.fillStyle=lerpColor(obs.col,'#000',0.35); ctx.beginPath(); ctx.roundRect(-22,-18,44,9,[4,4,0,0]); ctx.fill();
+                ctx.fillStyle='rgba(150,220,255,0.5)'; ctx.beginPath(); ctx.roundRect(-16,-16,16,7,[2]); ctx.fill(); ctx.beginPath(); ctx.roundRect(0,-16,16,7,[2]); ctx.fill();
+                ctx.fillStyle='#1e293b'; ctx.beginPath(); ctx.arc(-13,2,7,0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(13,2,7,0,Math.PI*2); ctx.fill();
+                if (obs.squished && obs.squishT > 0.5) {
+                    ctx.fillStyle='rgba(255,100,0,0.6)'; ctx.font='16px sans-serif'; ctx.textAlign='center';
+                    ctx.fillText('💥', 0, -25 / squishScale);
+                }
+                ctx.restore();
+            }
+        } else { monsterBumpY = 0; }
+
+        // LIMO — floating music notes
+        if (t === 'limo') {
+            limoNoteTimer -= dt;
+            if (limoNoteTimer < 0) {
+                const notes = ['♪','♫','♬','♩'];
+                limoNotes.push({ x: carCX + (Math.random()-0.5)*80, y: carY-50, vx:(Math.random()-0.5)*0.6, vy:-1.8-Math.random(), life:1, note:notes[Math.floor(Math.random()*notes.length)], col:`hsl(${Math.random()*360},100%,70%)` });
+                limoNoteTimer = 280 + Math.random()*350;
+            }
+            for (const n of limoNotes) { n.x+=n.vx*(dt/16); n.y+=n.vy*(dt/16); n.life-=dt/3000; }
+            limoNotes = limoNotes.filter(n => n.life > 0);
+        }
+
+        // MUSCLE CAR — exhaust flames
+        if (t === 'muscle' && (carKeys['arrowright'] || carKeys['d'])) {
+            if (Math.random() < 0.5) {
+                muscleFlames.push({ x: carCX - 68, y: carY - 10 + (Math.random()-0.5)*8, vx:-(carSpeed*0.4+Math.random()*2), vy:(Math.random()-0.5)*1.5, life:1, size:10+Math.random()*10 });
+            }
+        }
+        for (const f of muscleFlames) { f.x+=f.vx*(dt/16); f.y+=f.vy*(dt/16); f.life-=dt/350; f.size*=0.96; }
+        muscleFlames = muscleFlames.filter(f => f.life > 0);
+
+        // ICE CREAM — sprinkle trail
+        if (t === 'icecream') {
+            if (Math.random() < 0.4) {
+                iceCreamTrail.push({ x: carCX - 65, y: carY - 5 + Math.random()*8, vx:-(0.5+Math.random()), vy:-Math.random()*1.5, life:1, col:`hsl(${Math.random()*360},100%,70%)`, size:3+Math.random()*4 });
+            }
+            if (Math.random() < 0.04) {
+                iceCreamTrail.push({ x: carCX+(Math.random()-0.5)*50, y: carY-55, vx:(Math.random()-0.5)*0.4, vy:-2.5, life:1, col:`hsl(${Math.random()*360},100%,75%)`, size:9, star:true });
+            }
+        }
+        for (const p of iceCreamTrail) { p.x+=p.vx*(dt/16); p.y+=p.vy*(dt/16); p.life-=dt/2200; }
+        iceCreamTrail = iceCreamTrail.filter(p => p.life > 0);
+
+        // Draw muscle flames (behind car)
+        for (const f of muscleFlames) {
+            ctx.save(); ctx.globalAlpha=f.life*0.85;
+            ctx.fillStyle=`hsl(${f.life*40},100%,${45+f.life*25}%)`;
+            ctx.shadowColor=`hsl(${f.life*40},100%,60%)`; ctx.shadowBlur=12;
+            ctx.beginPath(); ctx.arc(f.x,f.y,f.size,0,Math.PI*2); ctx.fill();
+            ctx.restore();
+        }
+
+        // Draw ice cream trail (behind car)
+        for (const p of iceCreamTrail) {
+            ctx.save(); ctx.globalAlpha=p.life;
+            ctx.fillStyle=p.col;
+            if (p.star) {
+                ctx.font='14px sans-serif'; ctx.textAlign='center';
+                ctx.fillText('⭐',p.x,p.y);
+            } else {
+                ctx.beginPath(); ctx.arc(p.x,p.y,p.size,0,Math.PI*2); ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        drawCar(carCX, carY, bobY + lowRiderY + monsterBumpY, now);
+
+        // Draw limo notes (above car)
+        for (const n of limoNotes) {
+            ctx.save(); ctx.globalAlpha=n.life*0.9;
+            ctx.fillStyle=n.col; ctx.shadowColor=n.col; ctx.shadowBlur=8;
+            ctx.font='bold 20px sans-serif'; ctx.textAlign='center';
+            ctx.fillText(n.note,n.x,n.y);
+            ctx.restore();
+        }
+
+        // Sports turbo flash at high speed
+        if (t === 'sports' && carSpeed > 14) {
+            const flash = (carSpeed - 14) / 6;
+            ctx.save(); ctx.globalAlpha = flash * 0.35;
+            ctx.fillStyle='rgba(100,200,255,0.4)';
+            ctx.fillRect(0,0,width,height);
+            ctx.restore();
+        }
 
         // Biome transition label
         if (biomeBlend < 0.06 && sceneDist > 200) {
@@ -6209,21 +6821,50 @@
         // HUD: speed bar + distance
         const nb = (biomeIndex+1) % BIOMES.length;
         const accentCol = lerpColor(BIOMES[biomeIndex].accent, BIOMES[nb].accent, biomeBlend);
-        const speedPct = (carSpeed - 0.5) / 9.5;
+        const speedPct = (carSpeed - 0.5) / (maxSpd - 0.5);
 
         ctx.save();
-        // Speed gauge — bottom centre
-        const gx = width/2-90, gy = height-44, gw = 180, gh = 12;
-        ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.roundRect(gx-4, gy-4, gw+8, gh+8, 8); ctx.fill();
-        ctx.fillStyle='rgba(255,255,255,0.1)'; ctx.beginPath(); ctx.roundRect(gx, gy, gw, gh, 4); ctx.fill();
-        ctx.fillStyle=accentCol; ctx.beginPath(); ctx.roundRect(gx, gy, gw*speedPct, gh, 4); ctx.fill();
-        ctx.fillStyle='white'; ctx.font='bold 11px sans-serif'; ctx.textAlign='center';
-        ctx.fillText(`${Math.round(carSpeed * 28)} km/h`, width/2, gy - 6);
+        // ── Speed HUD — digital bars + MPH ──
+        const mph = Math.round(carSpeed * 12);
+        const BARS = 16;
+        const litBars = Math.round(speedPct * BARS);
+        const barW = 9, barH = 22, barGap = 4;
+        const totalW = BARS * (barW + barGap) - barGap;
+        const bx = width/2 - totalW/2;
+        const by = height - 52;
 
-        // Distance odometer
-        ctx.fillStyle='rgba(0,0,0,0.45)'; ctx.beginPath(); ctx.roundRect(width-145,14,130,36,10); ctx.fill();
-        ctx.fillStyle=accentCol; ctx.font='bold 14px monospace'; ctx.textAlign='right';
-        ctx.fillText(`${Math.round(sceneDist * 0.8).toString().padStart(6,'0')} m`, width-20, 38);
+        // Panel background
+        ctx.fillStyle='rgba(0,0,0,0.6)';
+        ctx.beginPath(); ctx.roundRect(bx-10, by-32, totalW+20, barH+36, 10); ctx.fill();
+
+        // Bars
+        for (let i = 0; i < BARS; i++) {
+            const lit = i < litBars;
+            const frac = i / (BARS - 1);
+            // colour: green → yellow → red
+            const r = frac < 0.5 ? Math.round(frac * 2 * 255) : 255;
+            const g = frac < 0.5 ? 220 : Math.round((1 - (frac - 0.5) * 2) * 220);
+            ctx.fillStyle = lit ? `rgb(${r},${g},0)` : 'rgba(255,255,255,0.07)';
+            if (lit) { ctx.shadowColor=`rgb(${r},${g},0)`; ctx.shadowBlur=6; }
+            ctx.beginPath(); ctx.roundRect(bx + i*(barW+barGap), by, barW, barH, 2); ctx.fill();
+            ctx.shadowBlur=0;
+        }
+
+        // Digital MPH number
+        ctx.shadowColor='#00ffaa'; ctx.shadowBlur=12;
+        ctx.fillStyle='#00ffaa';
+        ctx.font='bold 20px "Courier New", monospace';
+        ctx.textAlign='center';
+        ctx.fillText(mph.toString().padStart(3,' '), width/2, by - 10);
+        ctx.shadowBlur=0;
+        ctx.fillStyle='rgba(0,255,170,0.55)';
+        ctx.font='bold 10px "Courier New", monospace';
+        ctx.fillText('MP/H', width/2, by - 26);
+
+        // Distance odometer — top left
+        ctx.fillStyle='rgba(0,0,0,0.45)'; ctx.beginPath(); ctx.roundRect(14,14,130,36,10); ctx.fill();
+        ctx.fillStyle=accentCol; ctx.font='bold 14px monospace'; ctx.textAlign='left';
+        ctx.fillText(`📍 ${Math.round(sceneDist * 0.8).toString().padStart(6,'0')} m`, 24, 38);
 
         // Controls hint (fade out after 5s)
         if (sceneDist < 600) {
@@ -6231,9 +6872,688 @@
             ctx.globalAlpha = ha;
             ctx.fillStyle='rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.roundRect(16,height-50,220,36,10); ctx.fill();
             ctx.fillStyle='white'; ctx.font='13px sans-serif'; ctx.textAlign='left';
-            ctx.fillText('← A / → D  to control speed   Q to exit', 26, height-27);
+            const hint = t==='lowrider' ? '← → speed   ↑ hop / ↓ crouch   Q exit'
+                       : t==='monster'  ? '← → speed   Crush cars!   Q exit'
+                       : '← A / → D  speed   Q to exit';
+            ctx.fillText(hint, 26, height-27);
         }
         ctx.restore();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PING PONG MODE
+    // ═══════════════════════════════════════════════════════════════════
+    let isPingPongMode = false;
+    let ppKeys = {};
+    let ppState = null;
+    const PP_PADDLE_H = 90;
+    const PP_BALL_R   = 11;
+    const PP_WIN      = 7;
+
+    function initPingPong() {
+        ppState = {
+            ball: { x: width/2, y: height/2, vx: 0, vy: 0, trail: [] },
+            p1:   { y: height/2, score: 0, hitAnim: 0 },
+            p2:   { y: height/2, score: 0, hitAnim: 0 },
+            aiMode: true,
+            serving: true, serveTimer: 3000,
+            winner: null, winAnim: 0,
+            flashTimer: 0,
+            // ── DING DONG GONE state ──
+            ddgMode: false,
+            ddgPowerUps: [],           // { x, y, type, pulse }
+            ddgP1: { held: null, activeType: null, timer: 0, fireReady: false, shieldHit: 0, collectFlash: 0 },
+            ddgP2: { held: null, activeType: null, timer: 0, fireReady: false, shieldHit: 0, collectFlash: 0 },
+            ddgSpawnTimer: 5000,
+            ddgBallFire: false,
+            ddgFireParticles: [],
+        };
+    }
+
+    function enterPingPongMode(ddg) {
+        isPingPongMode = true;
+        document.getElementById('topBar').style.display = 'none';
+        document.querySelector('.controls').style.display = 'none';
+        document.getElementById('leftPanel').style.display = 'none';
+        document.getElementById('pingPongExitBtn').style.display = 'block';
+        document.getElementById('driveExitBtn').style.display = 'none';
+        initPingPong();
+        if (ddg) ppState.ddgMode = true;
+    }
+    function exitPingPongMode() {
+        isPingPongMode = false;
+        document.getElementById('topBar').style.display = '';
+        document.querySelector('.controls').style.display = 'flex';
+        document.getElementById('leftPanel').style.display = 'flex';
+        document.getElementById('pingPongExitBtn').style.display = 'none';
+        updateBodyBackground();
+    }
+    const pingPongDropdown = document.getElementById('pingPongDropdown');
+    document.getElementById('pingPongBtn').addEventListener('click', e => {
+        e.stopPropagation();
+        const isOpen = pingPongDropdown.style.display === 'block';
+        pingPongDropdown.style.display = isOpen ? 'none' : 'block';
+    });
+    document.getElementById('classicPongBtn').onclick = () => { pingPongDropdown.style.display = 'none'; enterPingPongMode(false); };
+    document.getElementById('dingDongBtn').onclick    = () => { pingPongDropdown.style.display = 'none'; enterPingPongMode(true);  };
+    document.getElementById('pingPongExitBtn').onclick = exitPingPongMode;
+
+    window.addEventListener('keydown', e => {
+        if (!isPingPongMode) return;
+        ppKeys[e.key] = true;
+        if (e.key === 'Escape') exitPingPongMode();
+        if ((e.key === 'r' || e.key === 'R') && ppState && ppState.winner) initPingPong();
+        if (e.key === 'Tab') { e.preventDefault(); if (ppState) ppState.aiMode = !ppState.aiMode; }
+        // DDG: toggle mode (any time) — M key
+        if ((e.key === 'm' || e.key === 'M') && ppState) {
+            ppState.ddgMode = !ppState.ddgMode;
+            // reset power-up state when toggling
+            ppState.ddgPowerUps = [];
+            ppState.ddgP1 = { held: null, activeType: null, timer: 0, fireReady: false, shieldHit: 0, collectFlash: 0 };
+            ppState.ddgP2 = { held: null, activeType: null, timer: 0, fireReady: false, shieldHit: 0, collectFlash: 0 };
+            ppState.ddgBallFire = false; ppState.ddgFireParticles = [];
+            ppState.ddgSpawnTimer = 5000;
+        }
+        // DDG: activate power-up — P1 = E, P2 = Enter or /
+        if ((e.key === 'e' || e.key === 'E') && ppState && ppState.ddgMode) {
+            activateDDGPower(ppState, 1);
+        }
+        if ((e.key === 'Enter' || e.key === '/') && ppState && ppState.ddgMode) {
+            activateDDGPower(ppState, 2);
+        }
+    });
+    window.addEventListener('keyup', e => { if (isPingPongMode) delete ppKeys[e.key]; });
+
+    // ── Duck paddle drawing ──────────────────────────────────────────
+    function drawPPDuck(x, y, facingRight, hitAnim, baseCol) {
+        ctx.save();
+        ctx.translate(x, y);
+        if (!facingRight) ctx.scale(-1, 1);
+
+        const bounce = 1 + Math.abs(Math.sin(hitAnim)) * 0.18;
+        ctx.scale(bounce, bounce);
+
+        const col    = baseCol || '#fbbf24';
+        const dark   = lerpColor(col, '#000', 0.25);
+        const lite   = lerpColor(col, '#fff', 0.25);
+        const orange = '#f97316';
+        const billCol= '#f59e0b';
+
+        // Shadow
+        ctx.save(); ctx.globalAlpha=0.22; ctx.fillStyle='#000';
+        ctx.beginPath(); ctx.ellipse(4, 52, 22, 7, 0, 0, Math.PI*2); ctx.fill(); ctx.restore();
+
+        // ── Body ──
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.ellipse(0, 6, 22, 36, 0, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = dark; ctx.lineWidth = 2; ctx.stroke();
+        // Belly highlight
+        ctx.fillStyle = lite;
+        ctx.beginPath(); ctx.ellipse(-3, 10, 11, 20, -0.15, 0, Math.PI*2); ctx.fill();
+
+        // ── Wing extended toward ball ──
+        ctx.fillStyle = dark;
+        ctx.beginPath();
+        ctx.moveTo(4, -4); ctx.bezierCurveTo(22, -10, 32, 4, 26, 18);
+        ctx.bezierCurveTo(20, 28, 8, 22, 4, 14); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = lerpColor(col,'#fff',0.1);
+        ctx.beginPath();
+        ctx.moveTo(6, -1); ctx.bezierCurveTo(18, -6, 26, 4, 22, 14);
+        ctx.bezierCurveTo(18, 22, 8, 18, 6, 12); ctx.closePath(); ctx.fill();
+
+        // ── Head ──
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.arc(4, -32, 19, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = dark; ctx.lineWidth = 2; ctx.stroke();
+
+        // ── Eye ──
+        ctx.fillStyle = '#000';
+        ctx.beginPath(); ctx.arc(4, -38, 5, 0, Math.PI*2); ctx.fill();
+
+        // ── Flat duck bill (wide, rounded, classic duck shape) ──
+        ctx.fillStyle = billCol;
+        ctx.beginPath();
+        // Upper mandible — flat top, rounded tip
+        ctx.moveTo(16, -38);
+        ctx.bezierCurveTo(26, -39, 36, -37, 37, -33);   // top curve to tip
+        ctx.bezierCurveTo(37, -31, 36, -30, 33, -30);   // round tip
+        // Lower mandible
+        ctx.lineTo(16, -30);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#d97706'; ctx.lineWidth = 1; ctx.stroke();
+        // Bill centre line (upper/lower mandible split)
+        ctx.strokeStyle = '#d97706'; ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.moveTo(17, -34); ctx.bezierCurveTo(26,-34,34,-33,36,-32); ctx.stroke();
+        // Nostril hole
+        ctx.fillStyle = '#b45309';
+        ctx.beginPath(); ctx.ellipse(24, -36, 2.5, 1.5, 0.2, 0, Math.PI*2); ctx.fill();
+
+        // ── Webbed feet ──
+        // Back foot
+        ctx.fillStyle = orange;
+        ctx.beginPath();
+        ctx.moveTo(-6, 40);
+        ctx.bezierCurveTo(-14, 44, -18, 52, -10, 54); // outer toe
+        ctx.bezierCurveTo(-6,  55,  -2, 55,  2,  54); // middle toe
+        ctx.bezierCurveTo( 8,  52,   8, 46,  4,  42); // inner toe
+        ctx.bezierCurveTo( 0,  40,  -4, 40, -6,  40);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle='#c2410c'; ctx.lineWidth=1;
+        // Toe lines
+        ctx.beginPath(); ctx.moveTo(-6,40); ctx.lineTo(-12,52); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-2,41); ctx.lineTo(-1,54);  ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(3, 41); ctx.lineTo(6, 52);  ctx.stroke();
+
+        // Front foot (slightly forward and offset)
+        ctx.fillStyle = lerpColor(orange,'#000',0.12);
+        ctx.beginPath();
+        ctx.moveTo(4, 42);
+        ctx.bezierCurveTo(-4,  46, -8, 54,  0,  56);
+        ctx.bezierCurveTo( 4,  57,  8, 57, 12,  56);
+        ctx.bezierCurveTo(18,  54, 18, 48, 14,  44);
+        ctx.bezierCurveTo(10,  42,  6, 42,  4,  42);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle='#c2410c'; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.moveTo(4,42);  ctx.lineTo(0, 55);  ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(8,42);  ctx.lineTo(10,56);  ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(12,43); ctx.lineTo(16,54);  ctx.stroke();
+
+        ctx.restore();
+    }
+
+    function runPingPong(dt) {
+        if (!ppState) return;
+        const ps = ppState;
+        const now = performance.now();
+
+        ctx.clearRect(0, 0, width, height);
+
+        // ── Table background ──
+        const tg = ctx.createLinearGradient(0, 0, 0, height);
+        tg.addColorStop(0, '#1a5c34'); tg.addColorStop(1, '#0d3a1e');
+        ctx.fillStyle = tg; ctx.fillRect(0, 0, width, height);
+
+        // Table edge lines
+        ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 3;
+        const tableTop = height * 0.07, tableBot = height * 0.93;
+        ctx.beginPath(); ctx.moveTo(0, tableTop); ctx.lineTo(width, tableTop); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, tableBot); ctx.lineTo(width, tableBot); ctx.stroke();
+
+        // Table wood edge texture
+        ctx.fillStyle = 'rgba(139,90,43,0.35)';
+        ctx.fillRect(0, tableBot, width, height - tableBot);
+        ctx.fillRect(0, 0, width, tableTop);
+
+        // Center service line (faint)
+        ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 2;
+        ctx.setLineDash([12,12]);
+        ctx.beginPath(); ctx.moveTo(width/2, tableTop); ctx.lineTo(width/2, tableBot); ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Net
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillRect(width/2 - 3, tableTop - 10, 6, tableBot - tableTop + 20);
+        ctx.fillStyle = '#f1f5f9'; ctx.beginPath(); ctx.roundRect(width/2-5, tableTop-14, 10, 10, 3); ctx.fill();
+        ctx.beginPath(); ctx.roundRect(width/2-5, tableBot+4, 10, 10, 3); ctx.fill();
+        // Net mesh lines
+        ctx.strokeStyle = 'rgba(200,200,200,0.4)'; ctx.lineWidth = 1;
+        for (let ny = tableTop; ny < tableBot; ny += 12) {
+            ctx.beginPath(); ctx.moveTo(width/2-3, ny); ctx.lineTo(width/2+3, ny); ctx.stroke();
+        }
+
+        // ── Bounds ──
+        const P1_X = 52, P2_X = width - 52;
+        const topB = tableTop + PP_PADDLE_H/2 + 5;
+        const botB = tableBot - PP_PADDLE_H/2 - 5;
+
+        if (!ps.winner) {
+            // ── P1 input (W / S) ──
+            if (ppKeys['w'] || ppKeys['W']) ps.p1.y = Math.max(topB, ps.p1.y - 7);
+            if (ppKeys['s'] || ppKeys['S']) ps.p1.y = Math.min(botB, ps.p1.y + 7);
+
+            // ── P2 AI or input (↑ / ↓) ──
+            if (ps.aiMode) {
+                // CPU only tracks the ball — it never deliberately chases power-ups.
+                // It can still collect one if the ball happens to move it near enough.
+                const diff  = ps.ball.y - ps.p2.y;
+                const aiSpd = Math.min(Math.abs(diff) * 0.1 + 2, 5.5);
+                ps.p2.y = Math.max(topB, Math.min(botB, ps.p2.y + Math.sign(diff) * aiSpd));
+            } else {
+                if (ppKeys['ArrowUp'])   ps.p2.y = Math.max(topB, ps.p2.y - 7);
+                if (ppKeys['ArrowDown']) ps.p2.y = Math.min(botB, ps.p2.y + 7);
+            }
+
+            // ── Serve delay ──
+            if (ps.serving) {
+                ps.serveTimer -= dt;
+                if (ps.serveTimer <= 0) {
+                    ps.serving = false;
+                    const ang = (Math.random() * 0.8 - 0.4);
+                    const dir = Math.random() > 0.5 ? 1 : -1;
+                    ps.ball.vx = dir * 5.5 * Math.cos(ang);
+                    ps.ball.vy = 5.5 * Math.sin(ang);
+                }
+            } else {
+                // ── DDG: update power timers & fire particles ──
+                if (ps.ddgMode) {
+                    ['ddgP1','ddgP2'].forEach(k => {
+                        const p = ps[k];
+                        if (p.timer > 0) {
+                            p.timer -= dt;
+                            if (p.timer <= 0) { p.activeType = null; p.fireReady = false; p.timer = 0; }
+                        }
+                        if (p.shieldHit > 0) p.shieldHit -= dt;
+                        if (p.collectFlash > 0) p.collectFlash -= dt;
+                    });
+                    // Spawn power-ups
+                    ps.ddgSpawnTimer -= dt;
+                    if (ps.ddgSpawnTimer <= 0 && ps.ddgPowerUps.length < 2) {
+                        spawnDDGPowerUp(ps, tableTop, tableBot);
+                        ps.ddgSpawnTimer = 7000 + Math.random() * 5000;
+                    }
+                    // Animate power-up pulses + tick life timer
+                    for (const pu of ps.ddgPowerUps) {
+                        pu.pulse += dt * 0.006;
+                        pu.lifeTimer -= dt;
+                    }
+                    // Collection + expiry
+                    for (let i = ps.ddgPowerUps.length - 1; i >= 0; i--) {
+                        const pu = ps.ddgPowerUps[i];
+                        // Expired — remove
+                        if (pu.lifeTimer <= 0) { ps.ddgPowerUps.splice(i, 1); continue; }
+                        const py = pu.y + Math.sin(pu.pulse) * 4;
+                        if (!ps.ddgP1.held && !ps.ddgP1.activeType && Math.hypot(P1_X - pu.x, ps.p1.y - py) < 52) {
+                            ps.ddgP1.held = pu.type; ps.ddgP1.collectFlash = 400;
+                            ps.ddgPowerUps.splice(i, 1); continue;
+                        }
+                        if (!ps.ddgP2.held && !ps.ddgP2.activeType && Math.hypot(P2_X - pu.x, ps.p2.y - py) < 52) {
+                            ps.ddgP2.held = pu.type; ps.ddgP2.collectFlash = 400;
+                            ps.ddgPowerUps.splice(i, 1);
+                        }
+                    }
+                    // Fire particle update
+                    if (ps.ddgBallFire) {
+                        for (let i = 0; i < 3; i++) ps.ddgFireParticles.push({
+                            x: ps.ball.x + (Math.random()-0.5)*10,
+                            y: ps.ball.y + (Math.random()-0.5)*10,
+                            vx: (Math.random()-0.5)*3, vy: -1.5 - Math.random()*2, life: 1.0
+                        });
+                    }
+                    for (let i = ps.ddgFireParticles.length - 1; i >= 0; i--) {
+                        const p = ps.ddgFireParticles[i];
+                        p.x += p.vx * (dt/16); p.y += p.vy * (dt/16); p.life -= dt * 0.004;
+                        if (p.life <= 0) ps.ddgFireParticles.splice(i, 1);
+                    }
+                }
+
+                // ── Move ball ──
+                const slowFactor = (ps.ddgMode && (ps.ddgP1.activeType === 'slow' || ps.ddgP2.activeType === 'slow')) ? 0.28 : 1;
+                ps.ball.x += ps.ball.vx * slowFactor * (dt / 16);
+                ps.ball.y += ps.ball.vy * slowFactor * (dt / 16);
+
+                // Trail
+                ps.ball.trail.push({ x: ps.ball.x, y: ps.ball.y });
+                if (ps.ball.trail.length > 10) ps.ball.trail.shift();
+
+                // Wall bounce
+                if (ps.ball.y - PP_BALL_R < tableTop)  { ps.ball.y = tableTop  + PP_BALL_R; ps.ball.vy =  Math.abs(ps.ball.vy); }
+                if (ps.ball.y + PP_BALL_R > tableBot)   { ps.ball.y = tableBot  - PP_BALL_R; ps.ball.vy = -Math.abs(ps.ball.vy); }
+
+                // ── DDG: Shield auto-return ──
+                if (ps.ddgMode) {
+                    if (ps.ddgP1.activeType === 'shield' && ps.ball.vx < 0 && ps.ball.x - PP_BALL_R < P1_X - 5) {
+                        ps.ball.vx = Math.abs(ps.ball.vx); ps.ball.x = P1_X - 5 + PP_BALL_R;
+                        ps.ddgP1.shieldHit = 250; ps.flashTimer = 60;
+                    }
+                    if (ps.ddgP2.activeType === 'shield' && ps.ball.vx > 0 && ps.ball.x + PP_BALL_R > P2_X + 5) {
+                        ps.ball.vx = -Math.abs(ps.ball.vx); ps.ball.x = P2_X + 5 - PP_BALL_R;
+                        ps.ddgP2.shieldHit = 250; ps.flashTimer = 60;
+                    }
+                }
+
+                // P1 paddle (left)
+                if (ps.ball.vx < 0 && ps.ball.x - PP_BALL_R < P1_X + 22 && ps.ball.x > P1_X - 10) {
+                    if (Math.abs(ps.ball.y - ps.p1.y) < PP_PADDLE_H / 2 + PP_BALL_R) {
+                        const rel = (ps.ball.y - ps.p1.y) / (PP_PADDLE_H / 2);
+                        ps.ball.vx = Math.min(Math.abs(ps.ball.vx) * 1.06, 14);
+                        ps.ball.vy = rel * 9;
+                        ps.ball.x  = P1_X + 22 + PP_BALL_R;
+                        ps.p1.hitAnim = Math.PI * 2;
+                        ps.flashTimer = 80;
+                        ps.ddgBallFire = false; // opponent returned fireball, extinguish
+                        // DDG fireball launch
+                        if (ps.ddgMode && ps.ddgP1.fireReady) {
+                            ps.ball.vx = Math.min(ps.ball.vx * 2.6, 22);
+                            ps.ball.vy *= 1.15;
+                            ps.ddgBallFire = true;
+                            ps.ddgP1.fireReady = false; ps.ddgP1.activeType = null; ps.ddgP1.timer = 0;
+                        }
+                    }
+                }
+                // P2 paddle (right)
+                if (ps.ball.vx > 0 && ps.ball.x + PP_BALL_R > P2_X - 22 && ps.ball.x < P2_X + 10) {
+                    if (Math.abs(ps.ball.y - ps.p2.y) < PP_PADDLE_H / 2 + PP_BALL_R) {
+                        const rel = (ps.ball.y - ps.p2.y) / (PP_PADDLE_H / 2);
+                        ps.ball.vx = -Math.min(Math.abs(ps.ball.vx) * 1.06, 14);
+                        ps.ball.vy = rel * 9;
+                        ps.ball.x  = P2_X - 22 - PP_BALL_R;
+                        ps.p2.hitAnim = Math.PI * 2;
+                        ps.flashTimer = 80;
+                        ps.ddgBallFire = false; // opponent returned fireball, extinguish
+                        // DDG fireball launch
+                        if (ps.ddgMode && ps.ddgP2.fireReady) {
+                            ps.ball.vx = -Math.min(Math.abs(ps.ball.vx) * 2.6, 22);
+                            ps.ball.vy *= 1.15;
+                            ps.ddgBallFire = true;
+                            ps.ddgP2.fireReady = false; ps.ddgP2.activeType = null; ps.ddgP2.timer = 0;
+                        }
+                    }
+                }
+
+                // ── Score ──
+                if (ps.ball.x < -30) {
+                    ps.p2.score++;
+                    ps.flashTimer = 300;
+                    if (ps.p2.score >= PP_WIN) { ps.winner = 2; }
+                    else resetBall(ps);
+                }
+                if (ps.ball.x > width + 30) {
+                    ps.p1.score++;
+                    ps.flashTimer = 300;
+                    if (ps.p1.score >= PP_WIN) { ps.winner = 1; }
+                    else resetBall(ps);
+                }
+            }
+        } else {
+            ps.winAnim += dt;
+        }
+
+        // Decay
+        ps.p1.hitAnim = Math.max(0, ps.p1.hitAnim - dt * 0.015);
+        ps.p2.hitAnim = Math.max(0, ps.p2.hitAnim - dt * 0.015);
+        ps.flashTimer = Math.max(0, (ps.flashTimer || 0) - dt);
+
+        // Hit flash
+        if (ps.flashTimer > 0) {
+            ctx.save(); ctx.globalAlpha = (ps.flashTimer / 300) * 0.12;
+            ctx.fillStyle = 'white'; ctx.fillRect(0,0,width,height); ctx.restore();
+        }
+
+        // ── DDG: Draw power-ups on table ──
+        if (ps.ddgMode) {
+            for (const pu of ps.ddgPowerUps) {
+                const lifeFrac = Math.max(0, pu.lifeTimer / 3500); // 1 → 0
+                const py = pu.y + Math.sin(pu.pulse) * 4;
+                const col = pu.type === 'shield' ? '#3b82f6' : pu.type === 'slow' ? '#8b5cf6' : '#f97316';
+                ctx.save();
+                ctx.translate(pu.x, py);
+                ctx.globalAlpha = 0.4 + lifeFrac * 0.5; // fades out as time runs out
+                ctx.shadowColor = col; ctx.shadowBlur = 14 + Math.sin(pu.pulse)*4;
+                ctx.fillStyle = col;
+                ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI*2); ctx.fill();
+                ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+                ctx.font = '17px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText(pu.type === 'shield' ? '🛡️' : pu.type === 'slow' ? '⏱️' : '🔥', 0, 1);
+                // Countdown ring — drains clockwise
+                ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(0, 0, 24, -Math.PI/2, -Math.PI/2 + Math.PI * 2 * lifeFrac);
+                ctx.stroke();
+                ctx.restore();
+            }
+            // Shield barriers
+            const drawShield = (px, side) => {
+                const pwr = side === 1 ? ps.ddgP1 : ps.ddgP2;
+                if (pwr.activeType !== 'shield') return;
+                const frac = pwr.timer / 6000;
+                ctx.save();
+                ctx.globalAlpha = 0.55 * frac + (pwr.shieldHit > 0 ? pwr.shieldHit/250*0.35 : 0);
+                ctx.strokeStyle = '#60a5fa'; ctx.lineWidth = 10;
+                ctx.shadowColor = '#93c5fd'; ctx.shadowBlur = 22 + Math.sin(now*0.01)*8;
+                ctx.beginPath();
+                ctx.moveTo(px + (side===1?-18:18), tableTop);
+                ctx.lineTo(px + (side===1?-18:18), tableBot);
+                ctx.stroke();
+                // Inner glow fill
+                ctx.globalAlpha = 0.12 * frac;
+                ctx.fillStyle = '#93c5fd';
+                ctx.fillRect(side===1 ? 0 : px+18, tableTop, side===1 ? px-18 : width-(px+18), tableBot-tableTop);
+                ctx.restore();
+            };
+            drawShield(P1_X, 1); drawShield(P2_X, 2);
+            // Fire particles (draw before ball)
+            for (const p of ps.ddgFireParticles) {
+                ctx.save();
+                ctx.globalAlpha = p.life * 0.75;
+                ctx.fillStyle = p.life > 0.55 ? '#f97316' : '#fde68a';
+                ctx.shadowColor = '#f97316'; ctx.shadowBlur = 6;
+                ctx.beginPath(); ctx.arc(p.x, p.y, 5 * p.life, 0, Math.PI*2); ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // ── Ball trail ──
+        for (let i = 0; i < ps.ball.trail.length; i++) {
+            const tr = ps.ball.trail[i];
+            const a  = (i / ps.ball.trail.length);
+            const trailCol = (ps.ddgMode && ps.ddgBallFire) ? '#f97316' : '#fde68a';
+            ctx.save(); ctx.globalAlpha = a * 0.45;
+            ctx.fillStyle = trailCol;
+            ctx.beginPath(); ctx.arc(tr.x, tr.y, PP_BALL_R * a, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        }
+
+        // ── Ball ──
+        if (ps.ddgMode && ps.ddgBallFire) {
+            ctx.save();
+            ctx.shadowColor = '#f97316'; ctx.shadowBlur = 28;
+            // Fireball outer glow ring
+            ctx.globalAlpha = 0.5 + 0.3 * Math.sin(now * 0.025);
+            ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.arc(ps.ball.x, ps.ball.y, PP_BALL_R + 5, 0, Math.PI*2); ctx.stroke();
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = '#fff7ed';
+            ctx.beginPath(); ctx.arc(ps.ball.x, ps.ball.y, PP_BALL_R, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 2.5; ctx.stroke();
+            ctx.restore();
+        } else {
+            const slowActive = ps.ddgMode && (ps.ddgP1.activeType === 'slow' || ps.ddgP2.activeType === 'slow');
+            ctx.save();
+            ctx.shadowColor = slowActive ? 'rgba(147,197,253,0.9)' : 'rgba(255,255,220,0.9)';
+            ctx.shadowBlur = 14;
+            ctx.fillStyle = slowActive ? '#e0f2fe' : '#fffef0';
+            ctx.beginPath(); ctx.arc(ps.ball.x, ps.ball.y, PP_BALL_R, 0, Math.PI * 2); ctx.fill();
+            ctx.shadowBlur = 0;
+            if (slowActive) {
+                // Ice ring
+                ctx.strokeStyle = '#93c5fd'; ctx.lineWidth = 2.5;
+                ctx.beginPath(); ctx.arc(ps.ball.x, ps.ball.y, PP_BALL_R + 4, 0, Math.PI*2); ctx.stroke();
+            }
+            ctx.strokeStyle = 'rgba(180,160,140,0.6)'; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.arc(ps.ball.x, ps.ball.y, PP_BALL_R, 0.4, Math.PI + 0.4); ctx.stroke();
+            ctx.restore();
+        }
+
+        // ── Ducks ──
+        const p1col = ducks[0] ? ducks[0].color.base : '#fbbf24';
+        const p2col = ducks[1] ? ducks[1].color.base : '#818cf8';
+        drawPPDuck(P1_X, ps.p1.y, true,  ps.p1.hitAnim, p1col);
+        drawPPDuck(P2_X, ps.p2.y, false, ps.p2.hitAnim, p2col);
+
+        // ── Score display ──
+        ctx.save();
+        ctx.fillStyle = 'rgba(255,255,255,0.15)';
+        ctx.font = 'bold 64px monospace'; ctx.textAlign = 'center';
+        ctx.fillText(ps.p1.score, width/2 - 100, tableTop + 72);
+        ctx.fillText(ps.p2.score, width/2 + 100, tableTop + 72);
+        // Player labels
+        ctx.font = '11px sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.fillText('W / S', width/2 - 100, tableTop + 86);
+        ctx.fillText(ps.aiMode ? 'CPU  (Tab=2P)' : '↑ / ↓  (Tab=AI)', width/2 + 100, tableTop + 86);
+        ctx.restore();
+
+        // ── DDG mode badge ──
+        if (ps.ddgMode) {
+            ctx.save();
+            ctx.textAlign = 'center';
+            const badgePulse = 0.85 + 0.15 * Math.sin(now * 0.005);
+            ctx.globalAlpha = badgePulse;
+            ctx.fillStyle = '#f97316'; ctx.shadowColor = '#f97316'; ctx.shadowBlur = 12;
+            ctx.font = 'bold 13px monospace';
+            ctx.fillText('🔔 DING DONG GONE', width/2, tableTop + 14);
+            ctx.restore();
+        }
+
+        // ── DDG power-up HUD ──
+        if (ps.ddgMode) {
+            const drawPwrHud = (px, pwr, keyHint, side) => {
+                const bx = side === 1 ? px - 10 : px - 110;
+                const by = tableTop + 16;
+                ctx.save();
+                ctx.fillStyle = 'rgba(0,0,0,0.45)';
+                ctx.beginPath(); ctx.roundRect(bx, by, 120, 52, 8); ctx.fill();
+                ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.lineWidth = 1;
+                ctx.stroke();
+                if (pwr.held) {
+                    const hcol = pwr.held === 'shield' ? '#60a5fa' : pwr.held === 'slow' ? '#c084fc' : '#fb923c';
+                    const flash = pwr.collectFlash > 0 ? pwr.collectFlash/400 : 0;
+                    ctx.globalAlpha = 1;
+                    ctx.fillStyle = hcol; ctx.shadowColor = hcol; ctx.shadowBlur = 8 + flash*12;
+                    ctx.font = 'bold 22px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+                    ctx.fillText(pwr.held === 'shield' ? '🛡️' : pwr.held === 'slow' ? '⏱️' : '🔥', bx + 30, by + 7);
+                    ctx.shadowBlur = 0;
+                    ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.font = '10px sans-serif';
+                    ctx.fillText('Press ' + keyHint, bx + 30, by + 36);
+                    ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.font = '9px sans-serif';
+                    ctx.fillText('READY', bx + 90, by + 22);
+                } else if (pwr.activeType) {
+                    const acol = pwr.activeType === 'shield' ? '#60a5fa' : pwr.activeType === 'slow' ? '#c084fc' : '#fb923c';
+                    const maxT = pwr.activeType === 'shield' ? 6000 : pwr.activeType === 'slow' ? 4500 : 12000;
+                    const frac = Math.max(0, pwr.timer / maxT);
+                    ctx.fillStyle = acol; ctx.shadowColor = acol; ctx.shadowBlur = 6;
+                    ctx.font = 'bold 22px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+                    ctx.fillText(pwr.activeType === 'shield' ? '🛡️' : pwr.activeType === 'slow' ? '⏱️' : '🔥', bx + 30, by + 7);
+                    ctx.shadowBlur = 0;
+                    // Timer bar
+                    ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.fillRect(bx + 8, by + 38, 104, 7);
+                    ctx.fillStyle = acol; ctx.fillRect(bx + 8, by + 38, 104 * frac, 7);
+                    ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = '9px sans-serif';
+                    ctx.fillText('ACTIVE', bx + 90, by + 22);
+                } else {
+                    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+                    ctx.font = '10px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                    ctx.fillText('No power-up', bx + 60, by + 26);
+                }
+                ctx.restore();
+            };
+            drawPwrHud(P1_X + 10, ps.ddgP1, 'E', 1);
+            drawPwrHud(P2_X - 10, ps.ddgP2, '/', 2);
+        }
+
+        // ── DDG mode toggle hint (during serve) ──
+        if (ps.serving && !ps.winner) {
+            ctx.save();
+            ctx.textAlign = 'center'; ctx.font = '12px monospace';
+            const modeOn = ps.ddgMode;
+            ctx.fillStyle = modeOn ? '#f97316' : 'rgba(255,255,255,0.35)';
+            ctx.fillText('M · ' + (modeOn ? '🔔 DING DONG GONE ✓' : 'CLASSIC MODE  (press M for DING DONG GONE)'), width/2, height/2 + 60);
+            ctx.restore();
+        }
+
+        // ── Serve countdown ──
+        if (ps.serving && !ps.winner) {
+            // serveTimer counts DOWN from 3000 → 0
+            // 3000-2001 → "3",  2000-1001 → "2",  1000-1 → "1",  ~0 → "GO!"
+            const remaining = ps.serveTimer; // ms left
+            let countLabel, countColor;
+            if (remaining > 2000)      { countLabel = '3'; countColor = '#f87171'; }
+            else if (remaining > 1000) { countLabel = '2'; countColor = '#fbbf24'; }
+            else if (remaining > 50)   { countLabel = '1'; countColor = '#4ade80'; }
+            else                       { countLabel = 'GO!'; countColor = '#ffffff'; }
+
+            // Pulse scale: snaps to 1.2 at the start of each second then shrinks to 1.0
+            const stepMs   = countLabel === 'GO!' ? 50 : 1000;
+            const progress = 1 - (remaining % stepMs) / stepMs; // 0→1 within each step
+            const scale    = 1.4 - progress * 0.4;              // 1.4 → 1.0
+
+            ctx.save();
+            ctx.translate(width / 2, height / 2);
+            ctx.scale(scale, scale);
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            // Glow
+            ctx.shadowColor = countColor; ctx.shadowBlur = 30;
+            ctx.fillStyle = countColor;
+            ctx.font = `bold ${countLabel === 'GO!' ? 64 : 88}px monospace`;
+            ctx.fillText(countLabel, 0, 0);
+            ctx.shadowBlur = 0;
+            ctx.restore();
+        }
+
+        // ── Winner overlay ──
+        if (ps.winner) {
+            const fade = Math.min(1, ps.winAnim / 600);
+            const pulse = 1 + 0.04 * Math.sin(now * 0.006);
+            ctx.save(); ctx.globalAlpha = fade;
+            ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillRect(0,0,width,height);
+            ctx.scale(pulse, pulse);
+            const cx = width/2/pulse, cy = height/2/pulse;
+            ctx.fillStyle = '#fde68a'; ctx.font = 'bold 50px sans-serif'; ctx.textAlign = 'center';
+            ctx.fillText(ps.winner === 1 ? '🦆 Duck 1 Wins!' : (ps.aiMode ? '🤖 CPU Wins!' : '🦆 Duck 2 Wins!'), cx, cy - 18);
+            ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.font = '17px sans-serif';
+            ctx.fillText('R · Play Again      Esc · Exit', cx, cy + 28);
+            ctx.restore();
+        }
+
+        // ── Bottom hint ──
+        ctx.save(); ctx.fillStyle = 'rgba(255,255,255,0.25)';
+        ctx.font = '11px sans-serif'; ctx.textAlign = 'center';
+        const hintBase = 'W/S · Left Duck   |   ↑↓ · Right Duck (or CPU)   |   Tab · Toggle AI   |   Esc · Exit';
+        const hintDDG  = '   |   E · P1 Power   |   / · P2 Power   |   M · Toggle Mode';
+        ctx.fillText(hintBase + (ps.ddgMode ? hintDDG : ''), width/2, height - 10);
+        ctx.restore();
+    }
+
+    function resetBall(ps) {
+        ps.ball = { x: width/2, y: height/2, vx: 0, vy: 0, trail: [] };
+        ps.serving = true; ps.serveTimer = 3000;
+        ps.ddgBallFire = false;
+        if (ps.ddgFireParticles) ps.ddgFireParticles = [];
+    }
+
+    function activateDDGPower(ps, playerNum) {
+        const pwr = playerNum === 1 ? ps.ddgP1 : ps.ddgP2;
+        if (!pwr.held) return;           // nothing to activate
+        if (pwr.activeType) return;      // already busy
+        const type = pwr.held;
+        pwr.held = null;
+        pwr.activeType = type;
+        if (type === 'shield')   { pwr.timer = 6000; }
+        else if (type === 'slow'){ pwr.timer = 4500; }
+        else if (type === 'fire'){ pwr.timer = 12000; pwr.fireReady = true; }
+    }
+
+    function spawnDDGPowerUp(ps, tableTop, tableBot) {
+        const types   = ['shield', 'slow', 'fire'];
+        const type    = types[Math.floor(Math.random() * types.length)];
+        const side    = Math.random() > 0.5 ? 1 : 2;
+        const x       = side === 1 ? 52 : width - 52;
+        const paddleY = side === 1 ? ps.p1.y : ps.p2.y;
+        const SAFE    = 80; // must exceed collection radius (52px) so it never auto-collects
+        const margin  = tableTop + 22;
+        const maxY    = tableBot - 22;
+        // Pick above or below the paddle, but only choose a direction that stays within bounds
+        // AND keeps at least SAFE px away from the paddle.
+        const canAbove = (paddleY - SAFE) >= margin;
+        const canBelow = (paddleY + SAFE) <= maxY;
+        let dir;
+        if (canAbove && canBelow) dir = Math.random() > 0.5 ? -1 : 1;
+        else if (canAbove)        dir = -1;
+        else if (canBelow)        dir =  1;
+        else                      return; // table too small — skip this spawn
+        const y = paddleY + dir * (SAFE + Math.random() * 25);
+        ps.ddgPowerUps.push({ x, y, type, pulse: Math.random() * Math.PI * 2, lifeTimer: 3500 });
     }
 
     // --- Main Loop ---
@@ -6250,6 +7570,12 @@
 
         if (isCarMode) {
             runCarMode(dt);
+            requestAnimationFrame(animate);
+            return;
+        }
+
+        if (isPingPongMode) {
+            runPingPong(dt);
             requestAnimationFrame(animate);
             return;
         }
@@ -6938,6 +8264,98 @@
         
         drawAllSlimes();
         drawFreezeRayEffects(dt, duckScreenX, duckScreenY);
+
+        // ── 2099 CyberDuck screen FX ─────────────────────────────────────────
+        if (currentDecade === '2099') {
+            // Neon cyan/purple vignette
+            const vig99 = ctx.createRadialGradient(width/2, height/2, height*0.18, width/2, height/2, height*0.80);
+            vig99.addColorStop(0, 'rgba(0,0,0,0)');
+            vig99.addColorStop(1, 'rgba(0,30,60,0.38)');
+            ctx.save(); ctx.fillStyle = vig99; ctx.fillRect(0,0,width,height); ctx.restore();
+            // Digital rain columns
+            ctx.save();
+            const rainChars = '01アイウエオカキクケコ#$%<>';
+            const colW = 20, cols = Math.ceil(width / colW);
+            ctx.font = '13px monospace'; ctx.textAlign = 'center';
+            for (let ci = 0; ci < cols; ci++) {
+                const colSeed = ci * 71.3;
+                const dropLen = 6 + (ci % 5);
+                const speed   = 0.028 + (ci % 4) * 0.008;
+                const baseY   = (now * speed + colSeed * 40) % (height + dropLen * 16);
+                for (let ri = 0; ri < dropLen; ri++) {
+                    const cy = baseY - ri * 16;
+                    if (cy < -16 || cy > height + 4) continue;
+                    const alpha = ri === 0 ? 0.9 : (1 - ri / dropLen) * 0.35;
+                    const ch = rainChars[Math.floor((now * 0.003 + ci * 3.7 + ri * 1.3)) % rainChars.length];
+                    ctx.globalAlpha = alpha;
+                    ctx.fillStyle = ri === 0 ? '#afffff' : '#00cc88';
+                    ctx.fillText(ch, ci * colW + colW/2, cy);
+                }
+            }
+            ctx.globalAlpha = 1;
+            ctx.restore();
+            // Horizontal scanlines over everything
+            ctx.save();
+            ctx.globalAlpha = 0.07;
+            ctx.fillStyle = '#000';
+            for (let sy = 0; sy < height; sy += 3) {
+                ctx.fillRect(0, sy, width, 1);
+            }
+            ctx.restore();
+            // Subtle purple corner glow
+            ctx.save();
+            const cornerGlow = ctx.createRadialGradient(0, 0, 0, 0, 0, height*0.55);
+            cornerGlow.addColorStop(0, 'rgba(120,0,200,0.12)');
+            cornerGlow.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = cornerGlow; ctx.fillRect(0,0,width,height);
+            const cornerGlow2 = ctx.createRadialGradient(width, height, 0, width, height, height*0.55);
+            cornerGlow2.addColorStop(0, 'rgba(0,180,255,0.10)');
+            cornerGlow2.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = cornerGlow2; ctx.fillRect(0,0,width,height);
+            ctx.restore();
+        }
+
+        // ── 1950s Rock & Roll screen FX ──────────────────────────────────────
+        if (currentDecade === '1950s') {
+            // Warm amber vignette
+            const vig50 = ctx.createRadialGradient(width/2, height/2, height*0.22, width/2, height/2, height*0.78);
+            vig50.addColorStop(0, 'rgba(0,0,0,0)');
+            vig50.addColorStop(1, 'rgba(120,60,0,0.22)');
+            ctx.save(); ctx.fillStyle = vig50; ctx.fillRect(0,0,width,height); ctx.restore();
+            // Faint checkerboard floor strip at bottom
+            ctx.save();
+            const floorY = height * 0.82;
+            const tileW = 38, tileH = 22;
+            ctx.globalAlpha = 0.13;
+            for (let col = 0; col < Math.ceil(width/tileW) + 1; col++) {
+                for (let row = 0; row < 4; row++) {
+                    if ((col + row) % 2 === 0) {
+                        ctx.fillStyle = '#fff';
+                        ctx.fillRect(col*tileW, floorY + row*tileH, tileW, tileH);
+                    }
+                }
+            }
+            ctx.restore();
+            // Floating music notes
+            const noteChars = ['♩','♪','♫','♬'];
+            const noteCount = 9;
+            ctx.save();
+            for (let ni = 0; ni < noteCount; ni++) {
+                const seed   = ni * 137.5;
+                const baseX  = (seed * 43) % width;
+                const speed  = 0.022 + (ni % 3) * 0.01;
+                const rawY   = height - ((now * speed + seed * 80) % (height + 60));
+                const swayX  = baseX + Math.sin(now * 0.001 + ni * 1.4) * 28;
+                const lifeY  = 1 - Math.max(0, (rawY - height*0.65) / (height*0.35)); // fade near top
+                const noteAlpha = 0.25 + 0.35 * Math.abs(Math.sin(now*0.0008 + ni));
+                ctx.globalAlpha = noteAlpha * lifeY;
+                ctx.fillStyle = ni % 2 === 0 ? '#fde68a' : '#fb923c';
+                ctx.font = `bold ${18 + (ni % 3)*6}px serif`;
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText(noteChars[ni % 4], swayX, rawY);
+            }
+            ctx.restore();
+        }
 
         // ── Time Machine travel animation ────────────────────────────────────
         if (timeMachineTraveling && timeMachineTimer > 0) {
@@ -8256,7 +9674,9 @@
 
     // Collapse / expand via the floating tab button above the panel
     const musicToggleTab = document.getElementById('musicToggleTab');
-    let collapsed = false;
+    let collapsed = true;
+    musicBody.classList.add('collapsed');
+    musicToggleTab.textContent = '🎵 Music Player ▲';
 
     window.toggleMusicPlayer = function() {
         collapsed = !collapsed;
