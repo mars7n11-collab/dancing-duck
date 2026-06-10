@@ -402,6 +402,7 @@
                 </div>
             </div>
 
+            <button id="undoBtn" class="bg-button" style="display: none;">↩ Undo</button>
             <button id="clearBtn" class="bg-button" style="display: none;">❌ Reset All</button>
         </div>
         
@@ -1000,6 +1001,57 @@
         frozenTimeRemaining = 0;
     });
 
+    // ── Undo System ──────────────────────────────────────────────────────────
+    let actionHistory = [];
+    const undoBtn = document.getElementById('undoBtn');
+
+    function pushAction(action) {
+        actionHistory.push(action);
+        undoBtn.style.display = '';
+        clearBtn.style.display = '';
+    }
+
+    function performUndo() {
+        if (!actionHistory.length) return;
+        const action = actionHistory.pop();
+        if (action.type === 'addBall') {
+            balls.pop();
+        } else if (action.type === 'addFood') {
+            foods.pop();
+        } else if (action.type === 'addFriend') {
+            if (ducks.length > 1) ducks.pop();
+            updateFriendBtn();
+        } else if (action.type === 'eatFood') {
+            const d = action.duck;
+            d.mutations.fat    = action.prev.fat;
+            d.mutations.muscle = action.prev.muscle;
+            d.mutations.energy = action.prev.energy;
+            d.mutations.gum    = action.prev.gum;
+            d.mutations.shroom = action.prev.shroom;
+            d.cakeCount   = action.prev.cakeCount;
+            d.brocCount   = action.prev.brocCount;
+            d.energyCount = action.prev.energyCount;
+            d.gumCount    = action.prev.gumCount;
+            d.shroomCount = action.prev.shroomCount;
+            d.gemCount    = action.prev.gemCount;
+            d.superHeroActive = action.prev.superHeroActive;
+            d.evilMode    = action.prev.evilMode;
+            foods.push(action.food);
+            if (fakeoutDuck === d)  { fakeoutPhase = null;  fakeoutDuck  = null; }
+            if (overdoseDuck === d) { overdosePhase = null; overdoseDuck = null; }
+        } else if (action.type === 'addSlime') {
+            slimes.pop();
+        } else if (action.type === 'addTarget') {
+            targets.pop();
+        }
+        if (!actionHistory.length) undoBtn.style.display = 'none';
+    }
+
+    undoBtn.addEventListener('click', performUndo);
+    window.addEventListener('keydown', e => {
+        if (e.ctrlKey && e.key === 'z') { e.preventDefault(); performUndo(); }
+    }, true);
+
     // Party Balls, Food & Slime States
     let balls = [];
     const MAX_BALLS = 15;
@@ -1360,6 +1412,7 @@
         }
         ducks.push(createDuck(DUCK_COLORS[colorKey], 160, -200));
         updateFriendBtn();
+        pushAction({ type: 'addFriend' });
     }
 
     // Toggle dropdown; clicking main button area also removes last friend if friends exist
@@ -1390,6 +1443,7 @@
     });
 
     ballBtn.addEventListener('click', () => {
+        if (balls.length >= MAX_BALLS) balls.shift();
         balls.push({
             x: (Math.random() - 0.5) * (width * 0.8),
             y: -height,
@@ -1398,17 +1452,14 @@
             radius: 16,
             color: '#ef4444'
         });
-        
-        if (balls.length > MAX_BALLS) {
-            balls.shift(); 
-        }
+        pushAction({ type: 'addBall' });
     });
 
     // Spawn Foods falling from the top
     window.spawnFood = function(type) {
         foods.push({
             type: type,
-            x: (Math.random() - 0.5) * (width * 0.6), 
+            x: (Math.random() - 0.5) * (width * 0.6),
             y: -height * 0.8,
             vx: (Math.random() - 0.5) * 8,
             vy: 0,
@@ -1416,6 +1467,7 @@
             isDragging: false,
             pulse: Math.random() * Math.PI
         });
+        pushAction({ type: 'addFood' });
     };
 
     // ── Love / Breeding helpers ──────────────────────────────────────────
@@ -1551,6 +1603,7 @@
 
     window.spawnTarget = function(type) {
         targets.push(createTarget(type));
+        pushAction({ type: 'addTarget' });
     };
 
     window.spawnSlime = function() {
@@ -1563,12 +1616,13 @@
             isDragging: false,
             dragOffsetX: 0, dragOffsetY: 0,
             pulse: Math.random() * Math.PI,
-            state: 'floating',   // 'floating' | 'anchored1' | 'tethered'
+            state: 'floating',
             anchor1: null,
             anchor2: null,
             restLength: 100,
             wobble: 0, wobbleV: 0,
         });
+        pushAction({ type: 'addSlime' });
     };
 
     function slimeAnchorPos(anchor) {
@@ -1681,6 +1735,8 @@
 
     // Reset Mutations, food items, and party balls
     clearBtn.addEventListener('click', () => {
+        actionHistory = [];
+        undoBtn.style.display = 'none';
         balls = [];
         foods = [];
         slimes = [];
@@ -2157,6 +2213,15 @@
                 if (dist < minDist) { minDist = dist; closestDuck = d; }
             }
             if (closestDuck) {
+                const prevState = {
+                    fat: closestDuck.mutations.fat, muscle: closestDuck.mutations.muscle,
+                    energy: closestDuck.mutations.energy, gum: closestDuck.mutations.gum,
+                    shroom: closestDuck.mutations.shroom,
+                    cakeCount: closestDuck.cakeCount, brocCount: closestDuck.brocCount,
+                    energyCount: closestDuck.energyCount, gumCount: closestDuck.gumCount,
+                    shroomCount: closestDuck.shroomCount, gemCount: closestDuck.gemCount,
+                    superHeroActive: closestDuck.superHeroActive, evilMode: closestDuck.evilMode
+                };
                 if (f.type === 'cake') {
                     closestDuck.mutations.fat += 0.45;
                     closestDuck.cakeCount++;
@@ -2210,6 +2275,7 @@
                 }
                 checkCombo(closestDuck);
                 for (let i = 0; i < 15; i++) rayParticles.push({ x: fsx, y: fsy, vx: (Math.random()-.5)*12, vy: (Math.random()-.5)*12, life: 1.0 });
+                pushAction({ type: 'eatFood', duck: closestDuck, prev: prevState, food: { ...f, isDragging: false, vx: 0, vy: 0 } });
                 foods.splice(draggedFoodIndex, 1);
             } else { f.isDragging = false; }
             draggedFoodIndex = null; canvas.style.cursor = 'grab';
@@ -7006,9 +7072,15 @@
         ctx.beginPath(); ctx.arc(4, -32, 19, 0, Math.PI*2); ctx.fill();
         ctx.strokeStyle = dark; ctx.lineWidth = 2; ctx.stroke();
 
-        // ── Eye ──
+        // ── Eye — goes wide on hit (hitAnim: 2π → 0) ──
+        const hitPop = Math.min(1, hitAnim / (Math.PI * 2)); // 1 on contact, fades to 0
+        const eyeR = 5 + hitPop * 9; // normal=5, shocked=14
+        ctx.fillStyle = 'white';
+        ctx.beginPath(); ctx.arc(4, -38, eyeR + 2, 0, Math.PI*2); ctx.fill(); // sclera
         ctx.fillStyle = '#000';
-        ctx.beginPath(); ctx.arc(4, -38, 5, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(4, -38, eyeR, 0, Math.PI*2); ctx.fill();     // pupil
+        ctx.fillStyle = 'white';
+        ctx.beginPath(); ctx.arc(4 + eyeR * 0.35, -38 - eyeR * 0.35, eyeR * 0.3, 0, Math.PI*2); ctx.fill(); // catchlight
 
         // ── Flat duck bill (wide, rounded, classic duck shape) ──
         ctx.fillStyle = billCol;
