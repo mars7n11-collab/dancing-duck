@@ -908,6 +908,7 @@
         document.getElementById('flashlightBtn').textContent = '🔦 Flashlight';
         intensity = 0.1; slider.value = 10;
         currentBgIndex = 0; bgBtn.innerText = '🌍 Scene: Club';
+        pendingScene = null; sceneFadeStart = null;
         updateBodyBackground();
         duckQuote = '';
     }
@@ -1887,6 +1888,46 @@
     const backgrounds = ['Club', 'Beach', 'Retro', 'Spotlight', 'Spectrum', 'Waveform', 'Galaxy'];
     let currentBgIndex = 0;
 
+    // ── Scene crossfade state ────────────────────────────────────────────
+    let pendingScene    = null;   // scene index queued to fade in
+    let sceneFadeStart  = null;   // timestamp the active crossfade began
+    let sceneFadeCanvas = null;   // offscreen snapshot of the outgoing scene
+    const SCENE_FADE_MS = 550;
+
+    // Replicate each scene's CSS body gradient onto a canvas so the snapshot
+    // captures the full composite (the body layer the main canvas draws over).
+    function paintSceneBase(c, idx, w, h) {
+        const scene = backgrounds[idx];
+        let g = null;
+        if (scene === 'Club') {
+            g = c.createLinearGradient(0, 0, w, h);
+            g.addColorStop(0, '#1e1b4b'); g.addColorStop(0.5, '#312e81'); g.addColorStop(1, '#4c1d95');
+        } else if (scene === 'Beach') {
+            g = c.createLinearGradient(0, 0, 0, h);
+            g.addColorStop(0, '#38bdf8'); g.addColorStop(0.6, '#0284c7');
+            g.addColorStop(0.6, '#fde047'); g.addColorStop(1, '#fef08a');
+        } else if (scene === 'Retro')     { c.fillStyle = '#0f172a'; c.fillRect(0, 0, w, h); return; }
+        else if (scene === 'Spotlight')   { c.fillStyle = '#020617'; c.fillRect(0, 0, w, h); return; }
+        else if (scene === 'Spectrum') {
+            g = c.createLinearGradient(0, h, 0, 0);
+            g.addColorStop(0, '#0f0a1e'); g.addColorStop(1, '#0d0d1a');
+        } else if (scene === 'Waveform') {
+            g = c.createLinearGradient(0, 0, w, h);
+            g.addColorStop(0, '#0f0a1e'); g.addColorStop(0.5, '#1a0d2e'); g.addColorStop(1, '#0d1a1e');
+        } else if (scene === 'Galaxy') {
+            g = c.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) * 0.7);
+            g.addColorStop(0, '#0f0a1e'); g.addColorStop(1, '#000005');
+        } else { return; }
+        c.fillStyle = g; c.fillRect(0, 0, w, h);
+    }
+
+    // Queue a smooth crossfade to a new scene (instead of a hard cut).
+    function changeScene(newIndex) {
+        if (newIndex === currentBgIndex) return;
+        pendingScene = newIndex;
+        bgBtn.innerText = '🌍 Scene: ' + backgrounds[newIndex];
+    }
+
     function updateBodyBackground() {
         if (isSkateMode) {
             document.body.style.background = 'linear-gradient(to bottom, #0f172a 0%, #1e1b4b 70%, #312e81 100%)';
@@ -1904,9 +1945,8 @@
     updateBodyBackground(); 
 
     bgBtn.addEventListener('click', () => {
-        currentBgIndex = (currentBgIndex + 1) % backgrounds.length;
-        bgBtn.innerText = `🌍 Scene: ${backgrounds[currentBgIndex]}`;
-        updateBodyBackground();
+        const next = (currentBgIndex + 1) % backgrounds.length;
+        changeScene(next);
     });
 
     const aiBtn = document.getElementById('aiBtn');
@@ -2031,9 +2071,7 @@
             slider.value = intensity * 100;
             const sceneIndex = backgrounds.indexOf(data.scene);
             if (sceneIndex !== -1) {
-                currentBgIndex = sceneIndex;
-                bgBtn.innerText = '🌍 Scene: ' + backgrounds[currentBgIndex];
-                updateBodyBackground();
+                changeScene(sceneIndex);
             }
             duckQuote = data.quote;
             playSFX('quack');
@@ -5514,6 +5552,40 @@
                 ctx.beginPath(); ctx.arc(0, 0, 180 + energy * 100, 0, Math.PI * 2); ctx.fill();
             }
             ctx.restore();
+        }
+
+        // ── Scene crossfade ──────────────────────────────────────────────
+        // Commit a queued scene change by snapshotting the just-drawn outgoing
+        // scene (body gradient base + canvas layer), then fade it out over the
+        // incoming scene across the next SCENE_FADE_MS.
+        if (pendingScene !== null && pendingScene !== currentBgIndex) {
+            if (!sceneFadeCanvas) sceneFadeCanvas = document.createElement('canvas');
+            if (sceneFadeCanvas.width !== canvas.width || sceneFadeCanvas.height !== canvas.height) {
+                sceneFadeCanvas.width  = canvas.width;
+                sceneFadeCanvas.height = canvas.height;
+            }
+            const fctx = sceneFadeCanvas.getContext('2d');
+            fctx.setTransform(1, 0, 0, 1, 0, 0);
+            fctx.clearRect(0, 0, sceneFadeCanvas.width, sceneFadeCanvas.height);
+            paintSceneBase(fctx, currentBgIndex, sceneFadeCanvas.width, sceneFadeCanvas.height);
+            fctx.drawImage(canvas, 0, 0);
+            currentBgIndex = pendingScene;
+            pendingScene   = null;
+            updateBodyBackground();
+            sceneFadeStart = t;
+        }
+        if (sceneFadeStart !== null && sceneFadeCanvas) {
+            const p = (t - sceneFadeStart) / SCENE_FADE_MS;
+            if (p >= 1) {
+                sceneFadeStart = null;
+            } else {
+                const a = 1 - (p * p * (3 - 2 * p)); // ease-in-out fade of outgoing scene
+                ctx.save();
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+                ctx.globalAlpha = a;
+                ctx.drawImage(sceneFadeCanvas, 0, 0);
+                ctx.restore();
+            }
         }
     }
 
