@@ -10434,7 +10434,7 @@
                         ps.ball.vy = rel * 9;
                         ps.ball.x  = P1_X + 22 + PP_BALL_R;
                         ps.p1.hitAnim = Math.PI * 2;
-                        ps.flashTimer = 80;
+                        ps.flashTimer = 80; ps.flashColor = '255,255,255';
                         playSFX('paddle');
                         ps.ddgBallFire = false; // opponent returned fireball, extinguish
                         // DDG fireball launch
@@ -10454,7 +10454,7 @@
                         ps.ball.vy = rel * 9;
                         ps.ball.x  = P2_X - 22 - PP_BALL_R;
                         ps.p2.hitAnim = Math.PI * 2;
-                        ps.flashTimer = 80;
+                        ps.flashTimer = 80; ps.flashColor = '255,255,255';
                         playSFX('paddle');
                         ps.ddgBallFire = false; // opponent returned fireball, extinguish
                         // DDG fireball launch
@@ -10467,19 +10467,19 @@
                     }
                 }
 
-                // ── Score ──
+                // ── Score ── (flash red when the left duck concedes, green when it scores)
                 if (ps.ball.x < -30) {
                     ps.p2.score++;
-                    ps.flashTimer = 300;
+                    ps.flashTimer = 300; ps.flashColor = '239,68,68';
                     playSFX('lose'); // P1 missed
-                    if (ps.p2.score >= PP_WIN) { ps.winner = 2; }
+                    if (ps.p2.score >= PP_WIN) { ps.winner = 2; ps.flashTimer = 500; playSFX('casinoWin'); }
                     else resetBall(ps);
                 }
                 if (ps.ball.x > width + 30) {
                     ps.p1.score++;
-                    ps.flashTimer = 300;
+                    ps.flashTimer = 300; ps.flashColor = '74,222,128';
                     playSFX('score'); // P1 scored
-                    if (ps.p1.score >= PP_WIN) { ps.winner = 1; }
+                    if (ps.p1.score >= PP_WIN) { ps.winner = 1; ps.flashTimer = 500; playSFX('casinoWin'); }
                     else resetBall(ps);
                 }
             }
@@ -10492,10 +10492,11 @@
         ps.p2.hitAnim = Math.max(0, ps.p2.hitAnim - dt * 0.015);
         ps.flashTimer = Math.max(0, (ps.flashTimer || 0) - dt);
 
-        // Hit flash
+        // Hit flash — color signals the event (white=rally hit, green=you scored, red=you conceded)
         if (ps.flashTimer > 0) {
-            ctx.save(); ctx.globalAlpha = (ps.flashTimer / 300) * 0.12;
-            ctx.fillStyle = 'white'; ctx.fillRect(0,0,width,height); ctx.restore();
+            const fcol = ps.flashColor || '255,255,255';
+            ctx.save(); ctx.globalAlpha = (ps.flashTimer / 300) * 0.16;
+            ctx.fillStyle = `rgb(${fcol})`; ctx.fillRect(0,0,width,height); ctx.restore();
         }
 
         // ── DDG: Draw power-ups on table ──
