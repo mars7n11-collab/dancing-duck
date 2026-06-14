@@ -5054,8 +5054,37 @@
         }
 
         const scene = backgrounds[currentBgIndex];
+        // Deterministic per-index pseudo-random in [0,1) — stable across frames (no flicker)
+        const rnd = n => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
 
         if (scene === 'Club') {
+            // ── Stage spotlight: soft overhead cone + floor pool that frames the duck
+            //    and fills the empty space between the top bar and the stage. ──
+            {
+                const sx = width/2, apexY = 88, poolY = height/2 + 145, halfW = 155;
+                ctx.save();
+                ctx.globalCompositeOperation = 'lighter';
+                const cone = ctx.createLinearGradient(0, apexY, 0, poolY);
+                cone.addColorStop(0,   'rgba(255,247,214,0.11)');
+                cone.addColorStop(0.7, 'rgba(255,247,214,0.05)');
+                cone.addColorStop(1,   'rgba(255,247,214,0)');
+                ctx.fillStyle = cone;
+                ctx.beginPath();
+                ctx.moveTo(sx - 16, apexY);
+                ctx.lineTo(sx + 16, apexY);
+                ctx.lineTo(sx + halfW, poolY);
+                ctx.lineTo(sx - halfW, poolY);
+                ctx.closePath();
+                ctx.fill();
+                const pool = ctx.createRadialGradient(sx, poolY, 6, sx, poolY, halfW);
+                pool.addColorStop(0, 'rgba(255,247,214,0.17)');
+                pool.addColorStop(1, 'rgba(255,247,214,0)');
+                ctx.fillStyle = pool;
+                ctx.beginPath();
+                ctx.ellipse(sx, poolY, halfW, 40, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
             if (intensity > 0.1) {
                 ctx.save();
                 ctx.translate(width/2, height/2);
@@ -5075,14 +5104,74 @@
             }
         } 
         else if (scene === 'Beach') {
+            const sunX = width * 0.2, sunY = height * 0.2, horizonY = height * 0.6;
+
+            // Soft sun rays sweeping from the sun
             ctx.save();
-            ctx.translate(width * 0.2, height * 0.2);
+            ctx.translate(sunX, sunY);
             ctx.rotate(t * 0.0002);
-            for(let i=0; i<8; i++) {
-                ctx.rotate(Math.PI * 2 / 8);
-                ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
+            for (let i = 0; i < 12; i++) {
+                ctx.rotate(Math.PI * 2 / 12);
+                ctx.fillStyle = `rgba(255,255,255,${0.05 + (i % 2) * 0.04})`;
                 ctx.beginPath();
-                ctx.moveTo(0, 0); ctx.lineTo(width * 2, -100); ctx.lineTo(width * 2, 100); ctx.fill();
+                ctx.moveTo(0, 0); ctx.lineTo(width * 2, -70); ctx.lineTo(width * 2, 70); ctx.fill();
+            }
+            ctx.restore();
+
+            // Sun disc + warm glow
+            ctx.save();
+            const sunGlow = ctx.createRadialGradient(sunX, sunY, 10, sunX, sunY, 230);
+            sunGlow.addColorStop(0, 'rgba(255,250,210,0.9)');
+            sunGlow.addColorStop(0.4, 'rgba(255,240,170,0.35)');
+            sunGlow.addColorStop(1, 'rgba(255,240,170,0)');
+            ctx.fillStyle = sunGlow;
+            ctx.beginPath(); ctx.arc(sunX, sunY, 230, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#fffdf0';
+            ctx.beginPath(); ctx.arc(sunX, sunY, 46, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+
+            // Drifting puffy clouds
+            for (let i = 0; i < 5; i++) {
+                const speed = 0.004 + rnd(i) * 0.006;
+                const cw = 90 + rnd(i + 9) * 80;
+                const cy = height * 0.10 + rnd(i + 3) * horizonY * 0.5;
+                const cx = ((rnd(i + 1) * width * 1.4 + t * speed) % (width + cw * 2)) - cw;
+                ctx.save();
+                ctx.globalAlpha = 0.82;
+                for (let p = 0; p < 4; p++) {
+                    const px = cx + p * (cw / 4);
+                    const pr = (cw / 3) * (0.6 + Math.sin(p * 1.3) * 0.25);
+                    const py = cy + Math.sin(p * 0.9) * 8;
+                    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+                    ctx.beginPath(); ctx.arc(px, py, pr, 0, Math.PI * 2); ctx.fill();
+                }
+                ctx.restore();
+            }
+
+            // Sparkle shimmer along the sand horizon
+            ctx.save();
+            for (let i = 0; i < 40; i++) {
+                const sxx = rnd(i + 50) * width;
+                const tw = 0.5 + 0.5 * Math.sin(t * 0.004 + i);
+                ctx.globalAlpha = 0.12 + tw * 0.32;
+                ctx.fillStyle = 'rgba(255,255,255,0.95)';
+                ctx.fillRect(sxx, horizonY - 2 + Math.sin(i) * 2, 3, 2);
+            }
+            ctx.restore();
+
+            // Distant seagulls — little flapping "m" shapes
+            ctx.save();
+            ctx.strokeStyle = 'rgba(40,50,70,0.5)'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+            for (let i = 0; i < 4; i++) {
+                const speed = 0.006 + rnd(i + 20) * 0.004;
+                const gx = ((rnd(i + 21) * width + t * speed) % (width + 60)) - 30;
+                const gy = height * 0.12 + rnd(i + 22) * height * 0.18 + Math.sin(t * 0.001 + i) * 6;
+                const flap = 4 + Math.sin(t * 0.006 + i * 2) * 3;
+                ctx.beginPath();
+                ctx.moveTo(gx - 10, gy);
+                ctx.quadraticCurveTo(gx - 4, gy - flap, gx, gy);
+                ctx.quadraticCurveTo(gx + 4, gy - flap, gx + 10, gy);
+                ctx.stroke();
             }
             ctx.restore();
         }
@@ -5094,6 +5183,25 @@
             const horizonY = -50;
             const bottomY  = height / 2 - 50;
             const halfSpread = width * 0.9;
+
+            // Twinkling stars scattered across the synthwave sky
+            for (let i = 0; i < 60; i++) {
+                const ssx = (rnd(i) - 0.5) * width * 1.9;
+                const ssy = horizonY - 20 - rnd(i + 7) * (height / 2);
+                const tw = 0.4 + 0.6 * Math.abs(Math.sin(t * 0.002 + i * 1.7));
+                ctx.globalAlpha = tw * (0.5 + intensity * 0.3);
+                ctx.fillStyle = i % 5 === 0 ? '#f0abfc' : '#e0e7ff';
+                ctx.fillRect(ssx, ssy, 1.6, 1.6);
+            }
+            ctx.globalAlpha = 1;
+
+            // Neon halo behind the sun
+            const sunHalo = ctx.createRadialGradient(0, horizonY, 40, 0, horizonY, 240);
+            sunHalo.addColorStop(0, 'rgba(244,63,94,0.35)');
+            sunHalo.addColorStop(0.5, 'rgba(251,146,60,0.15)');
+            sunHalo.addColorStop(1, 'rgba(251,146,60,0)');
+            ctx.fillStyle = sunHalo;
+            ctx.beginPath(); ctx.arc(0, horizonY, 240, 0, Math.PI * 2); ctx.fill();
 
             // Sun — gradient semicircle sitting exactly on the horizon
             ctx.beginPath();
@@ -5154,28 +5262,81 @@
             ctx.restore();
         }
         else if (scene === 'Spotlight') {
+            const sx = width/2, poolY = height/2 + 145;
+
+            // Stage vignette — darken the edges so the beams pop
+            const vig = ctx.createRadialGradient(sx, height/2, height*0.22, sx, height/2, height*0.9);
+            vig.addColorStop(0, 'rgba(0,0,0,0)');
+            vig.addColorStop(1, 'rgba(0,0,0,0.55)');
+            ctx.fillStyle = vig; ctx.fillRect(0, 0, width, height);
+
             ctx.save();
-            const spotX = width/2 + Math.sin(t * 0.002 * (1+intensity*3)) * 200;
-            
-            let gradient = ctx.createRadialGradient(spotX, height/2 - 50, 0, spotX, height/2 - 50, 300);
-            gradient.addColorStop(0, `rgba(255, 255, 255, ${0.15 + intensity * 0.25})`);
-            gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-            
-            ctx.fillStyle = gradient;
+            ctx.globalCompositeOperation = 'lighter';
+
+            // Two sweeping coloured searchlights crossing behind the performer
+            const beams = [
+                { baseX: width*0.30, col: '255,120,180', phase: 0 },
+                { baseX: width*0.70, col: '120,180,255', phase: Math.PI },
+            ];
+            for (const b of beams) {
+                const sway = Math.sin(t * 0.0011 * (1 + intensity*2) + b.phase) * 230;
+                const topX = b.baseX + sway*0.35;
+                const botX = b.baseX + sway;
+                const g = ctx.createLinearGradient(topX, 0, botX, height);
+                g.addColorStop(0, `rgba(${b.col},${0.10 + intensity*0.14})`);
+                g.addColorStop(1, `rgba(${b.col},0)`);
+                ctx.fillStyle = g;
+                ctx.beginPath();
+                ctx.moveTo(topX - 16, -40); ctx.lineTo(topX + 16, -40);
+                ctx.lineTo(botX + 150, height); ctx.lineTo(botX - 150, height);
+                ctx.closePath(); ctx.fill();
+            }
+
+            // Main follow-spot — stays on the duck with a gentle sway, brightens with intensity
+            const followX = sx + Math.sin(t * 0.0009) * 42, apexY = 80, halfW = 168;
+            const cone = ctx.createLinearGradient(0, apexY, 0, poolY);
+            cone.addColorStop(0, `rgba(255,250,225,${0.16 + intensity*0.14})`);
+            cone.addColorStop(0.7, `rgba(255,250,225,${0.05 + intensity*0.05})`);
+            cone.addColorStop(1, 'rgba(255,250,225,0)');
+            ctx.fillStyle = cone;
             ctx.beginPath();
-            ctx.moveTo(spotX - 50, -100); ctx.lineTo(spotX + 50, -100); ctx.lineTo(spotX + 400, height); ctx.lineTo(spotX - 400, height);
-            ctx.fill();
+            ctx.moveTo(followX - 18, apexY); ctx.lineTo(followX + 18, apexY);
+            ctx.lineTo(followX + halfW, poolY); ctx.lineTo(followX - halfW, poolY);
+            ctx.closePath(); ctx.fill();
+
+            // Floor pool where the beam lands
+            const pool = ctx.createRadialGradient(followX, poolY, 6, followX, poolY, halfW);
+            pool.addColorStop(0, `rgba(255,250,225,${0.22 + intensity*0.12})`);
+            pool.addColorStop(1, 'rgba(255,250,225,0)');
+            ctx.fillStyle = pool;
+            ctx.beginPath(); ctx.ellipse(followX, poolY, halfW, 44, 0, 0, Math.PI*2); ctx.fill();
+
             ctx.restore();
         }
 
         // --- Music Visualizer Scenes ---
         else if (scene === 'Spectrum') {
             // Vertical bars rising from bottom — classic Windows Media Player style
-            const bars = freqData && isPlaying ? 80 : 0;
-            const bw = width / Math.max(bars, 1);
+            const playing = freqData && isPlaying;
+            const bars = 80;
+            const bw = width / bars;
+            // When music is playing, bars track frequency data; otherwise gentle travelling
+            // sine waves keep the scene alive instead of going blank.
+            const barVal = i => playing
+                ? (freqData[Math.floor(i / bars * freqData.length * 0.8)] || 0) / 255
+                : 0.10 + 0.09 * (Math.sin(i * 0.35 + t * 0.003) * 0.5 + 0.5)
+                       + 0.06 * (Math.sin(i * 0.12 - t * 0.002) * 0.5 + 0.5);
+
+            // Soft floor glow beneath the bars
+            ctx.save();
+            const fg = ctx.createLinearGradient(0, height, 0, height - 60);
+            fg.addColorStop(0, 'rgba(168,85,247,0.18)');
+            fg.addColorStop(1, 'rgba(168,85,247,0)');
+            ctx.fillStyle = fg; ctx.fillRect(0, height - 60, width, 60);
+            ctx.restore();
+
             for (let i = 0; i < bars; i++) {
-                const v = (freqData[Math.floor(i / bars * freqData.length * 0.8)] || 0) / 255;
-                const barH = v * height * 0.72;
+                const barH = barVal(i) * height * 0.72;
                 const hue = (i / bars) * 280;
                 ctx.save();
                 const barGrad = ctx.createLinearGradient(0, height, 0, height - barH);
@@ -5195,8 +5356,7 @@
             ctx.scale(1, -1);
             ctx.translate(0, -height * 2);
             for (let i = 0; i < bars; i++) {
-                const v = (freqData[Math.floor(i / bars * freqData.length * 0.8)] || 0) / 255;
-                const barH = v * height * 0.72;
+                const barH = barVal(i) * height * 0.72;
                 const hue = (i / bars) * 280;
                 ctx.fillStyle = `hsl(${hue},80%,60%)`;
                 ctx.beginPath();
@@ -5257,7 +5417,28 @@
                 ctx.stroke();
                 ctx.restore();
             } else {
-                // Idle: gentle sine
+                // Idle: a softly breathing ring in the centre + gentle sine at the bottom
+                const pulse = 0.5 + 0.5 * Math.sin(t * 0.0015);
+                const ringR = 120 + pulse * 18;
+                ctx.save();
+                ctx.translate(width / 2, height / 2);
+                const idleGlow = ctx.createRadialGradient(0, 0, ringR * 0.6, 0, 0, ringR + 30);
+                idleGlow.addColorStop(0, `rgba(129,140,248,${0.05 + pulse * 0.06})`);
+                idleGlow.addColorStop(1, 'rgba(129,140,248,0)');
+                ctx.fillStyle = idleGlow;
+                ctx.beginPath(); ctx.arc(0, 0, ringR + 30, 0, Math.PI * 2); ctx.fill();
+                ctx.strokeStyle = `rgba(167,139,250,${0.18 + pulse * 0.12})`;
+                ctx.lineWidth = 2; ctx.shadowColor = '#a78bfa'; ctx.shadowBlur = 12;
+                ctx.beginPath();
+                for (let i = 0; i <= 80; i++) {
+                    const a = (i / 80) * Math.PI * 2 - Math.PI / 2;
+                    const r = ringR + Math.sin(a * 6 + t * 0.002) * 6;
+                    const x = Math.cos(a) * r, y = Math.sin(a) * r;
+                    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+                }
+                ctx.closePath(); ctx.stroke();
+                ctx.restore();
+
                 ctx.save();
                 ctx.translate(0, height * 0.82);
                 ctx.beginPath();
@@ -5272,6 +5453,35 @@
         }
 
         else if (scene === 'Galaxy') {
+            // Deep-space nebula wash — gives depth even when no music is playing
+            ctx.save();
+            const neb = [
+                { x: width * 0.28, y: height * 0.35, r: 320, col: '76,29,149' },
+                { x: width * 0.72, y: height * 0.55, r: 360, col: '8,47,73' },
+                { x: width * 0.50, y: height * 0.72, r: 300, col: '30,27,90' },
+            ];
+            for (const n of neb) {
+                const g = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r);
+                g.addColorStop(0, `rgba(${n.col},0.35)`);
+                g.addColorStop(1, `rgba(${n.col},0)`);
+                ctx.fillStyle = g;
+                ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.restore();
+
+            // Static twinkling starfield behind the orbiting particles
+            ctx.save();
+            for (let i = 0; i < 140; i++) {
+                const stx = rnd(i) * width;
+                const sty = rnd(i + 33) * height;
+                const tw = 0.3 + 0.7 * Math.abs(Math.sin(t * 0.0016 + i * 2.1));
+                const sz = 0.6 + rnd(i + 71) * 1.4;
+                ctx.globalAlpha = tw * 0.9;
+                ctx.fillStyle = i % 7 === 0 ? '#a5b4fc' : '#ffffff';
+                ctx.beginPath(); ctx.arc(stx, sty, sz, 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.restore();
+
             // Particle stars that pulse and orbit to the beat
             ctx.save();
             ctx.translate(width / 2, height / 2);
