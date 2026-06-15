@@ -464,6 +464,9 @@
     <!-- Duck Match floating exit button -->
     <button id="duckMatchExitBtn" style="display:none;position:absolute;top:14px;right:16px;z-index:60;background:rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.25);color:white;font-size:13px;font-weight:600;padding:6px 14px;border-radius:10px;cursor:pointer;">🥚 Exit Game</button>
 
+    <!-- Skate Mode floating exit button -->
+    <button id="skateExitBtn" style="display:none;position:absolute;top:14px;right:16px;z-index:60;background:rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.25);color:white;font-size:13px;font-weight:600;padding:6px 14px;border-radius:10px;cursor:pointer;">🛹 Exit Game</button>
+
     <!-- Casino floating exit button -->
     <button id="casinoExitBtn" style="display:none;position:absolute;top:14px;right:16px;z-index:60;background:rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.25);color:white;font-size:13px;font-weight:600;padding:6px 14px;border-radius:10px;cursor:pointer;">🚪 Leave Casino</button>
 
@@ -907,7 +910,7 @@
         document.getElementById('hatBtn').textContent = '🎩 Light Up Hat';
         document.getElementById('flashlightBtn').textContent = '🔦 Flashlight';
         intensity = 0.1; slider.value = 10;
-        currentBgIndex = 0; bgBtn.innerText = '🌍 Scene: Club';
+        currentBgIndex = 0; bgBtn.innerText = '🌍 Scene: ' + backgrounds[0];
         pendingScene = null; sceneFadeStart = null;
         updateBodyBackground();
         duckQuote = '';
@@ -1886,13 +1889,47 @@
 
     // Background Scenarios
     const backgrounds = ['Club', 'Beach', 'Retro', 'Spotlight', 'Spectrum', 'Waveform', 'Galaxy'];
+
+    // ── Seasonal holiday scenes ──────────────────────────────────────────
+    // These only appear when the player logs in on (or near) the real holiday.
+    // On a matching day the holiday scene becomes the default and leads the
+    // rotation, so it greets the player the moment the page loads.
+    //   ?holiday=july4|thanksgiving|christmas|all  forces one in for previewing.
+    function nthThursday(year, month, n) {            // month: 0-based
+        const firstDow = new Date(year, month, 1).getDay();   // Thu = 4
+        return 1 + ((4 - firstDow + 7) % 7) + (n - 1) * 7;
+    }
+    function detectHolidayScene(d) {
+        const m = d.getMonth(), day = d.getDate();
+        if (m === 6  && day >= 3 && day <= 5)  return 'July 4th';      // Independence Day window
+        if (m === 10) {                                                // Thanksgiving: 4th Thu of Nov
+            const tg = nthThursday(d.getFullYear(), 10, 4);
+            if (day >= tg - 1 && day <= tg + 1) return 'Thanksgiving'; // eve → day-after
+        }
+        if (m === 11 && day >= 24 && day <= 26) return 'Christmas';    // Christmas Eve/Day window
+        return null;
+    }
+    (function applyHolidayScenes() {
+        const forced = (new URLSearchParams(location.search).get('holiday') || '').toLowerCase();
+        const map = { july4: 'July 4th', independence: 'July 4th', thanksgiving: 'Thanksgiving', christmas: 'Christmas' };
+        let holidays;
+        if (forced === 'all') holidays = ['July 4th', 'Thanksgiving', 'Christmas'];
+        else if (map[forced])  holidays = [map[forced]];
+        else { const h = detectHolidayScene(new Date()); holidays = h ? [h] : []; }
+        // Lead with the holiday scene so it's the default greeting on the day.
+        for (let i = holidays.length - 1; i >= 0; i--) backgrounds.unshift(holidays[i]);
+    })();
+
     let currentBgIndex = 0;
 
     // ── Scene crossfade state ────────────────────────────────────────────
     let pendingScene    = null;   // scene index queued to fade in
     let sceneFadeStart  = null;   // timestamp the active crossfade began
     let sceneFadeCanvas = null;   // offscreen snapshot of the outgoing scene
-    const SCENE_FADE_MS = 550;
+    const SCENE_FADE_MS = 650;
+
+    // ── Holiday-scene particle state (lazy-initialised per effect) ───────
+    const fxState = { lastT: null, fireworks: [], fwTimer: 0, leaves: null, snow: null };
 
     // Replicate each scene's CSS body gradient onto a canvas so the snapshot
     // captures the full composite (the body layer the main canvas draws over).
@@ -1917,6 +1954,17 @@
         } else if (scene === 'Galaxy') {
             g = c.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) * 0.7);
             g.addColorStop(0, '#0f0a1e'); g.addColorStop(1, '#000005');
+        } else if (scene === 'July 4th') {
+            g = c.createLinearGradient(0, 0, 0, h);
+            g.addColorStop(0, '#05071a'); g.addColorStop(0.55, '#0b1437'); g.addColorStop(1, '#241047');
+        } else if (scene === 'Thanksgiving') {
+            g = c.createLinearGradient(0, 0, 0, h);
+            g.addColorStop(0, '#7c3f12'); g.addColorStop(0.45, '#b5651d');
+            g.addColorStop(0.62, '#8a5a2b'); g.addColorStop(1, '#5b3414');
+        } else if (scene === 'Christmas') {
+            g = c.createLinearGradient(0, 0, 0, h);
+            g.addColorStop(0, '#0a1733'); g.addColorStop(0.5, '#1c3a5e');
+            g.addColorStop(0.7, '#3f6286'); g.addColorStop(1, '#cdd9e6');
         } else { return; }
         c.fillStyle = g; c.fillRect(0, 0, w, h);
     }
@@ -1941,8 +1989,12 @@
         else if (scene === 'Spectrum')  document.body.style.background = 'linear-gradient(to top, #0f0a1e, #0d0d1a)';
         else if (scene === 'Waveform')  document.body.style.background = 'linear-gradient(135deg, #0f0a1e, #1a0d2e, #0d1a1e)';
         else if (scene === 'Galaxy')    document.body.style.background = 'radial-gradient(ellipse at center, #0f0a1e 0%, #000005 100%)';
+        else if (scene === 'July 4th')  document.body.style.background = 'linear-gradient(to bottom, #05071a 0%, #0b1437 55%, #241047 100%)';
+        else if (scene === 'Thanksgiving') document.body.style.background = 'linear-gradient(to bottom, #7c3f12 0%, #b5651d 45%, #8a5a2b 62%, #5b3414 100%)';
+        else if (scene === 'Christmas') document.body.style.background = 'linear-gradient(to bottom, #0a1733 0%, #1c3a5e 50%, #3f6286 70%, #cdd9e6 100%)';
     }
-    updateBodyBackground(); 
+    updateBodyBackground();
+    bgBtn.innerText = '🌍 Scene: ' + backgrounds[currentBgIndex];
 
     bgBtn.addEventListener('click', () => {
         const next = (currentBgIndex + 1) % backgrounds.length;
@@ -3499,9 +3551,27 @@
         
         ctx.save();
         ctx.scale(0.6, 0.6);
+        // Scene-aware floor shadow: tint + strength match the backdrop, and in
+        // Galaxy the duck floats, so the hard ground shadow becomes a faint glow.
+        const _shScene = backgrounds[currentBgIndex];
+        let _shCol = 'rgba(0,0,0,0.3)', _shW = 1, _shFloat = false;
+        if (_shScene === 'Galaxy')            { _shCol = 'rgba(120,110,200,0.22)'; _shW = 0.8; _shFloat = true; }
+        else if (_shScene === 'Beach')        { _shCol = 'rgba(120,85,25,0.28)'; }
+        else if (_shScene === 'Christmas')    { _shCol = 'rgba(40,70,120,0.30)'; }
+        else if (_shScene === 'July 4th')     { _shCol = 'rgba(0,0,10,0.34)'; }
+        else if (_shScene === 'Thanksgiving') { _shCol = 'rgba(70,40,12,0.32)'; }
+        else if (_shScene === 'Spotlight')    { _shCol = 'rgba(0,0,0,0.42)'; }   // strong stage shadow
         ctx.beginPath();
-        ctx.ellipse(0, 180, 100 * shadowScale * duckMutations.currentFat, 25 * shadowScale, 0, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+        ctx.ellipse(0, 180, 100 * shadowScale * duckMutations.currentFat * _shW, 25 * shadowScale * _shW, 0, 0, Math.PI * 2);
+        if (_shFloat) {
+            // soft radial glow instead of a flat disc
+            const gg = ctx.createRadialGradient(0, 180, 0, 0, 180, 100 * shadowScale * duckMutations.currentFat * _shW);
+            gg.addColorStop(0, _shCol);
+            gg.addColorStop(1, 'rgba(120,110,200,0)');
+            ctx.fillStyle = gg;
+        } else {
+            ctx.fillStyle = _shCol;
+        }
         ctx.fill();
         ctx.restore();
 
@@ -5405,89 +5475,133 @@
         }
 
         else if (scene === 'Waveform') {
-            // Oscilloscope-style waveform ring in the center
-            if (analyser && isPlaying) {
-                const waveData = new Uint8Array(analyser.fftSize);
-                analyser.getByteTimeDomainData(waveData);
+            // ── Oscilloscope: grid, radial frequency spokes, twin waveform rings,
+            //    and a mirrored scope ribbon. Reacts to music; flows on its own when idle. ──
+            const cx = width / 2, cy = height / 2;
+            const haveAudio = analyser && isPlaying;
+            let waveData = null;
+            if (haveAudio) { waveData = new Uint8Array(analyser.fftSize); analyser.getByteTimeDomainData(waveData); }
+            const energy = haveAudio ? smoothEnergy : 0.30 + 0.16 * (0.5 + 0.5 * Math.sin(t * 0.0015));
 
-                // Outer glow ring
-                const energy = smoothEnergy;
-                const ringR = 120 + energy * 80;
-                ctx.save();
-                ctx.translate(width / 2, height / 2);
-                const ringGrad = ctx.createRadialGradient(0, 0, ringR * 0.7, 0, 0, ringR + 20);
-                ringGrad.addColorStop(0, `rgba(129,140,248,${0.08 + energy * 0.15})`);
-                ringGrad.addColorStop(1, 'rgba(129,140,248,0)');
-                ctx.fillStyle = ringGrad;
-                ctx.beginPath(); ctx.arc(0, 0, ringR + 30, 0, Math.PI * 2); ctx.fill();
+            // Unit waveform sample in [-1,1] by fraction of the cycle — real audio or a living synth wave.
+            const waveAt = frac => haveAudio
+                ? (waveData[Math.floor(frac * waveData.length) % waveData.length] / 128 - 1)
+                : (Math.sin(frac * Math.PI * 10 + t * 0.0022) * 0.5 + Math.sin(frac * Math.PI * 3 - t * 0.0013) * 0.3)
+                  * (0.55 + 0.45 * Math.sin(t * 0.001));
+            // Frequency magnitude in [0,1] by spectrum fraction.
+            const freqMag = frac => haveAudio
+                ? (freqData ? (freqData[Math.floor(frac * freqData.length * 0.7)] || 0) / 255 : 0)
+                : 0.12 + 0.45 * Math.pow(0.5 + 0.5 * Math.sin(frac * 9 + t * 0.003), 2);
 
-                // Waveform as a circle
+            // Faint scrolling oscilloscope grid
+            ctx.save();
+            ctx.strokeStyle = 'rgba(129,140,248,0.05)';
+            ctx.lineWidth = 1;
+            for (let gx = (t * 0.01) % 64; gx <= width; gx += 64) { ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, height); ctx.stroke(); }
+            for (let gy = 0; gy <= height; gy += 64) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(width, gy); ctx.stroke(); }
+            ctx.restore();
+
+            // Full-width flowing traces filling the open space above and below the duck
+            ctx.save();
+            const traces = [
+                { y: 0.16, amp: 30, phase: 0.0,  col: 'rgba(129,140,248,0.32)', wob: 7 },
+                { y: 0.28, amp: 20, phase: 1.5,  col: 'rgba(167,139,250,0.24)', wob: 5 },
+                { y: 0.70, amp: 22, phase: 2.7,  col: 'rgba(244,114,182,0.22)', wob: 6 },
+            ];
+            ctx.lineWidth = 2;
+            for (const tr of traces) {
                 ctx.beginPath();
-                for (let i = 0; i < waveData.length; i++) {
-                    const angle = (i / waveData.length) * Math.PI * 2 - Math.PI / 2;
-                    const sample = (waveData[i] / 128 - 1);
-                    const r = ringR + sample * 60;
-                    const x = Math.cos(angle) * r;
-                    const y = Math.sin(angle) * r;
+                for (let x = 0; x <= width; x += 6) {
+                    const s = waveAt(x / width + tr.phase);
+                    const y = height * tr.y + s * tr.amp + Math.sin(x * 0.012 + t * 0.002 + tr.phase) * tr.wob;
+                    x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+                }
+                ctx.strokeStyle = tr.col; ctx.shadowColor = tr.col; ctx.shadowBlur = 8;
+                ctx.stroke();
+            }
+            ctx.restore();
+
+            ctx.save();
+            ctx.translate(cx, cy);
+            const baseR = 118 + energy * 70;
+
+            // Center glow
+            const cgrad = ctx.createRadialGradient(0, 0, baseR * 0.5, 0, 0, baseR + 70);
+            cgrad.addColorStop(0, `rgba(129,140,248,${0.06 + energy * 0.16})`);
+            cgrad.addColorStop(1, 'rgba(129,140,248,0)');
+            ctx.fillStyle = cgrad;
+            ctx.beginPath(); ctx.arc(0, 0, baseR + 70, 0, Math.PI * 2); ctx.fill();
+
+            // Radial frequency spokes
+            const spokes = 72;
+            ctx.save();
+            ctx.lineCap = 'round';
+            for (let i = 0; i < spokes; i++) {
+                const a = (i / spokes) * Math.PI * 2 + t * 0.0002;
+                const mag = freqMag(i / spokes);
+                const r0 = baseR + 16;
+                const len = 26 + mag * (150 + energy * 90);
+                const hue = 250 + (i / spokes) * 80;
+                ctx.strokeStyle = `hsla(${hue},88%,74%,${0.35 + mag * 0.55})`;
+                ctx.lineWidth = 2.5;
+                ctx.shadowColor = `hsl(${hue},90%,65%)`;
+                ctx.shadowBlur = 8;
+                ctx.beginPath();
+                ctx.moveTo(Math.cos(a) * r0, Math.sin(a) * r0);
+                ctx.lineTo(Math.cos(a) * (r0 + len), Math.sin(a) * (r0 + len));
+                ctx.stroke();
+            }
+            ctx.restore();
+
+            // Twin circular waveforms — main ring plus a counter-rotating ghost
+            const drawRing = (rot, amp, col, lw, alpha) => {
+                ctx.save();
+                ctx.rotate(rot);
+                ctx.beginPath();
+                const steps = 128;
+                for (let i = 0; i <= steps; i++) {
+                    const ang = (i / steps) * Math.PI * 2 - Math.PI / 2;
+                    const r = baseR + waveAt(i / steps) * amp;
+                    const x = Math.cos(ang) * r, y = Math.sin(ang) * r;
                     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
                 }
                 ctx.closePath();
-                ctx.strokeStyle = `rgba(167,139,250,${0.7 + energy * 0.3})`;
-                ctx.lineWidth = 2.5;
-                ctx.shadowColor = '#a78bfa';
-                ctx.shadowBlur = 16;
-                ctx.stroke();
-
-                // Horizontal waveform at bottom
-                ctx.restore();
-                ctx.save();
-                ctx.translate(0, height * 0.82);
-                ctx.beginPath();
-                for (let i = 0; i < waveData.length; i++) {
-                    const x = (i / waveData.length) * width;
-                    const y = ((waveData[i] / 128) - 1) * 55;
-                    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-                }
-                ctx.strokeStyle = 'rgba(244,114,182,0.6)';
-                ctx.lineWidth = 2;
-                ctx.shadowColor = '#f472b6';
-                ctx.shadowBlur = 10;
+                ctx.globalAlpha = alpha;
+                ctx.strokeStyle = col; ctx.lineWidth = lw;
+                ctx.shadowColor = col; ctx.shadowBlur = 16;
                 ctx.stroke();
                 ctx.restore();
-            } else {
-                // Idle: a softly breathing ring in the centre + gentle sine at the bottom
-                const pulse = 0.5 + 0.5 * Math.sin(t * 0.0015);
-                const ringR = 120 + pulse * 18;
-                ctx.save();
-                ctx.translate(width / 2, height / 2);
-                const idleGlow = ctx.createRadialGradient(0, 0, ringR * 0.6, 0, 0, ringR + 30);
-                idleGlow.addColorStop(0, `rgba(129,140,248,${0.05 + pulse * 0.06})`);
-                idleGlow.addColorStop(1, 'rgba(129,140,248,0)');
-                ctx.fillStyle = idleGlow;
-                ctx.beginPath(); ctx.arc(0, 0, ringR + 30, 0, Math.PI * 2); ctx.fill();
-                ctx.strokeStyle = `rgba(167,139,250,${0.18 + pulse * 0.12})`;
-                ctx.lineWidth = 2; ctx.shadowColor = '#a78bfa'; ctx.shadowBlur = 12;
-                ctx.beginPath();
-                for (let i = 0; i <= 80; i++) {
-                    const a = (i / 80) * Math.PI * 2 - Math.PI / 2;
-                    const r = ringR + Math.sin(a * 6 + t * 0.002) * 6;
-                    const x = Math.cos(a) * r, y = Math.sin(a) * r;
-                    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-                }
-                ctx.closePath(); ctx.stroke();
-                ctx.restore();
+            };
+            drawRing(t * 0.0003, 46 + energy * 30, `rgba(167,139,250,${0.7 + energy * 0.3})`, 2.5, 1);
+            drawRing(-t * 0.00045, 30 + energy * 24, 'rgba(244,114,182,0.5)', 1.5, 0.7);
+            ctx.restore();
 
-                ctx.save();
-                ctx.translate(0, height * 0.82);
-                ctx.beginPath();
-                for (let x = 0; x < width; x++) {
-                    const y = Math.sin((x / width) * Math.PI * 6 + t * 0.002) * 18;
-                    x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-                }
-                ctx.strokeStyle = 'rgba(244,114,182,0.3)';
-                ctx.lineWidth = 2; ctx.stroke();
-                ctx.restore();
+            // Mirrored scope ribbon near the bottom
+            ctx.save();
+            ctx.translate(0, height * 0.85);
+            const ribAmp = 38 + energy * 42;
+            const top = [], bot = [];
+            for (let x = 0; x <= width; x += 6) {
+                const s = waveAt(x / width);
+                top.push([x, s * ribAmp]); bot.push([x, -s * ribAmp]);
             }
+            ctx.beginPath();
+            top.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
+            for (let i = bot.length - 1; i >= 0; i--) ctx.lineTo(bot[i][0], bot[i][1]);
+            ctx.closePath();
+            const rg = ctx.createLinearGradient(0, -ribAmp, 0, ribAmp);
+            rg.addColorStop(0, 'rgba(244,114,182,0.13)');
+            rg.addColorStop(0.5, 'rgba(167,139,250,0.05)');
+            rg.addColorStop(1, 'rgba(244,114,182,0.13)');
+            ctx.fillStyle = rg; ctx.fill();
+            ctx.shadowBlur = 10; ctx.lineWidth = 2;
+            ctx.shadowColor = '#f472b6';
+            ctx.strokeStyle = `rgba(244,114,182,${0.55 + energy * 0.35})`;
+            ctx.beginPath(); top.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.stroke();
+            ctx.shadowColor = '#818cf8';
+            ctx.strokeStyle = `rgba(129,140,248,${0.4 + energy * 0.3})`;
+            ctx.beginPath(); bot.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.stroke();
+            ctx.restore();
         }
 
         else if (scene === 'Galaxy') {
@@ -5554,6 +5668,229 @@
             ctx.restore();
         }
 
+        else if (scene === 'July 4th') {
+            // ── Independence Day: fireworks bursting over a starry night ──
+            const dt = Math.min(50, fxState.lastT == null ? 16 : t - fxState.lastT);
+
+            // Twinkling stars in the upper sky
+            ctx.save();
+            for (let i = 0; i < 70; i++) {
+                const stx = rnd(i) * width, sty = rnd(i + 41) * height * 0.6;
+                const tw = 0.3 + 0.7 * Math.abs(Math.sin(t * 0.0015 + i * 1.7));
+                ctx.globalAlpha = tw * 0.8;
+                ctx.fillStyle = i % 5 === 0 ? '#9db4ff' : '#ffffff';
+                ctx.beginPath(); ctx.arc(stx, sty, 0.6 + rnd(i + 12) * 1.3, 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.restore();
+
+            // Faint city skyline silhouette along the bottom
+            ctx.save();
+            ctx.fillStyle = 'rgba(3,5,16,0.85)';
+            const baseY = height * 0.92;
+            for (let i = 0; i < 16; i++) {
+                const bw = width / 16, bx = i * bw;
+                const bh = 28 + rnd(i + 200) * 70;
+                ctx.fillRect(bx, baseY - bh, bw + 1, bh + 40);
+                // a few lit windows
+                ctx.fillStyle = `rgba(255,214,120,${0.18 + 0.12 * Math.sin(t * 0.002 + i)})`;
+                ctx.fillRect(bx + bw * 0.4, baseY - bh + 8, 3, 4);
+                ctx.fillStyle = 'rgba(3,5,16,0.85)';
+            }
+            ctx.restore();
+
+            // Spawn fireworks on a timer (more frequent at higher intensity)
+            fxState.fwTimer -= dt;
+            if (fxState.fwTimer <= 0) {
+                fxState.fwTimer = (650 + rnd(Math.floor(t)) * 900) / (0.6 + intensity);
+                const bx = width * (0.15 + Math.abs(Math.sin(t * 0.013)) * 0.7);
+                const by = height * (0.12 + Math.abs(Math.cos(t * 0.021)) * 0.4);
+                const palette = [[255,70,70],[255,255,255],[90,150,255],[250,204,21],[255,120,200]];
+                const col = palette[Math.floor(Math.abs(Math.sin(t * 0.07)) * palette.length) % palette.length];
+                const count = 34 + Math.floor(Math.abs(Math.cos(t * 0.03)) * 26);
+                const burstSpeed = 90 + Math.abs(Math.sin(t * 0.05)) * 150;
+                for (let p = 0; p < count; p++) {
+                    const a = (p / count) * Math.PI * 2;
+                    const sp = burstSpeed * (0.6 + (Math.sin(p * 12.9) * 0.5 + 0.5) * 0.7);
+                    fxState.fireworks.push({
+                        x: bx, y: by, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+                        life: 1100 + (Math.sin(p) * 0.5 + 0.5) * 700, max: 1800, col, flash: 1
+                    });
+                }
+            }
+
+            // Update + draw firework particles
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            for (let i = fxState.fireworks.length - 1; i >= 0; i--) {
+                const f = fxState.fireworks[i];
+                f.life -= dt;
+                if (f.life <= 0) { fxState.fireworks.splice(i, 1); continue; }
+                f.vy += 60 * dt / 1000;          // gravity
+                f.vx *= 0.985; f.vy *= 0.985;     // air drag
+                f.x += f.vx * dt / 1000;
+                f.y += f.vy * dt / 1000;
+                f.flash *= 0.9;
+                const lp = f.life / f.max;
+                const alpha = Math.max(0, lp);
+                const r = 1.4 + lp * 1.6;
+                ctx.fillStyle = `rgba(${f.col[0]},${f.col[1]},${f.col[2]},${alpha})`;
+                ctx.shadowColor = `rgb(${f.col[0]},${f.col[1]},${f.col[2]})`;
+                ctx.shadowBlur = 8;
+                ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, Math.PI * 2); ctx.fill();
+                if (f.flash > 0.05) {            // bright spark head right after burst
+                    ctx.fillStyle = `rgba(255,255,255,${f.flash * alpha})`;
+                    ctx.beginPath(); ctx.arc(f.x, f.y, r * 1.6, 0, Math.PI * 2); ctx.fill();
+                }
+            }
+            ctx.restore();
+        }
+
+        else if (scene === 'Thanksgiving') {
+            // ── Autumn: warm sun, drifting falling leaves, a few harvest treats ──
+            if (!fxState.leaves) {
+                fxState.leaves = [];
+                for (let i = 0; i < 26; i++) {
+                    fxState.leaves.push({
+                        x: rnd(i) * width, y: rnd(i + 5) * height,
+                        sz: 9 + rnd(i + 9) * 12, sp: 18 + rnd(i + 2) * 26,
+                        sway: 0.4 + rnd(i + 7) * 0.9, ph: rnd(i + 3) * Math.PI * 2,
+                        rot: rnd(i + 11) * Math.PI * 2, vr: (rnd(i + 13) - 0.5) * 0.0025,
+                        col: ['#c1440e','#e07b39','#d98324','#a23e0c','#b5651d','#8a5a2b'][i % 6]
+                    });
+                }
+            }
+            const dt = Math.min(50, fxState.lastT == null ? 16 : t - fxState.lastT);
+
+            // Warm hazy sun glow, upper-left
+            ctx.save();
+            const sx = width * 0.78, sy = height * 0.2;
+            const sg = ctx.createRadialGradient(sx, sy, 10, sx, sy, 280);
+            sg.addColorStop(0, 'rgba(255,224,150,0.55)');
+            sg.addColorStop(0.5, 'rgba(255,180,90,0.18)');
+            sg.addColorStop(1, 'rgba(255,180,90,0)');
+            ctx.fillStyle = sg;
+            ctx.beginPath(); ctx.arc(sx, sy, 280, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+
+            // Falling, swaying, tumbling maple leaves
+            ctx.save();
+            for (const lf of fxState.leaves) {
+                lf.y += lf.sp * dt / 1000;
+                lf.x += Math.sin(t * 0.001 * lf.sway + lf.ph) * 0.4;
+                lf.rot += lf.vr * dt;
+                if (lf.y - lf.sz > height) { lf.y = -lf.sz; lf.x = rnd(Math.floor(lf.x + t)) * width; }
+                ctx.save();
+                ctx.translate(lf.x, lf.y);
+                ctx.rotate(lf.rot);
+                ctx.fillStyle = lf.col;
+                ctx.globalAlpha = 0.92;
+                // pointed almond leaf with a center vein — reads clearly as foliage
+                const sz = lf.sz;
+                ctx.beginPath();
+                ctx.moveTo(0, -sz);
+                ctx.quadraticCurveTo(sz * 0.72, -sz * 0.15, 0, sz);
+                ctx.quadraticCurveTo(-sz * 0.72, -sz * 0.15, 0, -sz);
+                ctx.closePath(); ctx.fill();
+                ctx.strokeStyle = 'rgba(80,40,10,0.45)';
+                ctx.lineWidth = 0.8;
+                ctx.beginPath(); ctx.moveTo(0, -sz * 0.9); ctx.lineTo(0, sz * 0.85); ctx.stroke();
+                ctx.restore();
+            }
+            ctx.restore();
+
+            // A few harvest treats bobbing in the open side margins (clear of the UI panels)
+            ctx.save();
+            const treats = [
+                { e: '🥧', x: 0.07, y: 0.58 }, { e: '🦃', x: 0.93, y: 0.42 },
+                { e: '🌽', x: 0.13, y: 0.86 }, { e: '🍁', x: 0.88, y: 0.66 }
+            ];
+            ctx.font = '34px serif';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.globalAlpha = 0.85;
+            for (let i = 0; i < treats.length; i++) {
+                const tx = width * treats[i].x;
+                const ty = height * treats[i].y + Math.sin(t * 0.0014 + i * 1.5) * 10;
+                ctx.fillText(treats[i].e, tx, ty);
+            }
+            ctx.restore();
+        }
+
+        else if (scene === 'Christmas') {
+            // ── Snowy night: moon, stars, falling snow, snow drifts ──
+            if (!fxState.snow) {
+                fxState.snow = [];
+                for (let i = 0; i < 110; i++) {
+                    const depth = rnd(i + 17);   // 0 = far/small, 1 = near/big
+                    fxState.snow.push({
+                        x: rnd(i) * width, y: rnd(i + 31) * height,
+                        r: 1 + depth * 2.6, sp: 14 + depth * 42,
+                        sway: 0.5 + rnd(i + 4) * 1.1, ph: rnd(i + 8) * Math.PI * 2
+                    });
+                }
+            }
+            const dt = Math.min(50, fxState.lastT == null ? 16 : t - fxState.lastT);
+
+            // Moon with soft halo, upper-right
+            ctx.save();
+            const mx = width * 0.82, my = height * 0.18;
+            const halo = ctx.createRadialGradient(mx, my, 8, mx, my, 150);
+            halo.addColorStop(0, 'rgba(220,235,255,0.5)');
+            halo.addColorStop(1, 'rgba(220,235,255,0)');
+            ctx.fillStyle = halo;
+            ctx.beginPath(); ctx.arc(mx, my, 150, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#eaf2ff';
+            ctx.beginPath(); ctx.arc(mx, my, 38, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = 'rgba(190,210,235,0.5)';   // a couple of craters
+            ctx.beginPath(); ctx.arc(mx - 12, my - 8, 6, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(mx + 10, my + 9, 4.5, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+
+            // Twinkling stars in the dark upper band
+            ctx.save();
+            for (let i = 0; i < 55; i++) {
+                const stx = rnd(i + 60) * width, sty = rnd(i + 90) * height * 0.45;
+                const tw = 0.3 + 0.7 * Math.abs(Math.sin(t * 0.002 + i * 1.3));
+                ctx.globalAlpha = tw * 0.7;
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath(); ctx.arc(stx, sty, 0.6 + rnd(i + 50) * 1.1, 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.restore();
+
+            // Rolling snow drifts along the bottom
+            ctx.save();
+            ctx.fillStyle = '#eef4fb';
+            ctx.beginPath();
+            ctx.moveTo(0, height);
+            for (let x = 0; x <= width; x += 20) {
+                const y = height * 0.9 + Math.sin(x * 0.008 + 1.5) * 14 + Math.sin(x * 0.021) * 8;
+                ctx.lineTo(x, y);
+            }
+            ctx.lineTo(width, height); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = 'rgba(180,200,225,0.4)';   // soft blue shading on the drift crest
+            ctx.beginPath();
+            ctx.moveTo(0, height);
+            for (let x = 0; x <= width; x += 20) {
+                const y = height * 0.9 + Math.sin(x * 0.008 + 1.5) * 14 + Math.sin(x * 0.021) * 8 + 6;
+                ctx.lineTo(x, y);
+            }
+            ctx.lineTo(width, height); ctx.closePath(); ctx.fill();
+            ctx.restore();
+
+            // Falling, swaying snowflakes
+            ctx.save();
+            ctx.fillStyle = '#ffffff';
+            for (const s of fxState.snow) {
+                s.y += s.sp * dt / 1000;
+                s.x += Math.sin(t * 0.001 * s.sway + s.ph) * 0.5;
+                if (s.y - s.r > height) { s.y = -s.r; s.x = rnd(Math.floor(s.x + t)) * width; }
+                ctx.globalAlpha = 0.55 + (s.r / 3.6) * 0.45;
+                ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        fxState.lastT = t;   // frame-delta clock for holiday particle effects
+
         // ── Scene crossfade ──────────────────────────────────────────────
         // Commit a queued scene change by snapshotting the just-drawn outgoing
         // scene (body gradient base + canvas layer), then fade it out over the
@@ -5579,11 +5916,16 @@
             if (p >= 1) {
                 sceneFadeStart = null;
             } else {
-                const a = 1 - (p * p * (3 - 2 * p)); // ease-in-out fade of outgoing scene
+                const e = p * p * (3 - 2 * p);        // smoothstep progress
+                const a = 1 - e;                       // outgoing scene fades out
+                const scale = 1 + 0.035 * e;           // and drifts gently toward the viewer
+                const w = sceneFadeCanvas.width, h = sceneFadeCanvas.height;
                 ctx.save();
                 ctx.setTransform(1, 0, 0, 1, 0, 0);
                 ctx.globalAlpha = a;
-                ctx.drawImage(sceneFadeCanvas, 0, 0);
+                ctx.translate(w / 2, h / 2);
+                ctx.scale(scale, scale);
+                ctx.drawImage(sceneFadeCanvas, -w / 2, -h / 2);
                 ctx.restore();
             }
         }
@@ -5604,6 +5946,11 @@
     let skateSpeed = 4;
     let skateScore = 0;
     let skateLives = 3;
+    // Persistent best — safe wrappers in case localStorage is blocked.
+    function skateHighGet()  { try { return +(localStorage.getItem('duckSkateHigh') || 0); } catch(e) { return 0; } }
+    function skateHighSet(v)  { try { localStorage.setItem('duckSkateHigh', v); } catch(e) {} }
+    let skateHigh = skateHighGet();
+    let skateNewBest = false;   // set true the run the player beats their best
     let skateObstacles = [];
     let skateItems = [];
     let obstacleTimer = 0;
@@ -5611,8 +5958,26 @@
     let groundY = 0;
     let isGameOver = false;
 
+    // Distance-based spawn scheduler — fair, speed-scaled spacing so hazards
+    // never stack into impossible combos (replaces the old dual time-based timers).
+    let spawnDistance   = 0;     // px travelled since the last hazard
+    let nextObstacleGap = 380;   // px until the next hazard
+    let itemDistance    = 0;     // px travelled since the last collectible
+    let nextItemGap     = 900;   // px until the next collectible
+    let lastGroundKind  = '';    // avoid repeating the same ground archetype back-to-back
+
+    // Ground hazards the duck must JUMP. Heights stay within a single jump arc.
+    const SKATE_GROUND_KINDS = [
+        { kind: 'cone',    w: 30, h: 44 },
+        { kind: 'crate',   w: 46, h: 50 },
+        { kind: 'barrier', w: 74, h: 34 },
+        { kind: 'rock',    w: 54, h: 40 },
+        { kind: 'bush',    w: 62, h: 46 },
+    ];
+
     // Boost / D-key cooldown system
     const BOOST_USE_MAX   = 6000;  // 6s of boost available
+    const BOOST_OVERCHARGE_MAX = 12000;  // fuel can stack the meter to 200% (overcharged)
     const BOOST_RECHARGE  = 3000;  // 3s recharge after depletion
     let boostCharge       = BOOST_USE_MAX; // current charge (ms)
     let boostRecharging   = false;         // locked-out recharge phase
@@ -5680,6 +6045,8 @@
         }
     };
 
+    document.getElementById('skateExitBtn').onclick = () => exitSkateMode();
+
     function enterSkateMode() {
         isSkateMode = true;
         skateModeBtn.innerText = "🛑 Quit Skate";
@@ -5688,10 +6055,12 @@
         document.getElementById('partyDropdownWrapper').style.display = 'none';
         document.getElementById('friendBtn').style.display = 'none';
         document.getElementById('foodDropdownBtn').parentElement.style.display = 'none';
+        document.getElementById('targetsDropdownBtn').parentElement.style.display = 'none';
         document.getElementById('clearBtn').style.display = 'none';
         document.getElementById('bgBtn').style.display = 'none';
         document.getElementById('fightModeBtn').style.display = 'none';
         document.getElementById('gamesDropdownBtn').style.display = 'none';
+        document.getElementById('skateExitBtn').style.display = 'block';
         if (!collapsed) window.toggleMusicPlayer();
         updateBodyBackground();
         resetSkateGame();
@@ -5705,9 +6074,11 @@
         document.getElementById('partyDropdownWrapper').style.display = '';
         document.getElementById('friendBtn').style.display = '';
         document.getElementById('foodDropdownBtn').parentElement.style.display = '';
+        document.getElementById('targetsDropdownBtn').parentElement.style.display = '';
         document.getElementById('bgBtn').style.display = '';
         document.getElementById('fightModeBtn').style.display = '';
         document.getElementById('gamesDropdownBtn').style.display = '';
+        document.getElementById('skateExitBtn').style.display = 'none';
         updateBodyBackground();
     }
 
@@ -8639,10 +9010,16 @@
         skateSpeed = 4;
         skateScore = 0;
         skateLives = 3;
+        skateNewBest = false;
         skateObstacles = [];
         skateItems = [];
         obstacleTimer = 0;
         itemTimer = 0;
+        spawnDistance = 0;
+        nextObstacleGap = 380;
+        itemDistance = 0;
+        nextItemGap = 900;
+        lastGroundKind = '';
         isGameOver = false;
         boostCharge = BOOST_USE_MAX;
         boostRecharging = false;
@@ -8664,8 +9041,117 @@
         }
     }
 
+    // ── Unified, slightly-forgiving AABB collision for Skate mode ──
+    const SKATE_DUCK_X = 120;
+    function skateDuckBox() {
+        // Tracks the visible body (beak/wings excluded) with a small forgiveness inset.
+        return {
+            left:   SKATE_DUCK_X - 18,
+            right:  SKATE_DUCK_X + 18,
+            top:    groundY + skateDuck.y - skateDuck.height + 6,
+            bottom: groundY + skateDuck.y - 4,
+        };
+    }
+    function skateObsBox(obs) {
+        if (obs.type === 'overhead')  return { left: obs.x + 2, right: obs.x + obs.w - 2, top: obs.y, bottom: obs.y + obs.h - 4 };
+        if (obs.type === 'quicksand') return { left: obs.x + 6, right: obs.x + obs.w - 6, top: obs.y, bottom: obs.y + obs.h + 24 };
+        const insetTop = obs.kind === 'cone' ? 10 : 4;   // triangle is empty at its peak
+        return { left: obs.x + 4, right: obs.x + obs.w - 4, top: obs.y + insetTop, bottom: obs.y + obs.h };
+    }
+    function skateAabb(a, b) {
+        return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+    }
+
+    // Spawn one fair hazard at the right edge, chosen from a weighted table.
+    function spawnSkateHazard() {
+        const roll = Math.random();
+        if (roll < 0.26) {
+            // Overhead bar — crouch under. Bottom edge varies a little for variety,
+            // but always low enough that a standing duck hits and a crouch clears.
+            const barBottom = groundY - (58 + Math.random() * 16);
+            skateObstacles.push({ x: width, y: 0, w: 40, h: barBottom, type: 'overhead', scored: false });
+        } else if (roll < 0.34) {
+            // Quicksand — jump over it or get dragged to a crawl.
+            const w = 84 + Math.random() * 30;
+            skateObstacles.push({ x: width, y: groundY - 18, w, h: 18, type: 'quicksand', scored: false });
+        } else {
+            // Ground obstacle — pick a varied archetype, not the same as last time.
+            let pick;
+            do { pick = SKATE_GROUND_KINDS[Math.floor(Math.random() * SKATE_GROUND_KINDS.length)]; }
+            while (SKATE_GROUND_KINDS.length > 1 && pick.kind === lastGroundKind);
+            lastGroundKind = pick.kind;
+            const h = pick.h + Math.floor(Math.random() * 6 - 2);   // ±slight size jitter
+            skateObstacles.push({ x: width, y: groundY - h, w: pick.w, h, type: 'ground', kind: pick.kind, scored: false });
+        }
+    }
+
+    // Distinct visuals per ground archetype (all sit with their base on the ground).
+    function drawSkateGround(obs) {
+        const x = obs.x, y = obs.y, w = obs.w, h = obs.h;
+        ctx.save();
+        if (obs.kind === 'cone') {
+            ctx.fillStyle = "#f97316"; ctx.strokeStyle = "#c2410c"; ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(x + w / 2, y); ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h);
+            ctx.closePath(); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = "#fff"; ctx.globalAlpha = 0.85;
+            ctx.beginPath();
+            ctx.moveTo(x + w * 0.32, y + h * 0.5); ctx.lineTo(x + w * 0.68, y + h * 0.5);
+            ctx.lineTo(x + w * 0.76, y + h * 0.72); ctx.lineTo(x + w * 0.24, y + h * 0.72);
+            ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
+        } else if (obs.kind === 'crate') {
+            ctx.fillStyle = "#a16207"; ctx.strokeStyle = "#713f12"; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.roundRect(x, y, w, h, 4); ctx.fill(); ctx.stroke();
+            ctx.strokeStyle = "#854d0e"; ctx.lineWidth = 3;
+            ctx.strokeRect(x + 3, y + 3, w - 6, h - 6);
+            ctx.beginPath();
+            ctx.moveTo(x + 4, y + 4); ctx.lineTo(x + w - 4, y + h - 4);
+            ctx.moveTo(x + w - 4, y + 4); ctx.lineTo(x + 4, y + h - 4);
+            ctx.stroke();
+        } else if (obs.kind === 'barrier') {
+            ctx.fillStyle = "#374151";
+            ctx.fillRect(x + 6, y + h * 0.5, 5, h * 0.5);
+            ctx.fillRect(x + w - 11, y + h * 0.5, 5, h * 0.5);
+            ctx.fillStyle = "#f59e0b"; ctx.strokeStyle = "#b45309"; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.roundRect(x, y, w, h * 0.55, 3); ctx.fill(); ctx.stroke();
+            ctx.save();
+            ctx.beginPath(); ctx.roundRect(x, y, w, h * 0.55, 3); ctx.clip();
+            ctx.strokeStyle = "#1f2937"; ctx.lineWidth = 7;
+            for (let s = -h; s < w + h; s += 18) {
+                ctx.beginPath(); ctx.moveTo(x + s, y + h * 0.55); ctx.lineTo(x + s + h, y); ctx.stroke();
+            }
+            ctx.restore();
+        } else if (obs.kind === 'rock') {
+            ctx.fillStyle = "#6b7280"; ctx.strokeStyle = "#374151"; ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(x + w * 0.1, y + h); ctx.lineTo(x + w * 0.02, y + h * 0.5);
+            ctx.lineTo(x + w * 0.3, y + h * 0.12); ctx.lineTo(x + w * 0.6, y + h * 0.02);
+            ctx.lineTo(x + w * 0.9, y + h * 0.35); ctx.lineTo(x + w * 0.98, y + h * 0.7);
+            ctx.lineTo(x + w * 0.85, y + h);
+            ctx.closePath(); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = "rgba(255,255,255,0.18)";
+            ctx.beginPath(); ctx.ellipse(x + w * 0.4, y + h * 0.35, w * 0.2, h * 0.16, -0.3, 0, Math.PI * 2); ctx.fill();
+        } else if (obs.kind === 'bush') {
+            const minWH = Math.min(w, h);
+            ctx.fillStyle = "#15803d"; ctx.strokeStyle = "#166534"; ctx.lineWidth = 2;
+            const cxs = [0.25, 0.5, 0.75, 0.4, 0.6], cys = [0.6, 0.4, 0.6, 0.78, 0.8], crs = [0.3, 0.34, 0.3, 0.26, 0.26];
+            for (let k = 0; k < cxs.length; k++) {
+                ctx.beginPath();
+                ctx.arc(x + w * cxs[k], y + h * cys[k], minWH * crs[k], 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.fillStyle = "#ef4444";
+            ctx.beginPath(); ctx.arc(x + w * 0.4, y + h * 0.5, 3, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(x + w * 0.62, y + h * 0.62, 3, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
+    }
+
     function runSkateGame(dt) {
         groundY = height - 120;
+        // Frames-elapsed factor: makes movement, spawning and physics run at a
+        // consistent real-time rate regardless of frame rate (skateSpeed is px/frame@60fps).
+        const step = Math.min(3, dt / 16.6667);
         ctx.clearRect(0, 0, width, height);
 
         ctx.fillStyle = "#0f172a";
@@ -8693,9 +9179,24 @@
             ctx.font = "bold 24px sans-serif";
             ctx.fillText(`Obstacles Cleared: ${skateScore}`, width/2, height/2 + 2);
 
+            if (skateNewBest) {
+                // Celebrate the record with a gold, gently pulsing banner.
+                const pulse = 0.75 + 0.25 * Math.abs(Math.sin(performance.now() * 0.005));
+                ctx.save();
+                ctx.globalAlpha = pulse;
+                ctx.fillStyle = "#fbbf24";
+                ctx.font = "bold 22px sans-serif";
+                ctx.fillText("🏆 NEW BEST!", width/2, height/2 + 40);
+                ctx.restore();
+            } else {
+                ctx.fillStyle = "#94a3b8";
+                ctx.font = "18px sans-serif";
+                ctx.fillText(`Best: ${skateHigh}`, width/2, height/2 + 38);
+            }
+
             ctx.fillStyle = "#ffffff";
             ctx.font = "18px sans-serif";
-            ctx.fillText("Press Space to Skate Again", width/2, height/2 + 46);
+            ctx.fillText("Press Space to Skate Again", width/2, height/2 + 78);
             
             if (skateKeys[' ']) {
                 resetSkateGame();
@@ -8703,113 +9204,66 @@
             return;
         }
 
-        // Score is obstacle-based; no continuous increment here
+        // Score is obstacle-based; no continuous increment here.
+        // Commit a new best the moment it's beaten (only writes on an actual increment).
+        if (skateScore > skateHigh) {
+            skateHigh = skateScore;
+            skateNewBest = true;
+            skateHighSet(skateHigh);
+        }
 
-        if (skateKeys['s']) {
+        if (skateKeys['s'] || skateKeys['arrowdown']) {
             skateDuck.crouching = true;
             skateDuck.height = 50;
             skateDuck.scaleY = 0.5;
-        } else if (skateKeys['w']) {
-            skateDuck.crouching = false;
-            skateDuck.height = 160;
-            skateDuck.scaleY = 1.6;
         } else {
             skateDuck.crouching = false;
             skateDuck.height = 100;
             skateDuck.scaleY = 1.0;
         }
 
-        skateDuck.vy += 0.8; 
-        skateDuck.y += skateDuck.vy;
-        
+        skateDuck.vy += 0.8 * step;
+        skateDuck.y += skateDuck.vy * step;
+
         if (skateDuck.y >= 0) {
             skateDuck.y = 0;
             skateDuck.vy = 0;
             skateDuck.isJumping = false;
         }
 
-        obstacleTimer += dt;
-        if (obstacleTimer > 2000 - (skateSpeed * 100)) {
-            obstacleTimer = 0;
-            const isOverhead = Math.random() > 0.5;
-            
-            if (isOverhead) {
-                // Hangs from the top — duck must crouch. Bottom edge sits just above where a standing duck's head is.
-                const hangBottom = groundY - 70; // bottom of the hanging bar
-                const hangH = hangBottom;        // reaches all the way to y=0 (top of play area)
-                skateObstacles.push({
-                    x: width,
-                    y: 0,
-                    w: 40,
-                    h: hangH,
-                    type: 'overhead'
-                });
-            } else {
-                skateObstacles.push({
-                    x: width,
-                    y: groundY - 40,
-                    w: 30,
-                    h: 40,
-                    type: 'ground'
-                });
-            }
+        // ── Distance-based hazard scheduler (fair, speed-scaled spacing) ──
+        spawnDistance += skateSpeed * step;
+        if (spawnDistance >= nextObstacleGap) {
+            spawnDistance = 0;
+            spawnSkateHazard();
+            // The next gap must exceed a full jump arc so the player can always
+            // land before the next hazard; it widens as speed climbs.
+            const minGap = Math.max(300, skateSpeed * 52);
+            nextObstacleGap = minGap + Math.random() * 200;
         }
 
-        itemTimer += dt;
-        if (itemTimer > 1500) {
-            itemTimer = 0;
-
-            // Spawn rates: coins (lives) very rare, shield uncommon, boost common
-            const rr = Math.random();
-            let itemType;
-            if      (rr < 0.04)  itemType = 'coin';    // 4%  — lives are very rare
-            else if (rr < 0.22)  itemType = 'shield';  // 18%
-            else                 itemType = 'boost';   // 78%
-
-            const highSpawn = Math.random() < 0.4;
-            let spawnY;
-            if (highSpawn) {
-                spawnY = groundY - 110 - Math.random() * 40;
+        // ── Collectibles on their own cadence, never spawned on top of a hazard ──
+        itemDistance += skateSpeed * step;
+        if (itemDistance >= nextItemGap) {
+            if (skateObstacles.some(o => o.x > width - 90)) {
+                itemDistance = nextItemGap - 60;   // a hazard is right here — retry shortly
             } else {
-                spawnY = groundY - 40 - Math.random() * 60;
-            }
+                itemDistance = 0;
+                nextItemGap = 1600 + Math.random() * 1300;   // far wider spacing — power-ups are now occasional, not constant
 
-            const itemId = Math.random().toString(36).slice(2);
-            skateItems.push({
-                x: width,
-                y: spawnY,
-                radius: 14,
-                type: itemType,
-                pulse: 0,
-                high: highSpawn,
-                id: itemId
-            });
+                const rr = Math.random();
+                const itemType = rr < 0.12 ? 'coin'      // extra life
+                               : rr < 0.27 ? 'boost'     // RARE invulnerability smash (was the 75% default)
+                               : rr < 0.60 ? 'fuel'      // speed-boost meter refill (utility, not protection)
+                               :             'shield';   // common one-hit block
 
-            // 30% of HIGH spawns: queue an overhead bar behind the item
-            if (highSpawn && Math.random() < 0.3) {
-                const gap = skateSpeed * 72;
-                const hangH = groundY - 70;
-                skateObstacles.push({
-                    x: width + gap,
-                    y: 0,
-                    w: 40,
-                    h: hangH,
-                    type: 'overhead',
-                    scored: false
-                });
-            }
-
-            // 30% chance: place quicksand BEFORE the item (duck must jump over sand to reach item)
-            if (Math.random() < 0.30) {
-                const sandGap = skateSpeed * 50; // quicksand arrives ~1s before the item
-                skateObstacles.push({
-                    x: width - sandGap,   // spawns ahead of the item (lower x = arrives sooner)
-                    y: groundY - 18,
-                    w: 90,
-                    h: 18,
-                    type: 'quicksand',
-                    linkedItemId: itemId,
-                    scored: false
+                const highSpawn = Math.random() < 0.45;
+                const spawnY = highSpawn
+                    ? groundY - 100 - Math.random() * 28   // reachable mid-jump
+                    : groundY - 42  - Math.random() * 40;  // grab while grounded / short hop
+                skateItems.push({
+                    x: width, y: spawnY, radius: 14, type: itemType,
+                    pulse: 0, high: highSpawn, id: Math.random().toString(36).slice(2)
                 });
             }
         }
@@ -8818,6 +9272,9 @@
             skateDuck.boostTimer -= dt;
             if (skateDuck.boostTimer < 0) skateDuck.boostTimer = 0;
         }
+
+        // Cruising speed drifts upward with score so the run gets harder over time.
+        const baseSpeed = 4 + Math.min(3, skateScore * 0.015);
 
         // Boost / D-key with 6s use, 3s recharge cooldown
         if (boostRecharging) {
@@ -8828,9 +9285,9 @@
                 boostCharge = BOOST_USE_MAX;
             }
             // Can't use D during recharge
-            skateSpeed += (4 - skateSpeed) * 0.03;
+            skateSpeed += (baseSpeed - skateSpeed) * 0.03;
         } else if (skateKeys['d'] && boostCharge > 0) {
-            skateSpeed = Math.min(10, skateSpeed + 0.15);
+            skateSpeed = Math.min(11, skateSpeed + 0.15);
             boostCharge -= dt;
             if (boostCharge <= 0) {
                 boostCharge = 0;
@@ -8840,7 +9297,7 @@
         } else if (skateKeys['a']) {
             skateSpeed = Math.max(1, skateSpeed - 0.08);
         } else {
-            skateSpeed += (4 - skateSpeed) * 0.02;
+            skateSpeed += (baseSpeed - skateSpeed) * 0.02;
         }
 
         // Too slow = wipeout
@@ -8860,13 +9317,9 @@
         // Render obstacles
         for (let i = skateObstacles.length - 1; i >= 0; i--) {
             const obs = skateObstacles[i];
-            obs.x -= skateSpeed;
+            obs.x -= skateSpeed * step;
 
-            const duckScreenX = 120;
-            const duckWidth = 44;
-            // Duck top: when standing, head reaches ~100px above board; crouching ~50px
-            const duckTop = groundY + skateDuck.y - skateDuck.height;
-            const duckBottom = groundY + skateDuck.y; // board level
+            const duckLeft = SKATE_DUCK_X - 18;   // for "fully passed" scoring
 
             if (obs.type === 'overhead') {
                 // Hanging bar from top of screen — red danger bar with warning stripes
@@ -8902,56 +9355,6 @@
                 ctx.textAlign = "center";
                 ctx.fillText("DUCK!", obs.x + obs.w / 2, obs.y + obs.h - 12);
                 ctx.restore();
-
-                // Collision: duck top must be BELOW the bar's bottom edge
-                const barBottom = obs.y + obs.h;
-                const horizHit = obs.x < duckScreenX + duckWidth / 2 && obs.x + obs.w > duckScreenX - duckWidth / 2;
-                if (horizHit && duckTop < barBottom) {
-                    if (skateDuck.boostTimer > 0) { skateObstacles.splice(i, 1); skateScore++; continue; }
-                    if (skateDuck.shieldActive) { skateDuck.shieldActive = false; skateObstacles.splice(i, 1); skateScore++; continue; }
-                    takeDamage();
-                }
-                // Award point when fully passed
-                if (!obs.scored && obs.x + obs.w < duckScreenX - duckWidth / 2) {
-                    obs.scored = true;
-                    skateScore++;
-                }
-            } else if (obs.type === 'ground') {
-                // Ground cone/triangle obstacle
-                ctx.save();
-                ctx.fillStyle = "#f97316";
-                ctx.strokeStyle = "#c2410c";
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.moveTo(obs.x + obs.w / 2, obs.y);
-                ctx.lineTo(obs.x + obs.w, obs.y + obs.h);
-                ctx.lineTo(obs.x, obs.y + obs.h);
-                ctx.closePath();
-                ctx.fill();
-                ctx.stroke();
-                // Cone stripe
-                ctx.strokeStyle = "#fff";
-                ctx.lineWidth = 2;
-                ctx.globalAlpha = 0.4;
-                ctx.beginPath();
-                ctx.moveTo(obs.x + obs.w / 2, obs.y + 4);
-                ctx.lineTo(obs.x + obs.w * 0.8, obs.y + obs.h - 4);
-                ctx.stroke();
-                ctx.globalAlpha = 1;
-                ctx.restore();
-
-                // Collision: duck bottom must be ABOVE the cone's top
-                const horizHit = obs.x < duckScreenX + duckWidth / 2 && obs.x + obs.w > duckScreenX - duckWidth / 2;
-                if (horizHit && duckBottom > obs.y) {
-                    if (skateDuck.boostTimer > 0) { skateObstacles.splice(i, 1); skateScore++; continue; }
-                    if (skateDuck.shieldActive) { skateDuck.shieldActive = false; skateObstacles.splice(i, 1); skateScore++; continue; }
-                    takeDamage();
-                }
-                // Award point when fully passed
-                if (!obs.scored && obs.x + obs.w < duckScreenX - duckWidth / 2) {
-                    obs.scored = true;
-                    skateScore++;
-                }
             } else if (obs.type === 'quicksand') {
                 // --- Draw quicksand patch ---
                 ctx.save();
@@ -8996,33 +9399,32 @@
                 ctx.fillText("↑ JUMP", obs.x + obs.w / 2, obs.y - 6);
                 ctx.globalAlpha = 1;
                 ctx.restore();
-
-                // Collision: duck feet touching quicksand (duck not airborne)
-                const sandHorizHit = obs.x < duckScreenX + duckWidth / 2 && obs.x + obs.w > duckScreenX - duckWidth / 2;
-                const duckOnGround = skateDuck.y >= -2; // not jumping
-                if (sandHorizHit && duckOnGround) {
-                    // Slow the duck down — quicksand drags speed toward 1.5
-                    skateSpeed += (1.5 - skateSpeed) * 0.06;
-
-                    // Delete the linked item if there is one
-                    if (obs.linkedItemId && !obs.itemDeleted) {
-                        const idx = skateItems.findIndex(it => it.id === obs.linkedItemId);
-                        if (idx !== -1) {
-                            skateItems.splice(idx, 1);
-                        }
-                        obs.itemDeleted = true;
-                    }
-                }
+            } else {
+                drawSkateGround(obs);
             }
 
-            if (obs.x < -120) skateObstacles.splice(i, 1);
+            // ── Unified, forgiving AABB collision (matches the drawn shapes) ──
+            if (obs.type === 'quicksand') {
+                if (skateDuck.y >= -2 && skateAabb(skateDuckBox(), skateObsBox(obs))) {
+                    skateSpeed += (1.5 - skateSpeed) * 0.06;   // dragged to a crawl
+                }
+            } else if (skateAabb(skateDuckBox(), skateObsBox(obs))) {
+                if (skateDuck.boostTimer > 0)  { skateObstacles.splice(i, 1); skateScore++; continue; }
+                // Shield absorbs a single hit, then is gone (defensive — no point awarded).
+                if (skateDuck.shieldActive)    { skateDuck.shieldActive = false; skateObstacles.splice(i, 1); continue; }
+                takeDamage();
+            }
+            // Award a point once it has fully passed the duck
+            if (!obs.scored && obs.x + obs.w < duckLeft) { obs.scored = true; skateScore++; }
+
+            if (obs.x < -140) skateObstacles.splice(i, 1);
         }
 
         // Render collectables
         for (let i = skateItems.length - 1; i >= 0; i--) {
             const item = skateItems[i];
-            item.x -= skateSpeed;
-            item.pulse += 0.06;
+            item.x -= skateSpeed * step;
+            item.pulse += 0.06 * step;
 
             ctx.save();
             ctx.translate(item.x, item.y);
@@ -9109,17 +9511,47 @@
                 ctx.closePath();
                 ctx.fill();
             }
+            else if (item.type === 'fuel') {
+                // Energy cell — refills the D-key speed-boost meter. Green battery,
+                // deliberately distinct from the pink smash bolt above.
+                ctx.shadowColor = `rgba(34,197,94,${glow})`;
+                ctx.shadowBlur = 16;
+                const bw = 22, bh = 16, bx = -bw / 2 - 1, by = -bh / 2;
+                const fg = ctx.createLinearGradient(0, by, 0, by + bh);
+                fg.addColorStop(0, "#86efac");
+                fg.addColorStop(1, "#16a34a");
+                ctx.fillStyle = fg;
+                ctx.strokeStyle = "#bbf7d0";
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.roundRect(bx, by, bw, bh, 3);
+                ctx.fill();
+                ctx.stroke();
+                // Positive terminal nub on the right
+                ctx.fillStyle = "#bbf7d0";
+                ctx.beginPath();
+                ctx.roundRect(bx + bw, -3, 3, 6, 1);
+                ctx.fill();
+                // Charge segments inside
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = "#fff";
+                for (let s = 0; s < 3; s++) {
+                    ctx.beginPath();
+                    ctx.roundRect(bx + 4 + s * 5, by + 4, 3, bh - 8, 1);
+                    ctx.fill();
+                }
+            }
 
-            // High item hint — faint pulsing "▲ W" below item so player knows to stretch
+            // High item hint — faint pulsing "↑ JUMP" below item so player knows to leap for it
             if (item.high) {
                 const arrowAlpha = 0.35 + 0.35 * Math.abs(Math.sin(item.pulse * 1.5));
                 ctx.shadowBlur = 0;
                 ctx.globalAlpha = arrowAlpha;
                 ctx.fillStyle = "#fde047";
-                ctx.font = "bold 13px sans-serif";
+                ctx.font = "bold 12px sans-serif";
                 ctx.textAlign = "center";
                 ctx.textBaseline = "middle";
-                ctx.fillText("▲ W", 0, item.radius + 14);
+                ctx.fillText("↑ JUMP", 0, item.radius + 16);
                 ctx.globalAlpha = 1;
             }
 
@@ -9145,6 +9577,11 @@
                     skateDuck.shieldActive = true;
                 } else if (item.type === 'boost') {
                     skateDuck.boostTimer = 4000;
+                } else if (item.type === 'fuel') {
+                    // Refill the D-key speed boost; stacks PAST 100% into an overcharged state.
+                    boostCharge = Math.min(boostCharge + BOOST_USE_MAX, BOOST_OVERCHARGE_MAX);
+                    boostRecharging = false;
+                    boostRechargeTimer = 0;
                 }
                 skateItems.splice(i, 1);
                 continue;
@@ -9156,6 +9593,32 @@
         // Draw Board
         const duckScreenX = 120;
         const duckScreenY = groundY + skateDuck.y;
+
+        // ── Overcharge flames trailing the board (only while the meter is > 100%) ──
+        if (boostCharge > BOOST_USE_MAX + 1) {
+            const baseX = duckScreenX - 34;   // back edge of the board
+            const t = performance.now() * 0.02;
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            for (let f = 0; f < 5; f++) {
+                const flick = 0.6 + 0.4 * Math.sin(t * (1 + f * 0.3) + f * 1.4);
+                const len = (26 + f * 7) * flick;
+                const fy = duckScreenY + 2 - f * 3;
+                const grad = ctx.createLinearGradient(baseX, fy, baseX - len, fy);
+                grad.addColorStop(0,   'rgba(255,255,255,0.9)');
+                grad.addColorStop(0.3, 'rgba(253,224,71,0.85)');
+                grad.addColorStop(0.7, 'rgba(249,115,22,0.7)');
+                grad.addColorStop(1,   'rgba(239,68,68,0)');
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.moveTo(baseX, fy - 5);
+                ctx.quadraticCurveTo(baseX - len * 0.6, fy - 6 * flick, baseX - len, fy);
+                ctx.quadraticCurveTo(baseX - len * 0.6, fy + 6 * flick, baseX, fy + 5);
+                ctx.closePath();
+                ctx.fill();
+            }
+            ctx.restore();
+        }
 
         ctx.fillStyle = "#f43f5e";
         ctx.beginPath();
@@ -9337,10 +9800,15 @@
         const barW = hudW - 90;
         ctx.textAlign = "left";
 
-        // Row 1: Score (obstacles cleared) + Lives
+        // Row 1: Score (obstacles cleared) + best + Lives
         ctx.fillStyle = "#a3e635";
         ctx.font = "bold 18px monospace";
         ctx.fillText(`🏁 ${skateScore} pts`, hudX + 14, hudY + 28);
+        // Best, dimmer, just right of the score
+        const scoreW = ctx.measureText(`🏁 ${skateScore} pts`).width;
+        ctx.fillStyle = skateNewBest ? "#fbbf24" : "rgba(148,163,184,0.85)";
+        ctx.font = "bold 11px monospace";
+        ctx.fillText(`BEST ${skateHigh}`, hudX + 14 + scoreW + 12, hudY + 27);
 
         // Lives as hearts on the right (max 3)
         const livesX = hudX + hudW - 14;
@@ -9385,14 +9853,50 @@
             ctx.textAlign = "center";
             ctx.fillText(`${((BOOST_RECHARGE - boostRechargeTimer) / 1000).toFixed(1)}s`, hudX + 68 + barW / 2, hudY + 77);
         } else {
-            // Charge available — yellow drains as D is held
-            const chargeFrac = boostCharge / BOOST_USE_MAX;
-            ctx.fillStyle = chargeFrac > 0.4 ? "#facc15" : "#f97316";
-            ctx.beginPath(); ctx.roundRect(hudX + 68, hudY + 66, barW * chargeFrac, 13, 6); ctx.fill();
-            ctx.fillStyle = "#fff";
+            // Charge available — yellow drains as D is held. May exceed 100% when overcharged.
+            const chargeFrac = boostCharge / BOOST_USE_MAX;           // > 1 when overcharged
+            const overcharged = boostCharge > BOOST_USE_MAX + 1;
+            if (overcharged) {
+                // Flashing supercharged fill: pulses yellow ↔ white/cyan with a glow.
+                const flash = 0.5 + 0.5 * Math.sin(performance.now() * 0.012);
+                const fc = ctx.createLinearGradient(hudX + 68, 0, hudX + 68 + barW, 0);
+                fc.addColorStop(0, "#facc15");
+                fc.addColorStop(1, flash > 0.5 ? "#ffffff" : "#22d3ee");
+                ctx.save();
+                ctx.shadowColor = "#fde047";
+                ctx.shadowBlur = 8 + 10 * flash;
+                ctx.fillStyle = fc;
+                ctx.beginPath(); ctx.roundRect(hudX + 68, hudY + 66, barW, 13, 6); ctx.fill();
+                ctx.restore();
+                // Little lightning bolts crackling along the bar to signify > 100%.
+                ctx.save();
+                const t = performance.now() * 0.004;
+                for (let b = 0; b < 4; b++) {
+                    const bxp = hudX + 76 + ((b / 4 + (t % 1)) % 1) * (barW - 16);
+                    const byp = hudY + 72;
+                    ctx.globalAlpha = 0.55 + 0.45 * Math.sin(t * 3 + b * 1.7);
+                    ctx.fillStyle = "#1e3a8a";
+                    ctx.beginPath();
+                    ctx.moveTo(bxp + 2, byp - 5);
+                    ctx.lineTo(bxp - 2, byp);
+                    ctx.lineTo(bxp + 1, byp);
+                    ctx.lineTo(bxp - 2, byp + 5);
+                    ctx.lineTo(bxp + 3, byp - 1);
+                    ctx.lineTo(bxp, byp - 1);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+                ctx.restore();
+            } else {
+                ctx.fillStyle = chargeFrac > 0.4 ? "#facc15" : "#f97316";
+                ctx.beginPath(); ctx.roundRect(hudX + 68, hudY + 66, barW * chargeFrac, 13, 6); ctx.fill();
+            }
+            ctx.fillStyle = overcharged ? "#1e293b" : "#fff";
             ctx.font = "bold 10px monospace";
             ctx.textAlign = "center";
-            ctx.fillText(skateKeys['d'] && boostCharge > 0 ? "BOOSTING!" : "HOLD D", hudX + 68 + barW / 2, hudY + 77);
+            const label = overcharged ? `⚡ ${Math.round(chargeFrac * 100)}% ⚡`
+                        : (skateKeys['d'] && boostCharge > 0 ? "BOOSTING!" : "HOLD D");
+            ctx.fillText(label, hudX + 68 + barW / 2, hudY + 77);
         }
         ctx.textAlign = "left";
 
@@ -9403,7 +9907,7 @@
         if (skateDuck.boostTimer > 0) {
             ctx.fillStyle = "#ec4899";
             ctx.font = "bold 12px monospace";
-            ctx.fillText("⚡ ITEM BOOST", hudX + 14, powerY);
+            ctx.fillText("⚡ SMASH", hudX + 14, powerY);
             const bFrac = Math.max(0, skateDuck.boostTimer / BOOST_MAX);
             ctx.fillStyle = "rgba(255,255,255,0.1)";
             ctx.beginPath(); ctx.roundRect(hudX + 112, powerY - 11, barW - 32, 13, 6); ctx.fill();
@@ -9429,7 +9933,7 @@
             ctx.fillStyle = "#fff";
             ctx.font = "bold 10px monospace";
             ctx.textAlign = "center";
-            ctx.fillText("ACTIVE", hudX + 88 + (barW - 8) / 2, powerY);
+            ctx.fillText("BLOCKS 1 HIT", hudX + 88 + (barW - 8) / 2, powerY);
             ctx.textAlign = "left";
         }
 
