@@ -11617,7 +11617,12 @@
 
         if (isFightingMode) {
             updateFight(dt, now);
-            drawBackground(now);
+            drawFightBackground(now);
+            // Screen shake — jolt the world (arena + fighters + FX), but leave HUD/overlay steady
+            const shX = fightShake ? (Math.random()-0.5)*fightShake : 0;
+            const shY = fightShake ? (Math.random()-0.5)*fightShake : 0;
+            ctx.save();
+            ctx.translate(shX, shY);
             drawFightArena();
             duckTime += dt * 0.4;
             for (const d of ducks) {
@@ -11647,10 +11652,12 @@
                     }
                 }
             }
-            drawUltimateFlash();
             drawFightFireballs();
             drawFightUltimates();
             drawUltimateExplosion();
+            drawFightSparks();
+            ctx.restore();
+            drawUltimateFlash();
             drawFightHUD(now);
             if (fightWinner) drawWinScreen();
             requestAnimationFrame(animate);
@@ -12939,7 +12946,7 @@
         FLOOR: 80, WALL_L: -360, WALL_R: 360,
         SPEED: 3.5, JUMP: -14, GRAV: 0.55,
         PUNCH_RANGE: 95, KICK_RANGE: 115,
-        PUNCH_DMG: 7, KICK_DMG: 12, FIREBALL_DMG: 25, HEAVY_DMG: 22,
+        PUNCH_DMG: 7, KICK_DMG: 12, FIREBALL_DMG: 25, HEAVY_DMG: 22, DIVEKICK_DMG: 18,
         FIREBALL_SPEED: 8,
         SPECIAL_COST: 100, SP_GAIN_DEAL: 8, SP_GAIN_RECV: 14,
         HITSTUN_MS: 380, ATTACK_MS: 280, HEAVY_MS: 520, ROUND_SEC: 99,
@@ -12965,6 +12972,9 @@
     // {owner, x, y, vx, life, angle, flashAlpha} — the giant beam projectile
     let ultimateFlash = 0; // screen-flash alpha, decays each frame
     let ultimateFlashColor = 'rgba(255,200,50,'; // tint per most-recent ultimate
+    let fightSparks = [];  // hit-spark particles {x,y,vx,vy,life,hue,size}
+    let fightShake = 0;    // screen-shake magnitude, decays each frame
+    let fightArenaTheme = 0; // which themed background this fight uses
 
     const p1In = {left:false,right:false,jump:false,crouch:false,punch:false,kick:false,special:false,block:false,dodge:false,heavy:false};
     const p2In = {left:false,right:false,jump:false,crouch:false,punch:false,kick:false,special:false,block:false,dodge:false,heavy:false};
@@ -13004,9 +13014,13 @@
         fightUltimates = [];
         ultimateExplosionParticles = [];
         ultimateFlash = 0;
+        fightSparks = [];
+        fightShake = 0;
+        fightArenaTheme = (currentRound - 1) % 3;   // rotate arenas as the series goes on
         spCharge.p1 = false; spCharge.p2 = false;
         initFighter(ducks[0], -150, true);
         initFighter(ducks[1],  150, false);
+        playSFX('fightStart');
     }
 
     function startFightMode(wins) {
@@ -13055,6 +13069,28 @@
         }
         const dir = duck.physics.x > ducks[attackerIdx].physics.x ? 1 : -1;
         duck.physics.x = Math.max(FIGHT.WALL_L+45, Math.min(FIGHT.WALL_R-45, duck.physics.x + dir*18));
+        // ── Impact FX: spark burst + screen shake, both scaled to damage ──
+        const sx = width/2 + duck.physics.x;
+        const sy = height/2 + 50 + duck.physics.y - 30;
+        const n = Math.min(28, 4 + Math.floor(dmg));
+        const hue = dmg >= 25 ? 48 : dmg >= 15 ? 28 : 200; // big hits gold/orange, chip hits cool white
+        for (let p = 0; p < n; p++) {
+            const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 6;
+            fightSparks.push({ x: sx, y: sy, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp - 1.5, life: 1, hue, size: 2 + Math.random()*4 });
+        }
+        fightShake = Math.min(24, fightShake + dmg * 0.5);
+    }
+
+    // Spawn a ground shockwave + dust ring (dive-kick / heavy landings)
+    function fightShockwave(physX, physY) {
+        const sx = width/2 + physX;
+        const sy = height/2 + 50 + physY + 30;
+        for (let p = 0; p < 16; p++) {
+            const a = Math.PI + (p / 15) * Math.PI;     // fan out along the ground
+            const sp = 3 + Math.random() * 5;
+            fightSparks.push({ x: sx, y: sy, vx: Math.cos(a)*sp, vy: -Math.abs(Math.sin(a))*sp*0.5, life: 1, hue: 40, size: 3 + Math.random()*4 });
+        }
+        fightShake = Math.min(24, fightShake + 8);
     }
 
     function updateFighter(duck, input, opponent, now) {
@@ -13064,7 +13100,7 @@
         if (f.dodgeCooldown > 0) f.dodgeCooldown -= 16;
 
         // Expire timed states
-        if (['punch','kick','special','ultimate','hitstun','dodge','heavy'].includes(f.state) && now >= f.stateEnd) {
+        if (['punch','kick','special','ultimate','hitstun','dodge','heavy','divekick'].includes(f.state) && now >= f.stateEnd) {
             f.state = 'idle'; f.attackLanded = false;
         }
         // Release block when key lifted
@@ -13072,7 +13108,7 @@
 
         const canAct = ['idle','walk','crouch'].includes(f.state);
         const canActAir = f.state === 'jump';
-        const busy = ['punch','kick','special','ultimate','ultimateCharge','heavy','dodge','hitstun','ko'].includes(f.state);
+        const busy = ['punch','kick','special','ultimate','ultimateCharge','heavy','dodge','hitstun','ko','divekick'].includes(f.state);
 
         // Ultimate combo — fires immediately like a special, no charge phase
         const combo = FIGHT.ULTIMATE_COMBO;
@@ -13121,11 +13157,21 @@
 
         // Gravity
         if (!f.grounded) {
+            // Dive kick drives the duck forward as it falls
+            if (f.state === 'divekick') {
+                const dir = f.facingRight ? 1 : -1;
+                duck.physics.x = Math.max(FIGHT.WALL_L+45, Math.min(FIGHT.WALL_R-45, duck.physics.x + dir*6));
+            }
             f.vy += FIGHT.GRAV;
             duck.physics.y += f.vy;
             if (duck.physics.y >= -FIGHT.FLOOR) {
                 duck.physics.y = -FIGHT.FLOOR; f.vy = 0; f.grounded = true;
                 if (f.state === 'jump') f.state = 'idle';
+                else if (f.state === 'divekick') {
+                    f.state = 'idle'; f.attackLanded = false;
+                    fightShockwave(duck.physics.x, duck.physics.y);
+                    playSFX('fightHeavy');
+                }
             }
         }
 
@@ -13133,10 +13179,19 @@
         if ((canAct || canActAir) && !busy && f.state !== 'block') {
             if (input.punch) {
                 f.state = 'punch'; f.stateEnd = now + FIGHT.ATTACK_MS; f.attackLanded = false;
+                playSFX('fightPunch');
             } else if (input.kick) {
-                f.state = 'kick'; f.stateEnd = now + FIGHT.ATTACK_MS; f.attackLanded = false;
+                if (!f.grounded) {
+                    // Dive kick — airborne downward-forward lunge, harder than a ground kick
+                    f.state = 'divekick'; f.stateEnd = now + 800; f.attackLanded = false;
+                    f.vy = 11;
+                } else {
+                    f.state = 'kick'; f.stateEnd = now + FIGHT.ATTACK_MS; f.attackLanded = false;
+                }
+                playSFX('fightKick');
             } else if (input.heavy) {
                 f.state = 'heavy'; f.stateEnd = now + FIGHT.HEAVY_MS; f.attackLanded = false;
+                playSFX('fightHeavy');
             } else if (input.dodge && canAct && f.dodgeCooldown <= 0) {
                 f.state = 'dodge'; f.stateEnd = now + FIGHT.DODGE_MS;
                 f.invincible = FIGHT.DODGE_MS * 0.75; // invincible for first 75% of dodge
@@ -13149,12 +13204,13 @@
                 const dir = f.facingRight ? 1 : -1;
                 fightFireballs.push({ x: duck.physics.x + dir*65, y: duck.physics.y - 10,
                     vx: dir * FIGHT.FIREBALL_SPEED, owner: ducks.indexOf(duck), life: 2500, angle: 0 });
+                playSFX('fightFireball');
             }
         }
 
         // Melee hit detection
-        if (['punch','kick','heavy'].includes(f.state) && !f.attackLanded) {
-            const range = f.state === 'kick' ? FIGHT.KICK_RANGE : FIGHT.PUNCH_RANGE;
+        if (['punch','kick','heavy','divekick'].includes(f.state) && !f.attackLanded) {
+            const range = (f.state === 'kick' || f.state === 'divekick') ? FIGHT.KICK_RANGE : FIGHT.PUNCH_RANGE;
             const dir = f.facingRight ? 1 : -1;
             const hitX = duck.physics.x + dir * range * 0.55;
             const oppF = opponent.fighter;
@@ -13162,13 +13218,18 @@
                 const dist = Math.abs(hitX - opponent.physics.x);
                 if (dist < range * 0.5 + 35) {
                     const blocking = oppF.state === 'block';
+                    const baseDmg = f.state === 'punch' ? FIGHT.PUNCH_DMG
+                                  : f.state === 'kick' ? FIGHT.KICK_DMG
+                                  : f.state === 'divekick' ? FIGHT.DIVEKICK_DMG
+                                  : FIGHT.HEAVY_DMG;
                     let dmg;
                     if (f.state === 'heavy') {
                         dmg = FIGHT.HEAVY_DMG; // heavy ignores block entirely
                     } else {
-                        dmg = blocking ? Math.ceil((f.state === 'punch' ? FIGHT.PUNCH_DMG : FIGHT.KICK_DMG) * 0.1) : (f.state === 'punch' ? FIGHT.PUNCH_DMG : FIGHT.KICK_DMG);
+                        dmg = blocking ? Math.ceil(baseDmg * 0.1) : baseDmg;
                     }
                     applyDamage(opponent, dmg, ducks.indexOf(duck));
+                    playSFX(blocking && f.state !== 'heavy' ? 'fightBlock' : 'fightHit');
                     // Block broken by heavy: extra knockback + extended hitstun
                     if (f.state === 'heavy' && blocking) {
                         opponent.physics.x = Math.max(FIGHT.WALL_L+45, Math.min(FIGHT.WALL_R-45, opponent.physics.x + dir * 40));
@@ -13202,6 +13263,13 @@
             duck.limbs.wingL.ox = -ext * 15;
         } else if (f.state === 'kick') {
             duck.limbs.footR.ox = ext * 75; duck.limbs.footR.oy = -35;
+        } else if (f.state === 'divekick') {
+            // Both feet thrust down-and-forward for the dive
+            const d2 = f.facingRight ? 1 : -1;
+            duck.limbs.footR.ox = d2 * 55; duck.limbs.footR.oy = 38;
+            duck.limbs.footL.ox = d2 * 40; duck.limbs.footL.oy = 30;
+            duck.limbs.wingL.ox = -d2 * 25; duck.limbs.wingL.oy = -20;
+            duck.limbs.wingR.ox = -d2 * 25; duck.limbs.wingR.oy = -20;
         } else if (f.state === 'heavy') {
             // Wind-up: both wings pull back; release: right arm lunges hard
             if (prog < 0.45) {
@@ -13245,6 +13313,7 @@
         else if (fightWinner === 'P2') p2Wins++;
         if (p1Wins >= targetWins) seriesWinner = 'P1';
         else if (p2Wins >= targetWins) seriesWinner = 'P2';
+        if (seriesWinner) playSFX('fightWin');
     }
 
     function updateFight(dt, now) {
@@ -13260,7 +13329,7 @@
         updateFighter(ducks[1], p2In, ducks[0], now);
 
         // S / ArrowDown — charge SP while grounded and not in an attack state
-        const chargeBusy = ['punch','kick','special','ultimate','ultimateCharge','heavy','dodge','hitstun','ko'];
+        const chargeBusy = ['punch','kick','special','ultimate','ultimateCharge','heavy','dodge','hitstun','ko','divekick'];
         if (spCharge.p1 && ducks[0].fighter.grounded && !chargeBusy.includes(ducks[0].fighter.state))
             ducks[0].fighter.sp = Math.min(100, ducks[0].fighter.sp + dt * 0.022);
         if (spCharge.p2 && ducks[1].fighter.grounded && !chargeBusy.includes(ducks[1].fighter.state))
@@ -13292,6 +13361,7 @@
             const tf = target.fighter;
             if (tf && tf.state !== 'ko' && tf.invincible <= 0 && Math.abs(fb.x - target.physics.x) < 55) {
                 applyDamage(target, FIGHT.FIREBALL_DMG, fb.owner);
+                playSFX('fightHit');
                 fightFireballs.splice(i, 1);
             }
         }
@@ -13333,6 +13403,16 @@
             if (p.life <= 0) ultimateExplosionParticles.splice(i, 1);
         }
 
+        // Update hit sparks + decay screen shake
+        for (let i = fightSparks.length-1; i >= 0; i--) {
+            const s = fightSparks[i];
+            s.x += s.vx; s.y += s.vy;
+            s.vy += 0.35; s.vx *= 0.92;
+            s.life -= dt / 420;
+            if (s.life <= 0) fightSparks.splice(i, 1);
+        }
+        fightShake = Math.max(0, fightShake - dt * 0.06);
+
         for (let i = fightUltimates.length-1; i >= 0; i--) {
             const ub = fightUltimates[i];
             ub.x += ub.vx; ub.life -= dt; ub.angle += 0.08;
@@ -13344,6 +13424,7 @@
                 const blocking = tf.state === 'block';
                 const dmg = blocking ? FIGHT.ULTIMATE_DMG_BLOCKED : FIGHT.ULTIMATE_DMG;
                 applyDamage(target, dmg, ub.owner);
+                playSFX(blocking ? 'fightBlock' : 'fightHit');
                 if (!blocking) {
                     const dir = target.physics.x > ducks[ub.owner].physics.x ? 1 : -1;
                     target.physics.x = Math.max(FIGHT.WALL_L+45, Math.min(FIGHT.WALL_R-45, target.physics.x + dir*60));
@@ -13357,6 +13438,101 @@
             if (d.fighter && d.fighter.hp <= 0 && d.fighter.state !== 'ko') {
                 d.fighter.state = 'ko';
                 fightWinner = d === ducks[0] ? 'P2' : 'P1';
+                playSFX('fightKO');
+                fightShake = 24;
+            }
+        }
+    }
+
+    function drawFightSparks() {
+        for (const s of fightSparks) {
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, s.life);
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = `hsl(${s.hue},100%,65%)`;
+            ctx.fillStyle = `hsl(${s.hue},100%,${Math.round(60 + s.life*30)}%)`;
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, s.size * (0.5 + s.life*0.5), 0, Math.PI*2);
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    // Dedicated, animated arena backdrops (replaces the dance scene during fights)
+    function drawFightBackground(now) {
+        const floorScreenY = height/2 + 50 - FIGHT.FLOOR + 55;
+        if (fightArenaTheme === 0) {
+            // ── Neon Dojo: indigo dusk, big moon, paper-screen panels, swaying lanterns ──
+            const g = ctx.createLinearGradient(0,0,0,height);
+            g.addColorStop(0,'#1a1033'); g.addColorStop(0.6,'#241447'); g.addColorStop(1,'#0c0820');
+            ctx.fillStyle = g; ctx.fillRect(0,0,width,height);
+            const mx = width*0.78, my = height*0.26, mr = 70;
+            const mg = ctx.createRadialGradient(mx,my,10,mx,my,mr*2.4);
+            mg.addColorStop(0,'rgba(255,243,214,0.95)'); mg.addColorStop(0.4,'rgba(255,235,180,0.25)'); mg.addColorStop(1,'rgba(255,235,180,0)');
+            ctx.fillStyle = mg; ctx.beginPath(); ctx.arc(mx,my,mr*2.4,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#fff3d6'; ctx.beginPath(); ctx.arc(mx,my,mr,0,Math.PI*2); ctx.fill();
+            const panelTop = height*0.32;
+            for (let px = 0; px < width; px += 90) {
+                ctx.fillStyle = 'rgba(60,40,90,0.5)'; ctx.fillRect(px+4, panelTop, 82, floorScreenY-panelTop);
+                ctx.strokeStyle = 'rgba(180,150,230,0.25)'; ctx.lineWidth=2;
+                ctx.strokeRect(px+4, panelTop, 82, floorScreenY-panelTop);
+                ctx.beginPath(); ctx.moveTo(px+45, panelTop); ctx.lineTo(px+45, floorScreenY);
+                ctx.moveTo(px+4,(panelTop+floorScreenY)/2); ctx.lineTo(px+86,(panelTop+floorScreenY)/2); ctx.stroke();
+            }
+            for (let i = 0; i < 5; i++) {
+                const lx = width*(0.12 + i*0.19) + Math.sin(now*0.001 + i)*10;
+                const ly = height*0.16 + Math.cos(now*0.0013 + i)*4;
+                ctx.strokeStyle='rgba(255,200,120,0.4)'; ctx.lineWidth=2;
+                ctx.beginPath(); ctx.moveTo(lx,0); ctx.lineTo(lx,ly); ctx.stroke();
+                const lg = ctx.createRadialGradient(lx,ly,2,lx,ly,28);
+                lg.addColorStop(0,'rgba(255,160,80,0.95)'); lg.addColorStop(1,'rgba(255,120,40,0)');
+                ctx.fillStyle=lg; ctx.beginPath(); ctx.arc(lx,ly,28,0,Math.PI*2); ctx.fill();
+                ctx.fillStyle='#ff8c42'; ctx.beginPath(); ctx.ellipse(lx,ly,9,12,0,0,Math.PI*2); ctx.fill();
+            }
+        } else if (fightArenaTheme === 1) {
+            // ── Sunset Rooftop: warm gradient, skyline silhouette, twinkling windows ──
+            const g = ctx.createLinearGradient(0,0,0,height);
+            g.addColorStop(0,'#2a1a4a'); g.addColorStop(0.45,'#7a3b6e'); g.addColorStop(0.75,'#e0763f'); g.addColorStop(1,'#ffb866');
+            ctx.fillStyle=g; ctx.fillRect(0,0,width,height);
+            const sx=width*0.5, sy=height*0.5;
+            const sg=ctx.createRadialGradient(sx,sy,10,sx,sy,160);
+            sg.addColorStop(0,'rgba(255,240,200,0.9)'); sg.addColorStop(0.3,'rgba(255,180,90,0.5)'); sg.addColorStop(1,'rgba(255,150,60,0)');
+            ctx.fillStyle=sg; ctx.beginPath(); ctx.arc(sx,sy,160,0,Math.PI*2); ctx.fill();
+            const baseY = floorScreenY;
+            const buildings = [[0.0,140,90],[0.12,90,180],[0.24,150,120],[0.40,110,200],[0.56,130,150],[0.70,95,190],[0.82,160,110],[0.94,100,160]];
+            for (const [fx,w2,h2] of buildings) {
+                const bx = width*fx, by = baseY - h2;
+                ctx.fillStyle='rgba(20,10,35,0.85)'; ctx.fillRect(bx, by, w2, h2);
+                for (let wy = by+12; wy < baseY-8; wy += 18) {
+                    for (let wx = bx+8; wx < bx+w2-8; wx += 16) {
+                        const lit = (Math.sin(wx*12.9 + wy*7.7) * 0.5 + 0.5);
+                        const tw = 0.5 + 0.5*Math.sin(now*0.002 + wx + wy);
+                        ctx.fillStyle = lit > 0.55 ? `rgba(255,210,120,${0.4+0.4*tw})` : 'rgba(40,30,60,0.5)';
+                        ctx.fillRect(wx, wy, 8, 10);
+                    }
+                }
+            }
+        } else {
+            // ── Volcano Arena: dark red, lava glow, rising embers, jagged rocks ──
+            const g = ctx.createLinearGradient(0,0,0,height);
+            g.addColorStop(0,'#1a0808'); g.addColorStop(0.6,'#3a0f0a'); g.addColorStop(1,'#7a1d0a');
+            ctx.fillStyle=g; ctx.fillRect(0,0,width,height);
+            const floorY = floorScreenY;
+            const lg = ctx.createLinearGradient(0,floorY-60,0,floorY);
+            lg.addColorStop(0,'rgba(255,90,20,0)'); lg.addColorStop(1,'rgba(255,120,30,0.5)');
+            ctx.fillStyle=lg; ctx.fillRect(0,floorY-60,width,60);
+            ctx.fillStyle='rgba(15,5,5,0.9)';
+            ctx.beginPath(); ctx.moveTo(0,floorY);
+            const peaks=[[0.1,80],[0.25,160],[0.4,110],[0.55,190],[0.7,120],[0.85,170],[1.0,90]];
+            for (const [fx,h2] of peaks) ctx.lineTo(width*fx, floorY-h2);
+            ctx.lineTo(width,floorY); ctx.closePath(); ctx.fill();
+            for (let i = 0; i < 28; i++) {
+                const t = (now*0.00004 + i*0.137) % 1;
+                const ex = (i*53.3 % width);
+                const ey = floorY - t*height*0.8;
+                const a = (1 - t) * 0.8;
+                ctx.fillStyle = `rgba(255,${120+Math.floor(t*100)},40,${a})`;
+                ctx.beginPath(); ctx.arc(ex + Math.sin(now*0.002+i)*8, ey, 2 + (1-t)*2, 0, Math.PI*2); ctx.fill();
             }
         }
     }
@@ -13627,12 +13803,12 @@
         ctx.fillStyle='rgba(255,255,255,0.25)'; ctx.font='bold 10px "Segoe UI"';
         ctx.fillText('VS', width/2, m+barH+14);
 
-        // Controls hint — two lines, larger text
+        // Controls hint — two lines, dropped below the special/combo rows so they never overlap
         ctx.fillStyle='rgba(255,255,255,0.45)'; ctx.font='11px "Segoe UI"';
         ctx.textAlign='left';
-        ctx.fillText('WAD move  |  F punch  G kick  H heavy  E dodge  R block  Q special  S hold = charge SP', m, m+barH+5+spH+14);
+        ctx.fillText('WAD move  |  F punch  G kick  H heavy  E dodge  R block  Q special  S hold = charge SP', m, m+barH+5+spH+50);
         ctx.textAlign='right';
-        ctx.fillText('Arrows move  |  Num1 punch  Num3 kick  Num9 heavy  Num5 dodge  Num7 block  Num0 special  ↓ hold = charge SP', width-m, m+barH+5+spH+14);
+        ctx.fillText('Arrows move  |  Num1 punch  Num3 kick  Num9 heavy  Num5 dodge  Num7 block  Num0 special  ↓ hold = charge SP', width-m, m+barH+5+spH+50);
     }
 
     function drawWinScreen() {
@@ -13960,6 +14136,68 @@
                 case 'reelStop':  // reel clunk stop
                     noise(now, 0.06, 0.8, 150);
                     tone(90, now, 0.08, 0.6, 'triangle');
+                    break;
+
+                // ── Fight SFX ──────────────────────────────────────────────
+                case 'fightPunch':   // light swing whoosh
+                    noise(now, 0.05, 0.45, 900);
+                    tone(320, now, 0.05, 0.25, 'triangle');
+                    break;
+
+                case 'fightKick':    // heavier swing whoosh
+                    noise(now, 0.07, 0.55, 500);
+                    tone(190, now, 0.07, 0.35, 'triangle');
+                    break;
+
+                case 'fightHit':     // clean impact thwack
+                    noise(now, 0.06, 1.0, 150);
+                    tone(95, now, 0.12, 0.8, 'triangle');
+                    tone(160, now, 0.05, 0.4, 'square');
+                    break;
+
+                case 'fightHeavy':   // big slam — deep boom
+                    noise(now, 0.13, 1.1, 80);
+                    tone(58, now, 0.22, 0.95, 'triangle');
+                    tone(120, now, 0.08, 0.5, 'square');
+                    break;
+
+                case 'fightBlock':   // blocked hit — metallic clank
+                    tone(420, now, 0.05, 0.5, 'square');
+                    tone(620, now + 0.01, 0.04, 0.3, 'square');
+                    noise(now, 0.04, 0.5, 1600);
+                    break;
+
+                case 'fightFireball':  // energy cast — descending whoosh
+                    tone(900, now,        0.06, 0.3, 'sine');
+                    tone(620, now + 0.05, 0.07, 0.3, 'sine');
+                    tone(400, now + 0.11, 0.10, 0.3, 'sine');
+                    noise(now, 0.16, 0.3, 600);
+                    break;
+
+                case 'fightUltimate':  // rising charge into a boom
+                    [200,300,450,650,900].forEach((f,i) => tone(f, now + i*0.05, 0.12, 0.45, 'sawtooth'));
+                    tone(70, now + 0.28, 0.45, 1.0, 'triangle');
+                    noise(now + 0.28, 0.4, 0.6, 120);
+                    break;
+
+                case 'fightKO':      // knockout — descending hit + boom
+                    tone(300, now,        0.10, 0.7, 'sawtooth');
+                    tone(200, now + 0.08, 0.12, 0.7, 'sawtooth');
+                    tone(120, now + 0.18, 0.32, 0.9, 'triangle');
+                    noise(now + 0.18, 0.32, 0.5, 100);
+                    break;
+
+                case 'fightStart':   // boxing-bell ding-ding
+                    [0, 0.18].forEach(off => {
+                        tone(1046, now + off, 0.32, 0.5, 'sine');
+                        tone(1568, now + off, 0.30, 0.28, 'sine');
+                    });
+                    break;
+
+                case 'fightWin':     // series-win fanfare
+                    [523,659,784].forEach((f,i) => tone(f, now + i*0.09, 0.2, 0.5, 'sine'));
+                    tone(1047, now + 0.30, 0.5, 0.7, 'sine');
+                    [523,659,784,1047].forEach(f => tone(f, now + 0.45, 0.6, 0.4, 'sine'));
                     break;
             }
         } catch(e) {}
