@@ -1140,7 +1140,7 @@
     let bubbleActive = false;
     let dynamiteActive = false;
     let dynamites = [];              // {x,y,vy,fuse,max} world space
-    let blackHoleActive = false, blackHolePlacing = false;
+    let blackHoleActive = false, blackHolePlacing = false, blackHolePlacedOnce = false;
     let blackHoleX = 0, blackHoleY = 0, blackHoleSpin = 0;
     let bhParticles = [];            // shared FX specks (screen space)
     let blastFlash = 0;
@@ -1166,7 +1166,7 @@
         tractorActive = false; tractorPulling = false; tractorWeaponBtn.style.background = '';
         bubbleActive = false; bubbleWeaponBtn.style.background = '';
         dynamiteActive = false; dynamiteWeaponBtn.style.background = '';
-        blackHoleActive = false; blackHolePlacing = false; blackHoleWeaponBtn.textContent = '🕳️ Black Hole';
+        blackHoleActive = false; blackHolePlacing = false; blackHolePlacedOnce = false; blackHoleWeaponBtn.textContent = '🕳️ Black Hole';
     }
 
     tractorWeaponBtn.addEventListener('click', () => {
@@ -1208,6 +1208,7 @@
         if (!d || d.superHeroActive) return;
         d.bubbleTime = 4200; d.bubbleWob = Math.random() * Math.PI * 2;
         d.physics.vy = Math.min(d.physics.vy, -4);
+        pushUndo('🔵 Bubble', () => { d.bubbleTime = 0; });
         playSFX && playSFX('pop');
         const sx = width/2 + d.physics.x, sy = height/2 + 50 + d.physics.y;
         for (let i = 0; i < 14; i++) {
@@ -1219,7 +1220,9 @@
 
     // Drop a stick of dynamite into the world at a screen point.
     function dropDynamite(px, py) {
-        dynamites.push({ x: px - width/2, y: py - (height/2 + 50), vy: 0, fuse: 1100, max: 1100 });
+        const dn = { x: px - width/2, y: py - (height/2 + 50), vy: 0, fuse: 1100, max: 1100 };
+        dynamites.push(dn);
+        pushUndo('🧨 Dynamite', () => { const i = dynamites.indexOf(dn); if (i >= 0) dynamites.splice(i, 1); });
         playSFX && playSFX('pickup');
     }
 
@@ -2563,6 +2566,13 @@
                 blackHoleX = p.x; blackHoleY = p.y; blackHolePlacing = false;
                 blackHoleWeaponBtn.textContent = '🕳️ Black Hole (placed) — click it to move';
                 canvas.style.cursor = 'grab';
+                if (!blackHolePlacedOnce) {
+                    blackHolePlacedOnce = true;
+                    pushUndo('🕳️ Black Hole', () => {
+                        blackHoleActive = false; blackHolePlacing = false; blackHolePlacedOnce = false;
+                        blackHoleWeaponBtn.textContent = '🕳️ Black Hole';
+                    });
+                }
                 if (e.cancelable) e.preventDefault(); return;
             }
             if (Math.hypot(p.x - blackHoleX, p.y - blackHoleY) < 60) {
@@ -12340,8 +12350,10 @@
         );
         const hasFriends = ducks.length > 1;
         const hasWeapon = currentTool === 'freeze' || taserArmed || flameArmed || fanActive || frozenTimeRemaining > 0 || cannonActive;
+        const hasNewWeapon = tractorActive || bubbleActive || dynamiteActive || blackHoleActive ||
+            dynamites.length > 0 || ducks.some(d => (d.bubbleTime || 0) > 0);
         const hasSuperHero = ducks.some(d => d.superHeroActive);
-        if (balls.length > 0 || foods.length > 0 || slimes.length > 0 || targets.length > 0 || hasMutations || hasWeapon || hasFriends || hasSuperHero) {
+        if (balls.length > 0 || foods.length > 0 || slimes.length > 0 || targets.length > 0 || hasMutations || hasWeapon || hasNewWeapon || hasFriends || hasSuperHero) {
             clearBtn.style.display = 'block';
             undoBtn.style.display  = 'inline-flex';
         } else {
