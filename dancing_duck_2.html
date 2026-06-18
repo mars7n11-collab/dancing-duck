@@ -2183,7 +2183,7 @@
     }
 
     function pointerDown(e) {
-        if (isSkateMode) return;
+        if (isSkateMode || isFightingMode) return;   // fighters are keyboard-only; dragging reorders the ducks array and breaks P1/P2
         const p = getPointerPos(e);
         lastPointer = p;
 
@@ -2321,7 +2321,7 @@
     }
 
     function pointerMove(e) {
-        if (isSkateMode) return;
+        if (isSkateMode || isFightingMode) return;
         const p = getPointerPos(e);
 
         if (cannonDraggingAngle && cannonAnchored) {
@@ -2381,7 +2381,7 @@
     }
 
     function pointerUp(e) {
-        if (isSkateMode) return;
+        if (isSkateMode || isFightingMode) return;
         if (cannonDraggingAngle) { cannonDraggingAngle = false; return; }
         if (fanDraggingAngle) { fanDraggingAngle = false; return; }
         if (currentTool === 'freeze' && isShooting) {
@@ -3425,8 +3425,24 @@
         const gumOrange = lerpColor(baseOrange, duck.color.gumOrange, duckMutations.currentGum);
         // Lerp towards shroom rainbow on top of gum result
         function lerpColorStr(c1, c2, f) { return f < 0.01 ? c1 : f > 0.99 ? c2 : lerpColor(c1.startsWith('hsl') ? c1 : c1, c2.startsWith('hsl') ? c2 : c2, f); }
-        const duckYellow = shroomFactor < 0.01 ? gumYellow : shroomBodyColor;
-        const duckOrange = shroomFactor < 0.01 ? gumOrange : shroomAccColor;
+        let duckYellow = shroomFactor < 0.01 ? gumYellow : shroomBodyColor;
+        let duckOrange = shroomFactor < 0.01 ? gumOrange : shroomAccColor;
+        // Powered-up fighter: brighten the body toward a glowing "super" tone (gold P1 / electric blue P2).
+        // Note: duckYellow/duckOrange are already "rgb(...)" strings here, so we can't reuse the hex-only lerpColor.
+        if (duck.fighter && duck.fighter.poweredUp &&
+            typeof duckYellow === 'string' && duckYellow.indexOf('hsl') < 0) {
+            const pl = ducks.indexOf(duck);
+            const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.012);
+            const toRGB = (c) => c[0] === '#'
+                ? [parseInt(c.substr(1,2),16), parseInt(c.substr(3,2),16), parseInt(c.substr(5,2),16)]
+                : c.match(/\d+/g).map(Number);
+            const mix = (c, tgt, f) => { const a = toRGB(c);
+                return `rgb(${Math.round(a[0]+(tgt[0]-a[0])*f)},${Math.round(a[1]+(tgt[1]-a[1])*f)},${Math.round(a[2]+(tgt[2]-a[2])*f)})`; };
+            const tMain = pl === 0 ? [255,243,176] : [207,230,255];
+            const tAcc  = pl === 0 ? [255,210,77]  : [126,200,255];
+            duckYellow = mix(duckYellow, tMain, 0.4 + 0.18 * pulse);
+            duckOrange = mix(duckOrange, tAcc, 0.4);
+        }
         
         // Superhero: tick timer and handle flying hover
         if (duck.superHeroActive) {
@@ -4242,6 +4258,26 @@
             ctx.fillStyle = 'rgba(255,255,255,0.6)';
             ctx.beginPath(); ctx.arc(-14, eyeY - 7, 3, 0, Math.PI*2); ctx.fill();
             ctx.beginPath(); ctx.arc(16, eyeY - 7, 3, 0, Math.PI*2); ctx.fill();
+            ctx.restore();
+        }
+
+        // Fighter charging / charged — angry DBZ brows (and blank glowing rage eyes at full power)
+        if (duck.fighter && (duck.fighter.charging || duck.fighter.poweredUp)) {
+            const charged = duck.fighter.poweredUp;
+            const browCol = charged ? '#fde047' : '#ffffff';
+            ctx.save();
+            if (charged) {
+                // Transformed: small white glowing orbs, dropped a touch lower and slightly bigger
+                const orbY = eyeY + 7, orbR = 13;
+                ctx.shadowBlur = 20; ctx.shadowColor = '#fff';
+                drawCircle(ctx, -10, orbY, orbR, 'white');
+                drawCircle(ctx,  20, orbY, orbR, 'white');
+                ctx.shadowBlur = 0;
+            }
+            ctx.strokeStyle = browCol; ctx.lineWidth = 5; ctx.lineCap = 'round';
+            ctx.shadowBlur = charged ? 10 : 5; ctx.shadowColor = browCol;
+            ctx.beginPath(); ctx.moveTo(-24, eyeY - 20); ctx.lineTo(-2, eyeY - 9); ctx.stroke();   // left brow, inner end low
+            ctx.beginPath(); ctx.moveTo(30,  eyeY - 20); ctx.lineTo(8,  eyeY - 9); ctx.stroke();   // right brow, inner end low
             ctx.restore();
         }
 
@@ -8490,6 +8526,12 @@
 
     function dmKey(r,c){return r*DM_N+c;}
 
+    // Points that must be EARNED to clear a given level. The level target is computed as
+    // (score on entering the level) + this increment, so a big overshoot can never auto-pass
+    // later levels — you always have to earn the increment fresh. It also keeps growing each
+    // level (1000, 1800, 2400, 3000, …) so the game gets progressively harder.
+    function dmIncrement(level){const L=level||1;return L<=1?1000:1800+(L-2)*600;}
+
     function initDuckMatch(level,score){
         const W=canvas.width,H=canvas.height;
         const cs=Math.floor(Math.min((W-60)/DM_N,(H-170)/DM_N));
@@ -8498,9 +8540,13 @@
             W,H,cs,bx,by,
             grid:[],
             level:level||1,score:score||0,
-            target:1000+((level||1)-1)*1500,
+            base:score||0,                          // score on entering this level (for relative target + progress bar)
+            target:(score||0)+dmIncrement(level),   // must earn dmIncrement(level) points THIS level
             moves:25,chain:0,
+            time:150000,            // ms left this level (150s) — running out = game over
+            powerUp:0,powerGiven:false,powerArmed:false,pickedSym:null,  // transform power-up granted at 30s
             phase:'fall',phaseT:0,
+            idle:0,hint:null,                       // idle timer (ms) + a suggested swap to pulse when the player stalls
             sel:null,dragFrom:null,swapPair:null,lastRuns:null,
             particles:[],texts:[],beams:[],rings:[],flash:0,shake:0,
             high:+(localStorage.getItem('duckMatchHigh')||0),
@@ -8557,8 +8603,15 @@
     }
     function duckMatchDown(e){
         const s=duckMatchState;if(!s)return;
+        s.idle=0;s.hint=null;   // any tap dismisses the idle hint and restarts its timer
         const {mx,my}=dmMouse(e);
         if(s.phase==='gameover'){duckMatchState=initDuckMatch(1,0);return;}
+        // Transform power-up: pick a symbol from the left list, then tap a tile to convert it
+        if(s.phase==='idle'&&s.powerUp>0){
+            const sym=dmPowerHit(s,mx,my);
+            if(sym!==null){s.pickedSym=sym;s.powerArmed=true;playSFX&&playSFX('pickup');return;}
+            if(s.powerArmed){const tc=dmCellAt(s,mx,my);if(tc){dmUsePower(s,tc);return;}}
+        }
         if(s.phase!=='idle')return;
         const cell=dmCellAt(s,mx,my);
         if(!cell){s.sel=null;return;}
@@ -8585,6 +8638,43 @@
     function dmTrySwap(s,a,b){
         s.swapPair={a:{r:a.r,c:a.c},b:{r:b.r,c:b.c}};
         s.phase='swap';s.phaseT=150;
+    }
+
+    // Layout of the transform power-up symbol list down the left margin
+    function dmPowerListGeom(s){
+        const n=DM_TOKENS.length;
+        const lcs=Math.max(14,Math.min(s.cs*0.8, s.bx-16));
+        const gap=lcs*0.2;
+        const totalH=n*lcs+(n-1)*gap;
+        const x=Math.max(6,(s.bx-10-lcs)/2);
+        const y=s.by+(s.cs*DM_N-totalH)/2;
+        return {x,y,lcs,gap,n};
+    }
+    // Returns the token index under (mx,my) in the list, or null
+    function dmPowerHit(s,mx,my){
+        if(s.powerUp<=0)return null;
+        const {x,y,lcs,gap,n}=dmPowerListGeom(s);
+        if(mx<x||mx>x+lcs)return null;
+        for(let i=0;i<n;i++){const cy=y+i*(lcs+gap);if(my>=cy&&my<=cy+lcs)return i;}
+        return null;
+    }
+    // Spend the power-up: convert the chosen tile to the picked symbol, then resolve any
+    // match it creates for free (does NOT cost a move).
+    function dmUsePower(s,cell){
+        const g=s.grid[cell.r][cell.c];
+        if(!g||g.dead||s.pickedSym==null)return;
+        g.t=s.pickedSym;g.special=null;
+        s.powerUp=Math.max(0,s.powerUp-1);
+        s.powerArmed=false;
+        const px=s.bx+cell.c*s.cs+s.cs/2,py=s.by+cell.r*s.cs+s.cs/2;
+        s.rings.push({x:px,y:py,r:6,life:380,max:380,col:'#5ad1ff'});
+        for(let i=0;i<16;i++)s.particles.push({x:px,y:py,vx:(Math.random()-0.5)*320,vy:-90-Math.random()*240,
+            life:500+Math.random()*320,col:['#5ad1ff','#ffffff','#ffd700'][i%3],r:2.5+Math.random()*3,star:i%2===0});
+        s.texts.push({x:px,y:py-s.cs*0.3,txt:'TRANSFORM!',life:1000,col:'#5ad1ff',size:0.55});
+        s.flash=Math.max(s.flash,90);
+        playSFX&&playSFX('dmPower');
+        const matched=dmFindMatches(s);
+        if(matched.size>0){s.chain=0;s.streakShown=false;dmResolve(s,matched);}
     }
 
     function dmFindMatches(s){
@@ -8643,6 +8733,25 @@
             }
         }
         return false;
+    }
+    // Like dmHasMove, but returns the first valid swap it finds as {a,b} cell pair (or null).
+    function dmFindHint(s){
+        const sw=(r1,c1,r2,c2)=>{const a=s.grid[r1][c1];s.grid[r1][c1]=s.grid[r2][c2];s.grid[r2][c2]=a;};
+        for(let r=0;r<DM_N;r++)for(let c=0;c<DM_N;c++){
+            if(c<DM_N-1){
+                sw(r,c,r,c+1);
+                const m=dmMatchAt(s,r,c)||dmMatchAt(s,r,c+1);
+                sw(r,c,r,c+1);
+                if(m)return {a:{r,c},b:{r,c:c+1}};
+            }
+            if(r<DM_N-1){
+                sw(r,c,r+1,c);
+                const m=dmMatchAt(s,r,c)||dmMatchAt(s,r+1,c);
+                sw(r,c,r+1,c);
+                if(m)return {a:{r,c},b:{r:r+1,c}};
+            }
+        }
+        return null;
     }
     function dmShuffle(s){
         const flat=[];
@@ -8716,19 +8825,64 @@
             s.rings.push({x:px,y:py,r:4,life:260,max:260,col:glow});
         });
         if(count>0){
-            const pts=count*60*mult;
-            s.score+=pts;
             cx/=count;cy/=count;
-            s.texts.push({x:cx,y:cy,txt:'+'+pts,life:900,col:'#ffd700',size:0.5});
+            // Big-match bonus — clearing 4+ symbols at once pays a growing bonus on top of the base
+            const bigBonus=count>=4?(count-3)*(count-3)*30*mult:0;
+            const pts=count*60*mult+bigBonus;
+            s.score+=pts;
+            s.texts.push({x:cx,y:cy+s.cs*0.12,txt:'+'+pts,life:900,col:'#ffd700',size:0.5});
             if(mult>1){
                 s.texts.push({x:s.W/2,y:s.by-14,txt:`CASCADE ×${mult}!`,life:1100,col:'#ff8',size:0.8});
                 s.shake=Math.max(s.shake,4+mult*2);
             }
-            if(count>=6)s.shake=Math.max(s.shake,8);
-            if(count>=5)s.flash=Math.max(s.flash,140);
+            // Big single-clear celebration — the more symbols cleared at once, the bigger the
+            // message, the flashier the burst, and the louder the cheer (distinct from cascades).
+            if(count>=4){
+                const tiers=[
+                    {t:'NICE MATCH!', c:'#8fe9ff'},
+                    {t:'BIG MATCH!',  c:'#7cffb2'},
+                    {t:'HUGE MATCH!', c:'#ffd700'},
+                    {t:'MASSIVE!!',   c:'#ff9ff3'},
+                    {t:'COLOSSAL!!!', c:'#ff5252'},
+                ];
+                const ti=Math.min(tiers.length-1,count-4);
+                s.texts.push({x:cx,y:cy-s.cs*0.5,txt:tiers[ti].t,life:1300,col:tiers[ti].c,size:0.7+ti*0.18});
+                s.flash=Math.max(s.flash,90+count*22);
+                s.shake=Math.max(s.shake,6+count*2);
+                s.rings.push({x:cx,y:cy,r:6,life:440,max:440,col:tiers[ti].c});
+                const burst=count*5;
+                for(let i=0;i<burst;i++){
+                    const a=Math.random()*Math.PI*2,spd=80+Math.random()*260;
+                    s.particles.push({x:cx,y:cy,vx:Math.cos(a)*spd,vy:Math.sin(a)*spd-120,
+                        life:600+Math.random()*420,col:[tiers[ti].c,'#ffffff','#ffd700'][i%3],r:2.5+Math.random()*3.5,star:i%2===0});
+                }
+                playSFX&&playSFX(count>=6?'dmStreak':'dmPower');
+            }
+            // Big-streak celebration — a cascade of ×4 or more (chain longer than 3) earns
+            // a congrats banner + confetti shower + fanfare, escalating with the streak length.
+            if(mult>=4 && !s.streakShown){
+                s.streakShown=true;  // one banner per move, even if more cascades follow
+                const praise=['DUCK STREAK!','QUACKTACULAR!','AMAZING!','INCREDIBLE!','UNSTOPPABLE!','LEGENDARY!'];
+                const idx=Math.min(praise.length-1,mult-4);
+                s.texts.push({x:s.W/2,y:s.H/2-24,txt:praise[idx],life:1700,col:'#ffd700',size:1.5});
+                s.texts.push({x:s.W/2,y:s.H/2+36,txt:`${mult}× CHAIN COMBO!`,life:1700,col:'#fff',size:0.85});
+                s.flash=Math.max(s.flash,220);
+                s.shake=Math.max(s.shake,14+mult*2);
+                const conf=['#ffd700','#ff5af0','#5ad1ff','#8bf06a','#ff8a65','#ffffff'];
+                for(let i=0;i<70;i++){
+                    s.particles.push({
+                        x:s.bx+Math.random()*s.cs*DM_N, y:s.by-10,
+                        vx:(Math.random()-0.5)*360, vy:120+Math.random()*340,
+                        life:1100+Math.random()*700, col:conf[i%conf.length],
+                        r:3+Math.random()*4, star:i%2===0
+                    });
+                }
+                s.rings.push({x:s.W/2,y:s.H/2,r:6,life:520,max:520,col:'#ffd700'});
+                playSFX&&playSFX('dmStreak');
+            }
             if(s.score>s.high){s.high=s.score;try{localStorage.setItem('duckMatchHigh',s.high);}catch(_){}}
         }
-        playSFX&&playSFX('pop');
+        playSFX&&playSFX('dmPop', s.chain);
         s.phase='clear';s.phaseT=290;
     }
 
@@ -8756,6 +8910,20 @@
         const s=duckMatchState;if(!s)return;
         const sec=Math.min(dt,50)/1000;
         s.phaseT-=dt;
+
+        // Level timer — counts down during active play (paused on level-up / game-over screens)
+        if(s.phase!=='gameover'&&s.phase!=='levelup'){
+            s.time-=dt;
+            // At 30s left, grant a one-use transform power-up
+            if(!s.powerGiven&&s.time<=30000){
+                s.powerGiven=true;s.powerUp++;
+                s.texts.push({x:s.W/2,y:s.H/2,txt:'⚡ POWER-UP!',life:1900,col:'#5ad1ff',size:1.1});
+                s.texts.push({x:s.W/2,y:s.H/2+40,txt:'pick a symbol on the left',life:1900,col:'#fff',size:0.55});
+                s.flash=Math.max(s.flash,140);
+                playSFX&&playSFX('dmPower');
+            }
+            if(s.time<=0){s.time=0;s.phase='gameover';playSFX&&playSFX('casinoLose');}
+        }
         if(s.shake>0)s.shake=Math.max(0,s.shake-dt*0.025);
         if(s.flash>0)s.flash=Math.max(0,s.flash-dt);
         for(let i=s.beams.length-1;i>=0;i--){s.beams[i].life-=dt;if(s.beams[i].life<=0)s.beams.splice(i,1);}
@@ -8778,7 +8946,7 @@
                 if(s.phase==='swap'){
                     const matched=dmFindMatches(s);
                     if(matched.size>0){
-                        s.moves--;s.chain=0;
+                        s.moves--;s.chain=0;s.streakShown=false;
                         dmResolve(s,matched);
                         s.swapPair=null;
                     }else{
@@ -8795,7 +8963,17 @@
                 if(matched.size>0){s.chain++;dmResolve(s,matched);}
                 else{
                     s.chain=0;
-                    if(s.score>=s.target){s.phase='levelup';s.phaseT=2600;playSFX&&playSFX('casinoWin');}
+                    if(s.score>=s.target){
+                        // Reward efficient play: leftover moves and time convert to bonus points,
+                        // revealed with a count-up on the LEVEL CLEAR screen.
+                        s.bonusMoves=Math.max(0,s.moves)*50;
+                        s.bonusTime=Math.floor(Math.max(0,s.time)/1000)*5;
+                        s.scoreBefore=s.score;
+                        s.score+=s.bonusMoves+s.bonusTime;
+                        if(s.score>s.high){s.high=s.score;try{localStorage.setItem('duckMatchHigh',s.high);}catch(_){}}
+                        s.phase='levelup';s.phaseT=3000;s.levelupDur=3000;
+                        playSFX&&playSFX('casinoWin');
+                    }
                     else if(s.moves<=0){s.phase='gameover';playSFX&&playSFX('casinoLose');}
                     else{if(!dmHasMove(s))dmShuffle(s);s.phase='idle';}
                 }
@@ -8803,6 +8981,12 @@
         }else if(s.phase==='levelup'){
             if(s.phaseT<=0)duckMatchState=initDuckMatch(s.level+1,s.score);
         }
+
+        // Idle hint — when the player stalls during free play, surface a valid swap to nudge them.
+        if(s.phase==='idle'){
+            s.idle+=dt;
+            if(s.idle>=4500&&!s.hint)s.hint=dmFindHint(s);
+        }else{s.idle=0;s.hint=null;}
 
         for(let i=s.particles.length-1;i>=0;i--){
             const p=s.particles[i];
@@ -8816,12 +9000,70 @@
         dmDraw(ctx,s);
     }
 
+    function dmDrawPowerList(ctx2,s){
+        if(s.powerUp<=0)return;
+        const {x,y,lcs,gap,n}=dmPowerListGeom(s);
+        const t=performance.now()/1000;
+        ctx2.save();
+        ctx2.textAlign='center';ctx2.textBaseline='middle';
+        ctx2.fillStyle='#bdf';
+        ctx2.font=`bold ${Math.max(9,Math.round(lcs*0.26))}px monospace`;
+        ctx2.fillText('TRANSFORM',x+lcs/2,y-lcs*0.45);
+        for(let i=0;i<n;i++){
+            const cy=y+i*(lcs+gap);
+            const sel=s.powerArmed&&s.pickedSym===i;
+            ctx2.fillStyle=sel?'rgba(90,209,255,0.35)':'rgba(0,0,0,0.35)';
+            ctx2.fillRect(x,cy,lcs,lcs);
+            ctx2.strokeStyle=sel?'#5ad1ff':'rgba(255,255,255,0.25)';
+            ctx2.lineWidth=sel?3:1.5;
+            if(sel){ctx2.shadowColor='#5ad1ff';ctx2.shadowBlur=12+6*Math.sin(t*8);}
+            ctx2.strokeRect(x,cy,lcs,lcs);
+            ctx2.shadowBlur=0;
+            const ccx=x+lcs/2,ccy=cy+lcs/2,glow=DM_GLOW[i],chipR=lcs*0.42;
+            const rg=ctx2.createRadialGradient(ccx,ccy,chipR*0.15,ccx,ccy,chipR);
+            rg.addColorStop(0,glow+'cc');rg.addColorStop(1,glow+'00');
+            ctx2.fillStyle=rg;ctx2.beginPath();ctx2.arc(ccx,ccy,chipR,0,Math.PI*2);ctx2.fill();
+            ctx2.font=`${Math.round(lcs*0.62)}px serif`;ctx2.fillStyle='#fff';
+            ctx2.fillText(DM_TOKENS[i],ccx,ccy);
+        }
+        ctx2.fillStyle=s.powerArmed?'#5ad1ff':'#fff';
+        ctx2.font=`bold ${Math.max(8,Math.round(lcs*0.22))}px monospace`;
+        ctx2.fillText(s.powerArmed?'tap a tile!':'pick one',x+lcs/2,y+n*(lcs+gap)-gap+lcs*0.55);
+        ctx2.restore();
+    }
+
     function dmDraw(ctx2,s){
         const {W,H,cs,bx,by}=s;
         const t=performance.now()/1000;
-        const g0=ctx2.createLinearGradient(0,0,0,H);
-        g0.addColorStop(0,'#3b79c0');g0.addColorStop(0.6,'#4a9bd1');g0.addColorStop(1,'#3a7ca5');
+        // Animated, level-tinted backdrop — each level gets a fresh vibrant hue with a slow drift,
+        // and the whole thing briefly brightens on big clears (driven by s.flash) for a juicy pop.
+        const hue=(s.level*47 + t*4)%360;
+        const pulse=s.flash>0?Math.min(0.14,s.flash/700):0;
+        const g0=ctx2.createLinearGradient(0,0,W,H);
+        g0.addColorStop(0,`hsl(${hue},60%,${40+pulse*100}%)`);
+        g0.addColorStop(0.55,`hsl(${(hue+28)%360},66%,${48+pulse*100}%)`);
+        g0.addColorStop(1,`hsl(${(hue+55)%360},58%,${36+pulse*100}%)`);
         ctx2.fillStyle=g0;ctx2.fillRect(0,0,W,H);
+        // Drifting glow motes (bokeh) — gentle upward ambience
+        ctx2.save();
+        ctx2.globalCompositeOperation='lighter';
+        for(let i=0;i<20;i++){
+            const seed=i*1.37, period=9+(i%5)*2.5;
+            const tt=((t/period)+seed)%1;
+            const mx=(Math.sin(seed*3.1)*0.5+0.5)*W + Math.sin(t*0.25+seed)*46;
+            const my=H+70 - tt*(H+140);
+            const mr=18+(i%4)*16;
+            const ma=0.10*Math.sin(tt*Math.PI);
+            const mg=ctx2.createRadialGradient(mx,my,0,mx,my,mr);
+            mg.addColorStop(0,`hsla(${(hue+i*23)%360},85%,72%,${ma})`);
+            mg.addColorStop(1,`hsla(${(hue+i*23)%360},85%,72%,0)`);
+            ctx2.fillStyle=mg;ctx2.beginPath();ctx2.arc(mx,my,mr,0,Math.PI*2);ctx2.fill();
+        }
+        ctx2.restore();
+        // Soft vignette to keep focus on the board
+        const vg=ctx2.createRadialGradient(W/2,H*0.46,H*0.28,W/2,H*0.5,H*0.82);
+        vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(1,'rgba(0,0,0,0.34)');
+        ctx2.fillStyle=vg;ctx2.fillRect(0,0,W,H);
 
         ctx2.save();
         if(s.shake>0)ctx2.translate((Math.random()-0.5)*s.shake,(Math.random()-0.5)*s.shake);
@@ -8880,6 +9122,20 @@
             ctx2.strokeStyle='#fff';
             ctx2.lineWidth=3;
             ctx2.strokeRect(bx+s.sel.c*cs+2,by+s.sel.r*cs+2,cs-4,cs-4);
+        }
+
+        // Idle hint — softly pulse the two tiles of a suggested swap
+        if(s.hint&&s.phase==='idle'){
+            const pulse=0.45+0.55*Math.abs(Math.sin(t*3.2));
+            ctx2.save();
+            ctx2.globalAlpha=pulse;
+            ctx2.strokeStyle='#fff7b0';
+            ctx2.shadowColor='#ffe14d';ctx2.shadowBlur=cs*0.3*pulse;
+            ctx2.lineWidth=4;
+            [s.hint.a,s.hint.b].forEach(h=>{
+                ctx2.strokeRect(bx+h.c*cs+3,by+h.r*cs+3,cs-6,cs-6);
+            });
+            ctx2.restore();
         }
 
         // Special blast beams
@@ -8942,6 +9198,9 @@
         ctx2.globalAlpha=1;
         ctx2.restore();
 
+        // Transform power-up symbol list (left margin) — drawn stable, outside the board shake
+        dmDrawPowerList(ctx2,s);
+
         // Clear flash
         if(s.flash>0){
             ctx2.globalAlpha=Math.min(0.55,s.flash/300);
@@ -8967,27 +9226,53 @@
         ctx2.fillStyle='rgba(255,255,255,0.18)';
         ctx2.fillRect(pbX,18,pbW,20);
         ctx2.fillStyle='#ffd700';
-        ctx2.fillRect(pbX,18,pbW*Math.min(1,s.score/s.target),20);
+        const lvlEarned=s.score-s.base, lvlNeed=s.target-s.base;
+        ctx2.fillRect(pbX,18,pbW*Math.min(1,Math.max(0,lvlEarned/lvlNeed)),20);
         ctx2.fillStyle='#fff';
         ctx2.textAlign='center';
         ctx2.font='bold 14px monospace';
-        ctx2.fillText(`${s.score} / ${s.target}`,pbX+pbW/2,28);
+        ctx2.fillText(`${Math.floor(lvlEarned)} / ${lvlNeed}`,pbX+pbW/2,28);
         ctx2.font='bold 22px monospace';
         ctx2.fillStyle=s.moves<=5?'#f66':'#fff';
-        ctx2.fillText(`Moves: ${s.moves}`,W*0.72,28);
+        ctx2.fillText(`Moves: ${s.moves}`,W*0.70,28);
+        // Level timer — turns red and pulses under 30s
+        const tsec=Math.ceil(s.time/1000), low=s.time<=30000;
+        ctx2.fillStyle=low?(Math.sin(performance.now()/120)>0?'#ff4d4d':'#ffa000'):'#fff';
+        ctx2.fillText(`⏱ ${tsec}`,W*0.88,28);
         ctx2.restore();
 
         if(s.phase==='gameover'||s.phase==='levelup'){
             ctx2.fillStyle='rgba(0,0,0,0.6)';
             ctx2.fillRect(0,0,W,H);
             ctx2.textAlign='center';ctx2.textBaseline='middle';
-            ctx2.font='bold 54px monospace';
-            ctx2.fillStyle=s.phase==='levelup'?'#7f7':'#f77';
-            ctx2.fillText(s.phase==='levelup'?`LEVEL ${s.level} CLEAR!`:'GAME OVER',W/2,H/2-40);
-            ctx2.font='bold 24px monospace';
-            ctx2.fillStyle='#fff';
-            ctx2.fillText(`Score: ${s.score}`,W/2,H/2+14);
-            if(s.phase==='gameover'){
+            if(s.phase==='levelup'){
+                const prog=1-Math.max(0,s.phaseT)/(s.levelupDur||3000);
+                ctx2.font='bold 54px monospace';
+                ctx2.fillStyle='#7f7';
+                ctx2.fillText(`LEVEL ${s.level} CLEAR!`,W/2,H/2-70);
+                ctx2.font='bold 22px monospace';
+                if(prog>=0.22){
+                    ctx2.fillStyle='#8fe9ff';
+                    ctx2.fillText(`Moves Bonus   +${s.bonusMoves||0}`,W/2,H/2-18);
+                }
+                if(prog>=0.40){
+                    ctx2.fillStyle='#ffd54f';
+                    ctx2.fillText(`Time Bonus   +${s.bonusTime||0}`,W/2,H/2+14);
+                }
+                // Count the score up from its pre-bonus value as the bonuses are tallied
+                const cu=Math.max(0,Math.min(1,(prog-0.45)/0.45));
+                const before=(s.scoreBefore!=null)?s.scoreBefore:s.score;
+                const shown=Math.round(before+(s.score-before)*cu);
+                ctx2.font='bold 28px monospace';
+                ctx2.fillStyle='#fff';
+                ctx2.fillText(`Score: ${shown}`,W/2,H/2+56);
+            }else{
+                ctx2.font='bold 54px monospace';
+                ctx2.fillStyle='#f77';
+                ctx2.fillText('GAME OVER',W/2,H/2-40);
+                ctx2.font='bold 24px monospace';
+                ctx2.fillStyle='#fff';
+                ctx2.fillText(`Score: ${s.score}`,W/2,H/2+14);
                 ctx2.font='18px monospace';
                 ctx2.fillStyle='#ddd';
                 ctx2.fillText('Click or press R to play again',W/2,H/2+54);
@@ -11627,9 +11912,28 @@
             duckTime += dt * 0.4;
             for (const d of ducks) {
                 const dFrozen = d.fighter && d.fighter.state === 'hitstun';
+                // Powered-up aura behind the duck
+                if (d.fighter && d.fighter.poweredUp) {
+                    drawFightAura(d, d === ducks[0] ? '255,215,0' : '96,165,250');
+                }
                 ctx.save();
                 drawDuck(d, (!d.superHeroActive && d.frozenTimeRemaining > 0) ? d.frozenAtTime : duckTime, dFrozen, false, false);
                 ctx.restore();
+                // Rapid-flurry hit counter — sells the barrage with a throbbing tally
+                if (d.fighter && d.fighter.state === 'rapid' && (d.fighter.rapidHits||0) > 0) {
+                    const hx = width/2 + d.physics.x;
+                    const hy = height/2 + 50 + d.physics.y - 120;
+                    const pop = 1 + 0.12*Math.sin(now*0.045);
+                    ctx.save();
+                    ctx.translate(hx, hy); ctx.scale(pop, pop);
+                    ctx.font = 'bold 30px "Segoe UI"'; ctx.textAlign = 'center';
+                    ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+                    ctx.fillStyle = d === ducks[0] ? '#fde047' : '#93c5fd';
+                    ctx.shadowBlur = 12; ctx.shadowColor = ctx.fillStyle;
+                    ctx.strokeText(d.fighter.rapidHits + ' HITS!', 0, 0);
+                    ctx.fillText(d.fighter.rapidHits + ' HITS!', 0, 0);
+                    ctx.restore();
+                }
                 // Lightning aura during charge and the moment of release
                 if (d.fighter) {
                     const lColor = d === ducks[0] ? '#fbbf24' : '#60a5fa';
@@ -12947,8 +13251,12 @@
         SPEED: 3.5, JUMP: -14, GRAV: 0.55,
         PUNCH_RANGE: 95, KICK_RANGE: 115,
         PUNCH_DMG: 7, KICK_DMG: 12, FIREBALL_DMG: 25, HEAVY_DMG: 22, DIVEKICK_DMG: 18,
+        RAPID_DMG: 1, RAPID_RANGE: 100, RAPID_MS: 1000, RAPID_INTERVAL: 70,  // flurry: weak per-hit, but lots of hits
+        POWERED_DMG_MULT: 1.4,   // melee damage multiplier while a fighter is powered-up
+        POWERED_SPEED_MULT: 1.5, // movement-speed multiplier while powered-up
+        POWERUP_EXIT_HP: 0.6,    // powered-up persists until HP falls below this fraction of max (DBZ super-mode rules)
         FIREBALL_SPEED: 8,
-        SPECIAL_COST: 100, SP_GAIN_DEAL: 8, SP_GAIN_RECV: 14,
+        SPECIAL_COST: 100, FIREBALL_COST: 50, SP_GAIN_DEAL: 8, SP_GAIN_RECV: 14,
         HITSTUN_MS: 380, ATTACK_MS: 280, HEAVY_MS: 520, ROUND_SEC: 99,
         DODGE_DIST: 95, DODGE_MS: 300, DODGE_COOLDOWN: 900,
         ULTIMATE_DMG: 55, ULTIMATE_DMG_BLOCKED: 15,
@@ -12976,11 +13284,11 @@
     let fightShake = 0;    // screen-shake magnitude, decays each frame
     let fightArenaTheme = 0; // which themed background this fight uses
 
-    const p1In = {left:false,right:false,jump:false,crouch:false,punch:false,kick:false,special:false,block:false,dodge:false,heavy:false};
-    const p2In = {left:false,right:false,jump:false,crouch:false,punch:false,kick:false,special:false,block:false,dodge:false,heavy:false};
-    const P1_MAP = {KeyA:'left',KeyD:'right',KeyW:'jump',KeyF:'punch',KeyG:'kick',KeyQ:'special',KeyR:'block',KeyE:'dodge',KeyH:'heavy'};
+    const p1In = {left:false,right:false,jump:false,crouch:false,punch:false,kick:false,special:false,block:false,dodge:false,heavy:false,rapid:false};
+    const p2In = {left:false,right:false,jump:false,crouch:false,punch:false,kick:false,special:false,block:false,dodge:false,heavy:false,rapid:false};
+    const P1_MAP = {KeyA:'left',KeyD:'right',KeyW:'jump',KeyF:'punch',KeyG:'kick',KeyQ:'special',KeyR:'block',KeyE:'dodge',KeyH:'heavy',KeyT:'rapid'};
     const P2_MAP = {ArrowLeft:'left',ArrowRight:'right',ArrowUp:'jump',
-                    Numpad1:'punch',Numpad3:'kick',Numpad0:'special',Numpad7:'block',Numpad5:'dodge',Numpad9:'heavy'};
+                    Numpad1:'punch',Numpad3:'kick',Numpad0:'special',Numpad7:'block',Numpad5:'dodge',Numpad9:'heavy',Numpad2:'rapid'};
     // S and ArrowDown are handled separately to charge SP (isolated from the state machine)
     const spCharge = { p1: false, p2: false };
 
@@ -12992,6 +13300,7 @@
             attackLanded: false, jumpPressed: false,
             dodgeCooldown: 0,
             comboBuffer: [], comboLastTime: 0,
+            charging: false, poweredUp: false, rapidPrev: false,
         };
         duck.physics.x = startX; duck.physics.y = -FIGHT.FLOOR;
         duck.physics.vx = 0; duck.physics.vy = 0;
@@ -13093,6 +13402,33 @@
         fightShake = Math.min(24, fightShake + 8);
     }
 
+    // One-time DBZ-style transformation burst the instant a fighter's SP maxes out
+    function triggerPowerUp(duck, rgb, hue) {
+        const sx = width/2 + duck.physics.x;
+        const sy = height/2 + 50 + duck.physics.y - 10;
+        for (let p = 0; p < 30; p++) {
+            const a = (p / 30) * Math.PI * 2;
+            const sp = 5 + Math.random() * 4;
+            fightSparks.push({ x: sx, y: sy, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp - 2, life: 1.2, hue, size: 3 + Math.random()*4 });
+        }
+        ultimateFlashColor = 'rgba(' + rgb + ',';
+        ultimateFlash = 0.4;
+        fightShake = Math.min(24, fightShake + 10);
+        playSFX('fightPowerUp');
+    }
+
+    // Knocked out of "super" — a quick fizzle of fading sparks as the aura collapses
+    function triggerPowerDown(duck, rgb) {
+        const sx = width/2 + duck.physics.x;
+        const sy = height/2 + 50 + duck.physics.y - 10;
+        for (let p = 0; p < 18; p++) {
+            const a = (p / 18) * Math.PI * 2;
+            const sp = 2 + Math.random() * 3;
+            fightSparks.push({ x: sx, y: sy, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp + 1, life: 0.8, hue: 0, size: 2 + Math.random()*3 });
+        }
+        playSFX('fightPowerDown');
+    }
+
     function updateFighter(duck, input, opponent, now) {
         const f = duck.fighter;
         if (f.state === 'ko') return;
@@ -13100,7 +13436,7 @@
         if (f.dodgeCooldown > 0) f.dodgeCooldown -= 16;
 
         // Expire timed states
-        if (['punch','kick','special','ultimate','hitstun','dodge','heavy','divekick'].includes(f.state) && now >= f.stateEnd) {
+        if (['punch','kick','special','ultimate','hitstun','dodge','heavy','divekick','rapid'].includes(f.state) && now >= f.stateEnd) {
             f.state = 'idle'; f.attackLanded = false;
         }
         // Release block when key lifted
@@ -13108,7 +13444,7 @@
 
         const canAct = ['idle','walk','crouch'].includes(f.state);
         const canActAir = f.state === 'jump';
-        const busy = ['punch','kick','special','ultimate','ultimateCharge','heavy','dodge','hitstun','ko','divekick'].includes(f.state);
+        const busy = ['punch','kick','special','ultimate','ultimateCharge','heavy','dodge','hitstun','ko','divekick','rapid'].includes(f.state);
 
         // Ultimate combo — fires immediately like a special, no charge phase
         const combo = FIGHT.ULTIMATE_COMBO;
@@ -13135,11 +13471,12 @@
             f.state = 'block';
         }
 
-        // Horizontal movement — not while blocking or busy
+        // Horizontal movement — not while blocking or busy (powered-up fighters move faster)
         if ((canAct || canActAir) && f.state !== 'block') {
             let dx = 0;
-            if (input.left)  dx -= FIGHT.SPEED;
-            if (input.right) dx += FIGHT.SPEED;
+            const moveSpeed = FIGHT.SPEED * (f.poweredUp ? FIGHT.POWERED_SPEED_MULT : 1);
+            if (input.left)  dx -= moveSpeed;
+            if (input.right) dx += moveSpeed;
             if (dx !== 0) {
                 duck.physics.x = Math.max(FIGHT.WALL_L+45, Math.min(FIGHT.WALL_R-45, duck.physics.x + dx));
                 if (canAct) f.state = 'walk';
@@ -13198,13 +13535,18 @@
                 f.dodgeCooldown = FIGHT.DODGE_COOLDOWN;
                 const dashDir = f.facingRight ? -1 : 1; // dash away from opponent
                 duck.physics.x = Math.max(FIGHT.WALL_L+45, Math.min(FIGHT.WALL_R-45, duck.physics.x + dashDir * FIGHT.DODGE_DIST));
-            } else if (input.special && f.sp >= FIGHT.SPECIAL_COST) {
+            } else if (input.special && f.sp >= FIGHT.FIREBALL_COST) {
                 f.state = 'special'; f.stateEnd = now + FIGHT.ATTACK_MS + 100; f.attackLanded = false;
-                f.sp -= FIGHT.SPECIAL_COST;
+                f.sp -= FIGHT.FIREBALL_COST;
                 const dir = f.facingRight ? 1 : -1;
                 fightFireballs.push({ x: duck.physics.x + dir*65, y: duck.physics.y - 10,
                     vx: dir * FIGHT.FIREBALL_SPEED, owner: ducks.indexOf(duck), life: 2500, angle: 0 });
                 playSFX('fightFireball');
+            } else if (input.rapid && !f.rapidPrev && canAct) {
+                // Rapid-fire flurry — ground-only barrage of weak hits (one press = one flurry)
+                f.state = 'rapid'; f.stateEnd = now + FIGHT.RAPID_MS; f.attackLanded = false;
+                f.rapidNextHit = 0; f.rapidHits = 0;
+                playSFX('fightRapidStart');
             }
         }
 
@@ -13218,13 +13560,15 @@
                 const dist = Math.abs(hitX - opponent.physics.x);
                 if (dist < range * 0.5 + 35) {
                     const blocking = oppF.state === 'block';
-                    const baseDmg = f.state === 'punch' ? FIGHT.PUNCH_DMG
-                                  : f.state === 'kick' ? FIGHT.KICK_DMG
-                                  : f.state === 'divekick' ? FIGHT.DIVEKICK_DMG
-                                  : FIGHT.HEAVY_DMG;
+                    let baseDmg = f.state === 'punch' ? FIGHT.PUNCH_DMG
+                                : f.state === 'kick' ? FIGHT.KICK_DMG
+                                : f.state === 'divekick' ? FIGHT.DIVEKICK_DMG
+                                : FIGHT.HEAVY_DMG;
+                    // Powered-up fighters hit harder
+                    if (f.poweredUp) baseDmg = Math.round(baseDmg * FIGHT.POWERED_DMG_MULT);
                     let dmg;
                     if (f.state === 'heavy') {
-                        dmg = FIGHT.HEAVY_DMG; // heavy ignores block entirely
+                        dmg = baseDmg; // heavy ignores block entirely
                     } else {
                         dmg = blocking ? Math.ceil(baseDmg * 0.1) : baseDmg;
                     }
@@ -13237,6 +13581,40 @@
                     }
                     f.sp = Math.min(100, f.sp + FIGHT.SP_GAIN_DEAL);
                     f.attackLanded = true;
+                }
+            }
+        }
+
+        // Rapid flurry hit detection — a stream of weak chip hits that do NOT inflict hitstun,
+        // so the opponent stays put for the barrage (but can still block or dodge out of it).
+        if (f.state === 'rapid' && now >= (f.rapidNextHit || 0)) {
+            f.rapidNextHit = now + FIGHT.RAPID_INTERVAL;
+            const range = FIGHT.RAPID_RANGE;
+            const dir = f.facingRight ? 1 : -1;
+            const hitX = duck.physics.x + dir * range * 0.55;
+            const oppF = opponent.fighter;
+            if (oppF && oppF.state !== 'ko' && oppF.invincible <= 0) {
+                const dist = Math.abs(hitX - opponent.physics.x);
+                if (dist < range * 0.5 + 35) {
+                    const blocking = oppF.state === 'block';
+                    // Fully negated by block — a guarding duck eats the whole flurry for free,
+                    // so spamming rapid into a block achieves nothing (switch to heavy to break it).
+                    let dmg = blocking ? 0
+                            : f.poweredUp ? Math.round(FIGHT.RAPID_DMG * FIGHT.POWERED_DMG_MULT)
+                            : FIGHT.RAPID_DMG;
+                    oppF.hp = Math.max(0, oppF.hp - dmg);          // chip damage, no hitstun lock
+                    if (oppF.hp <= oppF.maxHp * 0.1) oppF.sp = 100; // preserve the low-HP comeback
+                    f.rapidHits = (f.rapidHits || 0) + 1;
+                    // Per-hit FX: a small spark puff at the contact point + a tiny shake
+                    const sx = width/2 + opponent.physics.x + dir*18;
+                    const sy = height/2 + 50 + opponent.physics.y - 28 + (Math.random()-0.5)*26;
+                    for (let p = 0; p < 3; p++) {
+                        const a = Math.random()*Math.PI*2, spd = 2 + Math.random()*3;
+                        fightSparks.push({ x: sx, y: sy, vx: Math.cos(a)*spd, vy: Math.sin(a)*spd, life: 0.45, hue: blocking?200:45, size: 2+Math.random()*2 });
+                    }
+                    fightShake = Math.min(18, fightShake + 1.2);
+                    f.sp = Math.min(100, f.sp + 1);                // modest meter gain per hit
+                    playSFX(blocking ? 'fightBlock' : 'fightRapidHit');
                 }
             }
         }
@@ -13300,10 +13678,18 @@
         } else if (f.state === 'special') {
             duck.limbs.wingL.ox = -25; duck.limbs.wingR.ox = -25;
             duck.limbs.wingL.oy =  10; duck.limbs.wingR.oy =  10;
+        } else if (f.state === 'rapid') {
+            // Both wings piston in and out of phase — a blur of forward jabs
+            const t = now * 0.05;
+            duck.limbs.wingR.ox = 50 + Math.sin(t) * 45;            duck.limbs.wingR.oy = -5 + Math.cos(t*1.3)*6;
+            duck.limbs.wingL.ox = 50 + Math.sin(t + Math.PI) * 45;  duck.limbs.wingL.oy = -5 + Math.cos(t*1.3 + Math.PI)*6;
         } else if (f.state === 'hitstun') {
             duck.limbs.wingL.ox=(Math.random()-.5)*50; duck.limbs.wingL.oy=(Math.random()-.5)*50;
             duck.limbs.wingR.ox=(Math.random()-.5)*50; duck.limbs.wingR.oy=(Math.random()-.5)*50;
         }
+
+        // Edge-track the rapid key so one press = one flurry (holding it won't chain flurries)
+        f.rapidPrev = input.rapid;
     }
 
     function tallyRound() {
@@ -13329,11 +13715,28 @@
         updateFighter(ducks[1], p2In, ducks[0], now);
 
         // S / ArrowDown — charge SP while grounded and not in an attack state
-        const chargeBusy = ['punch','kick','special','ultimate','ultimateCharge','heavy','dodge','hitstun','ko','divekick'];
+        const chargeBusy = ['punch','kick','special','ultimate','ultimateCharge','heavy','dodge','hitstun','ko','divekick','rapid'];
         if (spCharge.p1 && ducks[0].fighter.grounded && !chargeBusy.includes(ducks[0].fighter.state))
             ducks[0].fighter.sp = Math.min(100, ducks[0].fighter.sp + dt * 0.022);
         if (spCharge.p2 && ducks[1].fighter.grounded && !chargeBusy.includes(ducks[1].fighter.state))
             ducks[1].fighter.sp = Math.min(100, ducks[1].fighter.sp + dt * 0.022);
+
+        // Charging flags (for the angry eyes) + latched DBZ-style power-up.
+        // Transform the instant SP first maxes (provided you're still healthy enough to go super);
+        // the state then PERSISTS as SP is spent on fireballs, and only drops when HP falls below
+        // POWERUP_EXIT_HP — i.e. you get knocked out of "super" by taking too much damage.
+        [ducks[0].fighter, ducks[1].fighter].forEach((f, idx) => {
+            if (!f) return;
+            f.charging = (idx === 0 ? spCharge.p1 : spCharge.p2) && f.grounded && !chargeBusy.includes(f.state);
+            const healthyEnough = f.hp >= f.maxHp * FIGHT.POWERUP_EXIT_HP;
+            if (!f.poweredUp && f.sp >= FIGHT.SPECIAL_COST && healthyEnough) {
+                f.poweredUp = true;
+                triggerPowerUp(ducks[idx], idx === 0 ? '255,215,0' : '96,165,250', idx === 0 ? 48 : 210);
+            } else if (f.poweredUp && !healthyEnough) {
+                f.poweredUp = false;
+                triggerPowerDown(ducks[idx], idx === 0 ? '255,215,0' : '96,165,250');
+            }
+        });
 
         // Check for opposing fireballs cancelling each other out
         for (let i = fightFireballs.length-1; i >= 0; i--) {
@@ -13456,6 +13859,60 @@
             ctx.fill();
             ctx.restore();
         }
+    }
+
+    // DBZ-style powered-up aura — body glow + white-hot core + tall flame licks + ground ring + rising motes
+    function drawFightAura(duck, rgb) {
+        const cx = width/2 + duck.physics.x;
+        const cy = height/2 + 50 + duck.physics.y - 10;
+        const now = performance.now();
+        const pulse = 0.5 + 0.5 * Math.sin(now * 0.014);
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        // Outer body glow (pulses)
+        const glow = ctx.createRadialGradient(cx, cy, 18, cx, cy, 120 + 12*pulse);
+        glow.addColorStop(0, `rgba(${rgb},${0.32 + 0.12*pulse})`);
+        glow.addColorStop(1, `rgba(${rgb},0)`);
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.ellipse(cx, cy, 86, 122, 0, 0, Math.PI*2); ctx.fill();
+        // White-hot inner core
+        const core = ctx.createRadialGradient(cx, cy+10, 0, cx, cy+10, 52);
+        core.addColorStop(0, `rgba(255,255,255,${0.22 + 0.12*pulse})`);
+        core.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = core;
+        ctx.beginPath(); ctx.ellipse(cx, cy+10, 42, 62, 0, 0, Math.PI*2); ctx.fill();
+        // Upward flame licks around the body
+        for (let i = 0; i < 14; i++) {
+            const spread = (i / 13 - 0.5) * 130;
+            const flick = 0.5 + 0.5 * Math.sin(now * 0.02 + i * 1.7);
+            const baseX = cx + spread, baseY = cy + 74;
+            const tipX = baseX + spread * 0.12 + Math.sin(now * 0.011 + i) * 7;
+            const tipY = baseY - (70 + 90 * flick);
+            const w = 11 + 7 * flick;
+            const grad = ctx.createLinearGradient(baseX, baseY, tipX, tipY);
+            grad.addColorStop(0,    `rgba(${rgb},0)`);
+            grad.addColorStop(0.25, `rgba(${rgb},0.7)`);
+            grad.addColorStop(1,    'rgba(255,255,255,0)');
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.moveTo(baseX - w, baseY);
+            ctx.quadraticCurveTo(baseX - w*0.3, (baseY+tipY)/2, tipX, tipY);
+            ctx.quadraticCurveTo(baseX + w*0.3, (baseY+tipY)/2, baseX + w, baseY);
+            ctx.closePath(); ctx.fill();
+        }
+        // Pulsing ground-burst ring
+        const ringR = 40 + pulse * 50;
+        ctx.strokeStyle = `rgba(${rgb},${(1 - pulse) * 0.5})`; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.ellipse(cx, cy + 76, ringR, ringR*0.3, 0, 0, Math.PI*2); ctx.stroke();
+        // Rising energy motes
+        for (let i = 0; i < 10; i++) {
+            const t = ((now * 0.0006) + i * 0.1) % 1;
+            const mx = cx + Math.sin(i * 2.1) * 58;
+            const my = cy + 74 - t * 165;
+            ctx.fillStyle = `rgba(${rgb},${(1 - t) * 0.85})`;
+            ctx.beginPath(); ctx.arc(mx, my, 3 * (1 - t) + 1, 0, Math.PI*2); ctx.fill();
+        }
+        ctx.restore();
     }
 
     // Dedicated, animated arena backdrops (replaces the dance scene during fights)
@@ -13744,13 +14201,40 @@
         ctx.fillText('P1 🦆', m+5, m+18);
 
         // P1 special
+        const spPulse = 0.5 + 0.5*Math.sin(now*0.012);
+        const p1Powered = p1.poweredUp;                 // latched super state (persists as SP is spent)
+        const p1Full = p1.sp>=FIGHT.SPECIAL_COST;       // meter full → ultimate available
+        const p1Fire = p1.sp>=FIGHT.FIREBALL_COST;      // enough for a fireball
         ctx.fillStyle='rgba(0,0,0,0.4)'; ctx.fillRect(m, m+barH+5, barW*0.7, spH);
-        ctx.fillStyle=p1.sp>=FIGHT.SPECIAL_COST?'#818cf8':'rgba(129,140,248,0.45)';
+        ctx.save();
+        if (p1Powered) { ctx.shadowBlur = 8 + 10*spPulse; ctx.shadowColor = '#a5b4fc'; }
+        ctx.fillStyle = (p1Powered||p1Full) ? (spPulse>0.5?'#e0e7ff':'#818cf8') : 'rgba(129,140,248,0.45)';
         ctx.fillRect(m, m+barH+5, barW*0.7*(p1.sp/100), spH);
-        if (p1.sp>=FIGHT.SPECIAL_COST) {
-            ctx.fillStyle='#a5b4fc'; ctx.font='bold 11px "Segoe UI"'; ctx.textAlign='left';
-            ctx.fillText('✨ SPECIAL  [Q]', m, m+barH+5+spH+14);
-            // Combo progress dots
+        ctx.restore();
+        // Fireball-cost tick: the special becomes usable once the meter passes this mark
+        const p1TickX = m + barW*0.7*(FIGHT.FIREBALL_COST/100);
+        ctx.strokeStyle = p1Fire ? 'rgba(253,224,71,0.9)' : 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(p1TickX, m+barH+4); ctx.lineTo(p1TickX, m+barH+6+spH); ctx.stroke();
+        // Pulsing outline while powered-up (latched super state)
+        if (p1Powered) {
+            ctx.save();
+            ctx.strokeStyle = `rgba(253,224,71,${0.4+0.6*spPulse})`; ctx.lineWidth = 2;
+            ctx.strokeRect(m-1, m+barH+4, barW*0.7+2, spH+2);
+            ctx.restore();
+        }
+        // Status label: POWERED UP takes priority, otherwise show fireball-ready
+        if (p1Powered) {
+            ctx.save();
+            ctx.shadowBlur = 6*spPulse; ctx.shadowColor = '#fde047';
+            ctx.fillStyle = spPulse>0.5 ? '#fde047' : '#a5b4fc'; ctx.font='bold 11px "Segoe UI"'; ctx.textAlign='left';
+            ctx.fillText('⚡ POWERED UP', m, m+barH+5+spH+14);
+            ctx.restore();
+        } else if (p1Fire) {
+            ctx.fillStyle = '#fb923c'; ctx.font='bold 11px "Segoe UI"'; ctx.textAlign='left';
+            ctx.fillText('🔥 FIREBALL  [Q]', m, m+barH+5+spH+14);
+        }
+        // Ultimate combo dots — only when the meter is full
+        if (p1Full) {
             const p1combo = p1.comboBuffer || [];
             const dotY = m+barH+5+spH+30, dotR = 5, dotGap = 14;
             for (let ci = 0; ci < FIGHT.ULTIMATE_COMBO.length; ci++) {
@@ -13773,14 +14257,40 @@
 
         // P2 special
         const sp2X = width-m-barW*0.7;
+        const p2Powered = p2.poweredUp;
+        const p2Full = p2.sp>=FIGHT.SPECIAL_COST;
+        const p2Fire = p2.sp>=FIGHT.FIREBALL_COST;
         ctx.fillStyle='rgba(0,0,0,0.4)'; ctx.fillRect(sp2X, m+barH+5, barW*0.7, spH);
-        ctx.fillStyle=p2.sp>=FIGHT.SPECIAL_COST?'#fbbf24':'rgba(251,191,36,0.45)';
         const sp2FillW = barW*0.7*(p2.sp/100);
+        ctx.save();
+        if (p2Powered) { ctx.shadowBlur = 8 + 10*spPulse; ctx.shadowColor = '#fde68a'; }
+        ctx.fillStyle = (p2Powered||p2Full) ? (spPulse>0.5?'#fef9c3':'#fbbf24') : 'rgba(251,191,36,0.45)';
         ctx.fillRect(sp2X+barW*0.7-sp2FillW, m+barH+5, sp2FillW, spH);
-        if (p2.sp>=FIGHT.SPECIAL_COST) {
-            ctx.fillStyle='#fde68a'; ctx.font='bold 11px "Segoe UI"'; ctx.textAlign='right';
-            ctx.fillText('[Num0]  ✨ SPECIAL', width-m, m+barH+5+spH+14);
-            // Combo progress dots (right-aligned)
+        ctx.restore();
+        // Fireball-cost tick (bar fills right→left, so measure the mark in from the right edge)
+        const p2TickX = (width-m) - barW*0.7*(FIGHT.FIREBALL_COST/100);
+        ctx.strokeStyle = p2Fire ? 'rgba(253,224,71,0.9)' : 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(p2TickX, m+barH+4); ctx.lineTo(p2TickX, m+barH+6+spH); ctx.stroke();
+        // Pulsing outline while powered-up
+        if (p2Powered) {
+            ctx.save();
+            ctx.strokeStyle = `rgba(253,224,71,${0.4+0.6*spPulse})`; ctx.lineWidth = 2;
+            ctx.strokeRect(sp2X-1, m+barH+4, barW*0.7+2, spH+2);
+            ctx.restore();
+        }
+        // Status label
+        if (p2Powered) {
+            ctx.save();
+            ctx.shadowBlur = 6*spPulse; ctx.shadowColor = '#fde047';
+            ctx.fillStyle = spPulse>0.5 ? '#fde047' : '#fde68a'; ctx.font='bold 11px "Segoe UI"'; ctx.textAlign='right';
+            ctx.fillText('[Num0]  ⚡ POWERED UP', width-m, m+barH+5+spH+14);
+            ctx.restore();
+        } else if (p2Fire) {
+            ctx.fillStyle = '#fb923c'; ctx.font='bold 11px "Segoe UI"'; ctx.textAlign='right';
+            ctx.fillText('[Num0]  🔥 FIREBALL', width-m, m+barH+5+spH+14);
+        }
+        // Ultimate combo dots (right-aligned) — only when the meter is full
+        if (p2Full) {
             const p2combo = p2.comboBuffer || [];
             const dotY = m+barH+5+spH+30, dotR = 5, dotGap = 14;
             for (let ci = 0; ci < FIGHT.ULTIMATE_COMBO.length; ci++) {
@@ -13806,9 +14316,9 @@
         // Controls hint — two lines, dropped below the special/combo rows so they never overlap
         ctx.fillStyle='rgba(255,255,255,0.45)'; ctx.font='11px "Segoe UI"';
         ctx.textAlign='left';
-        ctx.fillText('WAD move  |  F punch  G kick  H heavy  E dodge  R block  Q special  S hold = charge SP', m, m+barH+5+spH+50);
+        ctx.fillText('WAD move  |  F punch  G kick  H heavy  T rapid  E dodge  R block  Q special  S hold = charge SP', m, m+barH+5+spH+50);
         ctx.textAlign='right';
-        ctx.fillText('Arrows move  |  Num1 punch  Num3 kick  Num9 heavy  Num5 dodge  Num7 block  Num0 special  ↓ hold = charge SP', width-m, m+barH+5+spH+50);
+        ctx.fillText('Arrows move  |  Num1 punch  Num3 kick  Num9 heavy  Num2 rapid  Num5 dodge  Num7 block  Num0 special  ↓ hold = charge SP', width-m, m+barH+5+spH+50);
     }
 
     function drawWinScreen() {
@@ -13995,7 +14505,7 @@
         return sfxCtx;
     }
 
-    function playSFX(type) {
+    function playSFX(type, opt) {
         if (sfxMuted) return;
         try {
             const ac = getSFXCtx();
@@ -14080,6 +14590,15 @@
                     tone(150, now, 0.06, 0.7, 'sine');
                     break;
 
+                case 'dmPop': {  // match clear — pitch climbs with the cascade step (opt) for an addictive combo
+                    const step = Math.min(12, opt||0);
+                    const base = 380 * Math.pow(1.0595, step*2);   // ~2 semitones higher each cascade
+                    noise(now, 0.035, 0.8, 700);
+                    tone(base, now, 0.10, 0.5, 'triangle');
+                    tone(base*1.5, now + 0.02, 0.08, 0.28, 'sine');
+                    break;
+                }
+
                 case 'pickup':   // food pickup — friendly bloop
                     tone(440, now,        0.1,  0.5, 'sine');
                     tone(660, now + 0.07, 0.12, 0.5, 'sine');
@@ -14091,6 +14610,19 @@
                         tone(f, now + i*0.07, 0.2, 0.5, 'sine');
                         tone(f*2, now + i*0.07, 0.1, 0.15, 'triangle');
                     });
+                    break;
+
+                case 'dmPower':  // transform power-up granted / used — bright shimmer
+                    [659,880,1175].forEach((f,i) => tone(f, now + i*0.05, 0.14, 0.4, 'sine'));
+                    tone(1568, now + 0.16, 0.2, 0.22, 'triangle');
+                    break;
+
+                case 'dmStreak':  // Duck Match big cascade — triumphant rising sparkle
+                    [523,659,784,1047,1319].forEach((f,i) => {
+                        tone(f, now + i*0.05, 0.16, 0.5, 'triangle');
+                        tone(f*2, now + i*0.05, 0.08, 0.18, 'sine');
+                    });
+                    [1568,1760,2093].forEach((f,i) => tone(f, now + 0.3 + i*0.06, 0.1, 0.25, 'sine'));
                     break;
 
                 case 'casinoWin':  // slot/roulette win — coin shower fanfare
@@ -14192,6 +14724,26 @@
                         tone(1046, now + off, 0.32, 0.5, 'sine');
                         tone(1568, now + off, 0.30, 0.28, 'sine');
                     });
+                    break;
+
+                case 'fightPowerUp':  // SP maxed — rising charge into a boom
+                    [180,260,360,500,680,900].forEach((f,i) => tone(f, now + i*0.05, 0.14, 0.4, 'sawtooth'));
+                    tone(90, now + 0.30, 0.5, 0.7, 'triangle');
+                    noise(now, 0.35, 0.25, 300);
+                    break;
+
+                case 'fightPowerDown':  // knocked out of super — descending fizzle
+                    [620,460,340,240].forEach((f,i) => tone(f, now + i*0.05, 0.12, 0.3, 'sawtooth'));
+                    noise(now, 0.28, 0.2, 500);
+                    break;
+
+                case 'fightRapidStart':  // battle-cry into the flurry
+                    [300,420,560].forEach((f,i) => tone(f, now + i*0.04, 0.08, 0.3, 'sawtooth'));
+                    break;
+
+                case 'fightRapidHit':    // one quick light jab (fires many times in a row)
+                    tone(420 + Math.random()*140, now, 0.04, 0.16, 'square');
+                    noise(now, 0.04, 0.12, 800);
                     break;
 
                 case 'fightWin':     // series-win fanfare
