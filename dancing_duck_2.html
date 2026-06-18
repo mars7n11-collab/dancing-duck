@@ -363,7 +363,11 @@
                     <button class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors border-b border-white/5" id="taserWeaponBtn">⚡ Taser</button>
                     <button class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors border-b border-white/5" id="flameWeaponBtn">🔥 Flamethrower</button>
                     <button class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors border-b border-white/5" id="fanWeaponBtn">💨 Giant Fan</button>
-                    <button class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors" id="cannonWeaponBtn">💥 Cannon</button>
+                    <button class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors border-b border-white/5" id="cannonWeaponBtn">💥 Cannon</button>
+                    <button class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors border-b border-white/5" id="tractorWeaponBtn">🧲 Tractor Beam</button>
+                    <button class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors border-b border-white/5" id="bubbleWeaponBtn">🔵 Bubble Gun</button>
+                    <button class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors border-b border-white/5" id="dynamiteWeaponBtn">🧨 Dynamite</button>
+                    <button class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors" id="blackHoleWeaponBtn">🕳️ Black Hole</button>
                 </div>
             </div>
 
@@ -902,6 +906,7 @@
         taserActive = false; taserArmed = false; taserShooting = false; taserOnDuck = false; taserTimer = 0;
         flameActive = false; flameArmed = false; flameShooting = false; flameTimer = 0; flameDuckX = 0;
         fanActive = false; fanAnchored = false; fanPlacing = false; fanHoverX = 0; fanHoverY = 0; fanWindParticles = [];
+        deactivateNewWeapons(); dynamites = []; bhParticles = []; blastFlash = 0;
         canvas.style.cursor = 'grab';
         freezeWeaponBtn.style.background = '';
         taserWeaponBtn.style.background = '';
@@ -1122,7 +1127,324 @@
         flameActive = false; flameArmed = false; flameShooting = false; flameTimer = 0; flameDuckX = 0; flameWeaponBtn.style.background = '';
         fanActive = false; fanAnchored = false; fanPlacing = false; fanWeaponBtn.textContent = '💨 Giant Fan';
         frozenTimeRemaining = 0;
+        deactivateNewWeapons();
     });
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Extra weapons: 🧲 Tractor Beam · 🫧 Bubble Gun · 🧨 Dynamite · 🕳️ Black Hole
+    // Conventions match the other weapons: a world position (x,y) maps to the
+    // screen via (width/2 + x, height/2 + 50 + y). Ducks, balls, foods and
+    // targets all live in that world space; cursor/anchor coords are screen space.
+    // ─────────────────────────────────────────────────────────────────────
+    let tractorActive = false, tractorPulling = false;
+    let bubbleActive = false;
+    let dynamiteActive = false;
+    let dynamites = [];              // {x,y,vy,fuse,max} world space
+    let blackHoleActive = false, blackHolePlacing = false, blackHolePlacedOnce = false;
+    let blackHoleX = 0, blackHoleY = 0, blackHoleSpin = 0;
+    let bhParticles = [];            // shared FX specks (screen space)
+    let blastFlash = 0;
+
+    const tractorWeaponBtn   = document.getElementById('tractorWeaponBtn');
+    const bubbleWeaponBtn    = document.getElementById('bubbleWeaponBtn');
+    const dynamiteWeaponBtn  = document.getElementById('dynamiteWeaponBtn');
+    const blackHoleWeaponBtn = document.getElementById('blackHoleWeaponBtn');
+
+    // Turn off the five built-in weapons (used when a new weapon is picked).
+    function deactivateLegacyWeapons() {
+        currentTool = 'hand'; isShooting = false; frozenTimeRemaining = 0; freezeCharge = 0;
+        freezeWeaponBtn.style.background = '';
+        taserActive = false; taserArmed = false; taserShooting = false; taserOnDuck = false; taserTimer = 0;
+        taserWeaponBtn.style.background = '';
+        flameActive = false; flameArmed = false; flameShooting = false; flameTimer = 0; flameDuckX = 0;
+        flameWeaponBtn.style.background = '';
+        fanActive = false; fanAnchored = false; fanPlacing = false; fanWeaponBtn.textContent = '💨 Giant Fan';
+        deactivateCannon();
+    }
+    // Turn off the four new weapons (called from the built-in handlers and resets).
+    function deactivateNewWeapons() {
+        tractorActive = false; tractorPulling = false; tractorWeaponBtn.style.background = '';
+        bubbleActive = false; bubbleWeaponBtn.style.background = '';
+        dynamiteActive = false; dynamiteWeaponBtn.style.background = '';
+        blackHoleActive = false; blackHolePlacing = false; blackHolePlacedOnce = false; blackHoleWeaponBtn.textContent = '🕳️ Black Hole';
+    }
+
+    tractorWeaponBtn.addEventListener('click', () => {
+        weaponsDropdown.style.display = 'none';
+        const on = !tractorActive;
+        deactivateLegacyWeapons(); deactivateNewWeapons();
+        tractorActive = on;
+        tractorWeaponBtn.style.background = on ? 'rgba(120,200,255,0.25)' : '';
+        canvas.style.cursor = on ? 'crosshair' : 'grab';
+    });
+    bubbleWeaponBtn.addEventListener('click', () => {
+        weaponsDropdown.style.display = 'none';
+        const on = !bubbleActive;
+        deactivateLegacyWeapons(); deactivateNewWeapons();
+        bubbleActive = on;
+        bubbleWeaponBtn.style.background = on ? 'rgba(150,220,255,0.25)' : '';
+        canvas.style.cursor = on ? 'crosshair' : 'grab';
+    });
+    dynamiteWeaponBtn.addEventListener('click', () => {
+        weaponsDropdown.style.display = 'none';
+        const on = !dynamiteActive;
+        deactivateLegacyWeapons(); deactivateNewWeapons();
+        dynamiteActive = on;
+        dynamiteWeaponBtn.style.background = on ? 'rgba(255,120,80,0.25)' : '';
+        canvas.style.cursor = on ? 'crosshair' : 'grab';
+    });
+    blackHoleWeaponBtn.addEventListener('click', () => {
+        weaponsDropdown.style.display = 'none';
+        if (blackHoleActive) { deactivateNewWeapons(); canvas.style.cursor = 'grab'; return; }
+        deactivateLegacyWeapons(); deactivateNewWeapons();
+        blackHoleActive = true; blackHolePlacing = true;
+        blackHoleWeaponBtn.textContent = '🕳️ Black Hole: click to place';
+        canvas.style.cursor = 'crosshair';
+    });
+
+    // Encase the duck nearest the cursor in a rising bubble.
+    function bubbleShootAt(px, py) {
+        const { duck: d } = closestDuck(px, py);
+        if (!d || d.superHeroActive) return;
+        d.bubbleTime = 4200; d.bubbleWob = Math.random() * Math.PI * 2;
+        d.physics.vy = Math.min(d.physics.vy, -4);
+        pushUndo('🔵 Bubble', () => { d.bubbleTime = 0; });
+        playSFX && playSFX('pop');
+        const sx = width/2 + d.physics.x, sy = height/2 + 50 + d.physics.y;
+        for (let i = 0; i < 14; i++) {
+            const a = (i / 14) * Math.PI * 2;
+            bhParticles.push({ x: sx + Math.cos(a)*30, y: sy + Math.sin(a)*30,
+                vx: Math.cos(a)*2.2, vy: Math.sin(a)*2.2, life: 0.7, col: 'rgba(200,240,255,0.9)', plain: true });
+        }
+    }
+
+    // Drop a stick of dynamite into the world at a screen point.
+    function dropDynamite(px, py) {
+        const dn = { x: px - width/2, y: py - (height/2 + 50), vy: 0, fuse: 1100, max: 1100 };
+        dynamites.push(dn);
+        pushUndo('🧨 Dynamite', () => { const i = dynamites.indexOf(dn); if (i >= 0) dynamites.splice(i, 1); });
+        playSFX && playSFX('pickup');
+    }
+
+    function explodeDynamite(dn) {
+        const sx = width/2 + dn.x, sy = height/2 + 50 + dn.y;
+        const RAD = 240;
+        for (const d of ducks) {
+            if (d.physics.isDragging) continue;
+            const dist = Math.hypot(dn.x - d.physics.x, dn.y - d.physics.y);
+            if (dist < RAD) {
+                const f = 1 - dist/RAD;
+                const dirx = dist > 1 ? (d.physics.x - dn.x)/dist : 0;
+                d.physics.vx += dirx * 26 * f + (Math.random()-0.5)*4;
+                d.physics.vy = -22 * f - 6;
+                d.squash.x = 0.6; d.squash.y = 1.45;
+            }
+        }
+        for (const b of balls) {
+            const dist = Math.hypot(dn.x - b.x, dn.y - b.y) || 1;
+            if (dist < RAD) { b.vx += (b.x - dn.x)/dist * 14; b.vy += (b.y - dn.y)/dist * 14 - 6; }
+        }
+        for (const tg of targets) {
+            const dist = Math.hypot(dn.x - tg.x, dn.y - tg.y);
+            if (dist < RAD) damageTarget(tg, 60 * (1 - dist/RAD), 'physical');
+        }
+        const cols = ['#ffe28a','#ff9d3c','#ff5a2b','#ffffff','#7a4a2a'];
+        for (let i = 0; i < 34; i++) {
+            const a = Math.random()*Math.PI*2, spd = 4 + Math.random()*11;
+            bhParticles.push({ x: sx, y: sy, vx: Math.cos(a)*spd, vy: Math.sin(a)*spd - 3,
+                life: 1.0, col: cols[i % cols.length], plain: true, grav: true });
+        }
+        blastFlash = Math.max(blastFlash, 0.45);
+        playSFX && playSFX('weapon');
+    }
+
+    // Per-frame physics for the new weapons (forces only; drawing happens later).
+    function applyNewWeaponForces(dt) {
+        const sec = Math.min(dt, 50) / 1000;
+        // Picking a built-in weapon cancels the new ones (mutual exclusivity).
+        if ((currentTool === 'freeze' || taserArmed || flameArmed || fanActive || cannonActive) &&
+            (tractorActive || bubbleActive || dynamiteActive || blackHoleActive)) {
+            deactivateNewWeapons();
+        }
+
+        // 🧲 Tractor Beam — pull ducks toward the cursor while the button is held.
+        if (tractorActive && tractorPulling && lastPointer) {
+            const RANGE = 460, STR = 2.6;
+            for (const d of ducks) {
+                if (d.physics.isDragging) continue;
+                const dsx = width/2 + d.physics.x, dsy = height/2 + 50 + d.physics.y;
+                const toX = lastPointer.x - dsx, toY = lastPointer.y - dsy;
+                const dist = Math.hypot(toX, toY) || 1;
+                if (dist > RANGE) continue;
+                const f = 1 - dist/RANGE;
+                if (dist > 46) { d.physics.vx += (toX/dist) * STR * (0.4 + f); d.physics.vy += (toY/dist) * STR * (0.4 + f); }
+                else { d.physics.vx *= 0.78; d.physics.vy *= 0.78; }
+            }
+            if (Math.random() < 0.9) {
+                const a = Math.random()*Math.PI*2, r = 70 + Math.random()*90;
+                bhParticles.push({ x: lastPointer.x + Math.cos(a)*r, y: lastPointer.y + Math.sin(a)*r,
+                    tx: lastPointer.x, ty: lastPointer.y, life: 0.7, col: 'rgba(140,210,255,0.9)', tract: true });
+            }
+        }
+
+        // 🕳️ Black Hole — pull ducks, balls and foods toward the well, with a swirl.
+        if (blackHoleActive && !blackHolePlacing) {
+            blackHoleSpin += sec * 3;
+            const bwX = blackHoleX - width/2, bwY = blackHoleY - (height/2 + 50);
+            const RANGE = 520, STR = 3.4, SWIRL = 1.1;
+            const pull = (ox, oy, setV) => {
+                const toX = bwX - ox, toY = bwY - oy;
+                const dist = Math.hypot(toX, toY) || 1;
+                if (dist > RANGE) return;
+                const f = 1 - dist/RANGE, nx = toX/dist, ny = toY/dist;
+                setV(nx * STR * (0.5 + f) - ny * SWIRL * f, ny * STR * (0.5 + f) + nx * SWIRL * f);
+            };
+            for (const d of ducks) {
+                if (d.physics.isDragging) continue;
+                pull(d.physics.x, d.physics.y, (ax, ay) => { d.physics.vx += ax; d.physics.vy += ay; });
+            }
+            for (const b of balls) pull(b.x, b.y, (ax, ay) => { b.vx += ax; b.vy += ay; });
+            for (const f of foods) pull(f.x, f.y, (ax, ay) => { f.vx += ax; f.vy += ay; });
+            for (let i = 0; i < 2; i++) {
+                const a = Math.random()*Math.PI*2, r = 40 + Math.random()*150;
+                bhParticles.push({ x: blackHoleX + Math.cos(a)*r, y: blackHoleY + Math.sin(a)*r,
+                    tx: blackHoleX, ty: blackHoleY, life: 0.85, col: `hsla(${265 + Math.random()*60},90%,72%,0.9)`, tract: true });
+            }
+        }
+
+        // 🧨 Dynamite — fall, fuse, detonate.
+        for (let i = dynamites.length - 1; i >= 0; i--) {
+            const dn = dynamites[i];
+            dn.vy += gravityValue; dn.y += dn.vy;
+            if (dn.y > 0) { dn.y = 0; dn.vy *= -0.4; if (Math.abs(dn.vy) < 1) dn.vy = 0; }
+            dn.fuse -= dt;
+            if (dn.fuse <= 0) { explodeDynamite(dn); dynamites.splice(i, 1); }
+        }
+
+        // 🫧 Bubble — encased ducks drift upward, wobble, then pop.
+        const ceil = -(height/2 - 70);
+        for (const d of ducks) {
+            if ((d.bubbleTime || 0) > 0) {
+                d.bubbleTime -= dt;
+                d.bubbleWob = (d.bubbleWob || 0) + sec * 3;
+                d.physics.vx = Math.sin(d.bubbleWob) * 1.0;
+                d.physics.vy = (d.physics.y <= ceil ? 0 : -2.4) - gravityValue;  // +gravity later nets a gentle rise
+                if (d.bubbleTime <= 0) {
+                    d.bubbleTime = 0;
+                    const sx = width/2 + d.physics.x, sy = height/2 + 50 + d.physics.y;
+                    for (let i = 0; i < 16; i++) {
+                        const a = Math.random()*Math.PI*2, spd = 2 + Math.random()*4;
+                        bhParticles.push({ x: sx, y: sy, vx: Math.cos(a)*spd, vy: Math.sin(a)*spd - 2,
+                            life: 0.6, col: 'rgba(200,240,255,0.9)', plain: true });
+                    }
+                    d.physics.vy = -3;
+                    playSFX && playSFX('pop');
+                }
+            }
+        }
+
+        if (blastFlash > 0) blastFlash = Math.max(0, blastFlash - sec * 2);
+    }
+
+    // Translucent bubble drawn around an encased duck (called from the duck loop).
+    function drawBubble(bx, by, life) {
+        const fade = life < 500 ? life / 500 : 1;
+        const R = 66 + Math.sin(performance.now()*0.005 + bx*0.05) * 3;
+        ctx.save();
+        ctx.globalAlpha = 0.5 * fade;
+        const g = ctx.createRadialGradient(bx - R*0.3, by - R*0.4, R*0.1, bx, by, R);
+        g.addColorStop(0, 'rgba(255,255,255,0.5)');
+        g.addColorStop(0.6, 'rgba(170,225,255,0.12)');
+        g.addColorStop(1, 'rgba(120,200,255,0.28)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(bx, by, R, 0, Math.PI*2); ctx.fill();
+        ctx.globalAlpha = 0.8 * fade; ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(220,245,255,0.8)';
+        ctx.beginPath(); ctx.arc(bx, by, R, 0, Math.PI*2); ctx.stroke();
+        ctx.globalAlpha = 0.9 * fade; ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(bx - R*0.4, by - R*0.45, R*0.13, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(bx - R*0.18, by - R*0.62, R*0.06, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
+    }
+
+    // Draw the new weapons + their FX (called once per frame, after the ducks).
+    function drawNewWeapons(now) {
+        // Black hole
+        if (blackHoleActive) {
+            const hx = blackHolePlacing ? (lastPointer ? lastPointer.x : width/2) : blackHoleX;
+            const hy = blackHolePlacing ? (lastPointer ? lastPointer.y : height/2) : blackHoleY;
+            const R = 46;
+            ctx.save();
+            const gg = ctx.createRadialGradient(hx, hy, 4, hx, hy, R*2.4);
+            gg.addColorStop(0, 'rgba(20,0,40,1)');
+            gg.addColorStop(0.45, 'rgba(80,20,140,0.55)');
+            gg.addColorStop(1, 'rgba(120,60,200,0)');
+            ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(hx, hy, R*2.4, 0, Math.PI*2); ctx.fill();
+            ctx.lineWidth = 3;
+            for (let a = 0; a < 4; a++) {
+                const rr = R*1.2 + a*8;
+                ctx.strokeStyle = `hsla(${270 + a*22},90%,66%,${0.6 - a*0.12})`;
+                ctx.beginPath(); ctx.arc(hx, hy, rr, blackHoleSpin + a*1.6, blackHoleSpin + a*1.6 + Math.PI*1.2); ctx.stroke();
+            }
+            ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(hx, hy, R*0.62, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = 'rgba(180,140,255,0.85)'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(hx, hy, R*0.62, 0, Math.PI*2); ctx.stroke();
+            ctx.restore();
+        }
+
+        // Dynamite sticks
+        for (const dn of dynamites) {
+            const sx = width/2 + dn.x, sy = height/2 + 50 + dn.y;
+            const fp = dn.fuse / dn.max;
+            ctx.save();
+            ctx.translate(sx, sy);
+            ctx.fillStyle = '#c0392b'; ctx.strokeStyle = '#7b241c'; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.roundRect(-8, -22, 16, 30, 3); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fillRect(-8, -14, 16, 4);
+            ctx.strokeStyle = '#5b3a1a'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(0, -22); ctx.quadraticCurveTo(6, -30, 2, -36); ctx.stroke();
+            if (Math.sin(performance.now() * (fp < 0.3 ? 0.05 : 0.02)) > 0) {
+                ctx.fillStyle = '#ffd24a'; ctx.beginPath(); ctx.arc(2, -37, 3.5 + Math.random()*1.5, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(2, -37, 1.6, 0, Math.PI*2); ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        // Shared FX specks
+        for (let i = bhParticles.length - 1; i >= 0; i--) {
+            const p = bhParticles[i];
+            if (p.tract) { p.x += (p.tx - p.x) * 0.14; p.y += (p.ty - p.y) * 0.14; p.life -= 0.03; }
+            else { p.x += p.vx; p.y += p.vy; if (p.grav) p.vy += 0.35; p.vx *= 0.98; p.life -= 0.03; }
+            if (p.life <= 0) { bhParticles.splice(i, 1); continue; }
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, p.life);
+            ctx.fillStyle = p.col;
+            ctx.beginPath(); ctx.arc(p.x, p.y, 2.5 + (p.plain ? 1.5 : 0), 0, Math.PI*2); ctx.fill();
+            ctx.restore();
+        }
+
+        // Tractor beam magnet at the cursor
+        if (tractorActive && lastPointer) {
+            ctx.save();
+            ctx.translate(lastPointer.x, lastPointer.y);
+            if (tractorPulling) {
+                const pr = 16 + (performance.now()*0.18 % 28);
+                ctx.strokeStyle = 'rgba(140,210,255,0.5)'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.arc(0, 0, pr, 0, Math.PI*2); ctx.stroke();
+            }
+            ctx.lineWidth = 8; ctx.lineCap = 'butt';
+            ctx.strokeStyle = '#d63031';
+            ctx.beginPath(); ctx.arc(0, 0, 14, Math.PI, 0, false); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(-14, 0); ctx.lineTo(-14, 12); ctx.moveTo(14, 0); ctx.lineTo(14, 12); ctx.stroke();
+            ctx.strokeStyle = '#b2bec3';
+            ctx.beginPath(); ctx.moveTo(-14, 12); ctx.lineTo(-14, 18); ctx.moveTo(14, 12); ctx.lineTo(14, 18); ctx.stroke();
+            ctx.restore();
+        }
+
+        // Explosion flash
+        if (blastFlash > 0) {
+            ctx.save(); ctx.globalAlpha = Math.min(0.5, blastFlash); ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, width, height); ctx.restore();
+        }
+    }
 
     // Party Balls, Food & Slime States
     let balls = [];
@@ -1874,6 +2196,7 @@
         fanActive = false; fanAnchored = false; fanPlacing = false;
         fanHoverX = 0; fanHoverY = 0; fanWindParticles = [];
         deactivateCannon(); cannonSmokeParticles = []; cannonPowTimer = 0;
+        deactivateNewWeapons(); dynamites = []; bhParticles = []; blastFlash = 0; for (const d of ducks) d.bubbleTime = 0;
         currentDecade = null; currentDecadeIdx = 0; timeMachineTraveling = false; timeMachineTimer = 0;
         timeMachineBtn.textContent = '⏱️ Time Machine';
         canvas.style.cursor = 'grab';
@@ -2237,6 +2560,32 @@
             }
         }
 
+        // Black Hole placement / re-placement
+        if (blackHoleActive) {
+            if (blackHolePlacing) {
+                blackHoleX = p.x; blackHoleY = p.y; blackHolePlacing = false;
+                blackHoleWeaponBtn.textContent = '🕳️ Black Hole (placed) — click it to move';
+                canvas.style.cursor = 'grab';
+                if (!blackHolePlacedOnce) {
+                    blackHolePlacedOnce = true;
+                    pushUndo('🕳️ Black Hole', () => {
+                        blackHoleActive = false; blackHolePlacing = false; blackHolePlacedOnce = false;
+                        blackHoleWeaponBtn.textContent = '🕳️ Black Hole';
+                    });
+                }
+                if (e.cancelable) e.preventDefault(); return;
+            }
+            if (Math.hypot(p.x - blackHoleX, p.y - blackHoleY) < 60) {
+                blackHolePlacing = true;
+                blackHoleWeaponBtn.textContent = '🕳️ Black Hole: click to place';
+                canvas.style.cursor = 'crosshair';
+                if (e.cancelable) e.preventDefault(); return;
+            }
+        }
+        if (tractorActive)  { tractorPulling = true; if (e.cancelable) e.preventDefault(); return; }
+        if (dynamiteActive) { dropDynamite(p.x, p.y); if (e.cancelable) e.preventDefault(); return; }
+        if (bubbleActive)   { bubbleShootAt(p.x, p.y); if (e.cancelable) e.preventDefault(); return; }
+
         if (currentTool === 'freeze') { isShooting = true; if (e.cancelable) e.preventDefault(); return; }
         if (taserArmed) { taserShooting = true; if (e.cancelable) e.preventDefault(); return; }
         if (flameArmed) { flameShooting = true; if (e.cancelable) e.preventDefault(); return; }
@@ -2382,6 +2731,7 @@
 
     function pointerUp(e) {
         if (isSkateMode || isFightingMode) return;
+        if (tractorPulling) tractorPulling = false;
         if (cannonDraggingAngle) { cannonDraggingAngle = false; return; }
         if (fanDraggingAngle) { fanDraggingAngle = false; return; }
         if (currentTool === 'freeze' && isShooting) {
@@ -12000,8 +12350,10 @@
         );
         const hasFriends = ducks.length > 1;
         const hasWeapon = currentTool === 'freeze' || taserArmed || flameArmed || fanActive || frozenTimeRemaining > 0 || cannonActive;
+        const hasNewWeapon = tractorActive || bubbleActive || dynamiteActive || blackHoleActive ||
+            dynamites.length > 0 || ducks.some(d => (d.bubbleTime || 0) > 0);
         const hasSuperHero = ducks.some(d => d.superHeroActive);
-        if (balls.length > 0 || foods.length > 0 || slimes.length > 0 || targets.length > 0 || hasMutations || hasWeapon || hasFriends || hasSuperHero) {
+        if (balls.length > 0 || foods.length > 0 || slimes.length > 0 || targets.length > 0 || hasMutations || hasWeapon || hasNewWeapon || hasFriends || hasSuperHero) {
             clearBtn.style.display = 'block';
             undoBtn.style.display  = 'inline-flex';
         } else {
@@ -12216,6 +12568,9 @@
                 });
             }
         }
+
+        // New weapons (Tractor Beam / Black Hole / Dynamite / Bubble) — apply forces
+        applyNewWeaponForces(dt);
 
         const speedUpMultiplier = 1.0 + (duckMutations.currentEnergy * 1.5);
         duckTime += dt * speedUpMultiplier;
@@ -12526,6 +12881,12 @@
             ctx.filter = 'none';
             ctx.restore();
 
+            // 🫧 Bubble overlay — drawn around the duck it traps
+            if ((d.bubbleTime || 0) > 0) {
+                drawBubble(width/2 + d.physics.x + shakeX + offsetX,
+                           height/2 + 50 + d.physics.y + shakeY, d.bubbleTime);
+            }
+
             // Evil auto-attack logic
             if (d.evilMode && ducks.length > 1) {
                 d.evilAutoAttackTimer -= dt;
@@ -12610,6 +12971,7 @@
             }
         }
         
+        drawNewWeapons(now);
         drawAllSlimes();
         drawFreezeRayEffects(dt, duckScreenX, duckScreenY);
 
