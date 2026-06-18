@@ -8985,7 +8985,7 @@
         // Idle hint — when the player stalls during free play, surface a valid swap to nudge them.
         if(s.phase==='idle'){
             s.idle+=dt;
-            if(s.idle>=4500&&!s.hint)s.hint=dmFindHint(s);
+            if(s.idle>=10000&&!s.hint)s.hint=dmFindHint(s);
         }else{s.idle=0;s.hint=null;}
 
         for(let i=s.particles.length-1;i>=0;i--){
