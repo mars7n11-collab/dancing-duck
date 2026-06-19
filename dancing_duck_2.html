@@ -9657,6 +9657,31 @@
     const ULT_TYPES = Object.keys(ULT_OBJ);
     const ultRand = (a, b) => a + Math.random() * (b - a);
 
+    // Super-form roster — Space transforms into the first, then cycles through the rest.
+    const ULT_FORMS = [
+        { name: 'GOLD SAIYAN',  glow: '#ffd54a', eye: '#33e0ff', dmg: 1.6, spd: 1.5, score: 2 },
+        { name: 'CRIMSON FURY', glow: '#ff5d73', eye: '#fff04d', dmg: 2.4, spd: 1.3, score: 2 },
+        { name: 'AZURE BOLT',   glow: '#5ad1ff', eye: '#ffffff', dmg: 1.5, spd: 2.0, score: 2 },
+        { name: 'PRISM GOD',    glow: 'rainbow', eye: '#ffffff', dmg: 2.8, spd: 2.1, score: 3 },
+    ];
+    const hexA = (h, a) => { const n = parseInt(h.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
+    function ultForm(s) { return s.super ? ULT_FORMS[((s.form % ULT_FORMS.length) + ULT_FORMS.length) % ULT_FORMS.length] : null; }
+    function ultRainbow(s, a) { return `hsla(${(s.t * 0.4) % 360},100%,65%,${a})`; }
+    function ultPalette(s) {
+        const f = ultForm(s);
+        if (!f) return { glow: '#7fe9ff', aura0: 'rgba(120,225,255,0.32)', aura1: 'rgba(120,225,255,0)', blade: 'rgba(150,235,255,0.85)', hair: '#f0922f', eye: '#1b2b3a', bodyA: '#ffe27a', bodyB: '#f5b400', super: false };
+        const rb = f.glow === 'rainbow';
+        return {
+            glow: rb ? ultRainbow(s, 1) : f.glow,
+            aura0: rb ? ultRainbow(s, 0.55) : hexA(f.glow, 0.55),
+            aura1: rb ? ultRainbow(s, 0) : hexA(f.glow, 0),
+            blade: rb ? ultRainbow(s, 0.9) : hexA(f.glow, 0.9),
+            hair: rb ? ultRainbow(s, 1) : f.glow,
+            eye: f.eye, bodyA: '#fff6c0', bodyB: rb ? ultRainbow(s, 1) : f.glow, super: true,
+        };
+    }
+    const ultATK = (s, base) => base * (ultForm(s) ? ultForm(s).dmg : 1);
+
     function ultMakeObject(s) {
         const t = ULT_TYPES[(Math.random() * ULT_TYPES.length) | 0];
         const cfg = ULT_OBJ[t];
@@ -9682,11 +9707,17 @@
             W, H,
             duck: { x: W * 0.4, y: H * 0.5, vx: 0, vy: 0, facing: 1, lean: 0 },
             keys: {},
-            power: 0, super: false, superT: 0,
+            power: 0, super: false, superT: 0, form: 0,
+            sp: 0, beam: null,                              // special meter + active ultimate beam
             charging: false, ki: 0,
-            slashT: 0, dashT: 0, dashCd: 0, invul: 0,
+            mouse: { x: W * 0.6, y: H * 0.5, active: false }, mDown: false, mHoldT: 0, mFireCd: 0,
+            rDown: false, rHoldT: 0, dashMax: 0,            // right-click super dash (hold to charge)
+            slashT: 0, spinT: 0, spinCd: 0, poundCd: 0, dashT: 0, dashCd: 0, invul: 0,
             blasts: [], objects: [], debris: [], particles: [], rings: [], trail: [], speedLines: [],
+            foes: [], foeSpawnT: 3000,                      // homing energy orbs that fight back
+            boss: null, kills: 0, nextBoss: 12, bossCount: 0,   // mini-boss encounters
             combo: 0, comboT: 0, score: 0, best: +(localStorage.getItem('ultimateBest') || 0),
+            comboMilestone: 0, announce: null, cutin: null, hurt: 0,   // combo callouts + transform cut-in + damage vignette
             shake: 0, flash: 0, hitstop: 0, bgHue: ultRand(0, 360), t: 0,
             spawnT: 0,
         };
@@ -9705,6 +9736,10 @@
         ultState = initUltimate();
         window.addEventListener('keydown', ultKeyDown);
         window.addEventListener('keyup', ultKeyUp);
+        canvas.addEventListener('mousemove', ultMouseMove);
+        canvas.addEventListener('mousedown', ultMouseDown);
+        window.addEventListener('mouseup', ultMouseUp);
+        canvas.addEventListener('contextmenu', ultPreventCtx);
         canvas.style.cursor = 'none';
     }
     function exitUltimateMode() {
@@ -9715,6 +9750,10 @@
         document.getElementById('ultimateExitBtn').style.display = 'none';
         window.removeEventListener('keydown', ultKeyDown);
         window.removeEventListener('keyup', ultKeyUp);
+        canvas.removeEventListener('mousemove', ultMouseMove);
+        canvas.removeEventListener('mousedown', ultMouseDown);
+        window.removeEventListener('mouseup', ultMouseUp);
+        canvas.removeEventListener('contextmenu', ultPreventCtx);
         ultState = null;
         canvas.style.cursor = 'grab';
         updateBodyBackground();
@@ -9724,12 +9763,15 @@
     function ultKeyDown(e) {
         const s = ultState; if (!s) return;
         const k = e.key === ' ' ? 'space' : e.key.toLowerCase();
-        if ([...ULT_MOVE_KEYS, 'j', 'k', 'l', 'shift', 'space'].includes(k)) e.preventDefault();
+        if ([...ULT_MOVE_KEYS, 'j', 'k', 'l', 'shift', 'space', 'h', 'g', 'u'].includes(k)) e.preventDefault();
         if (s.keys[k]) return;          // ignore key-repeat for edge triggers
         s.keys[k] = true;
         if (k === 'j') ultSlash(s);
         else if (k === 'k') { s.charging = true; s.ki = 0; }
         else if (k === 'l' || k === 'shift') ultDash(s);
+        else if (k === 'h') ultSpinSlash(s);
+        else if (k === 'g') ultGroundPound(s);
+        else if (k === 'u') ultFireUltimate(s);
         else if (k === 'space') ultTryTransform(s);
     }
     function ultKeyUp(e) {
@@ -9753,8 +9795,9 @@
         // damage objects within the slash arc
         for (const o of s.objects) {
             const dx = o.x - d.x, dy = o.y - d.y, dist = Math.hypot(dx, dy);
-            if (dist < 120 && (dx * aim.x + dy * aim.y) > -20) ultDamageObj(s, o, 2, '#bdf7ff');
+            if (dist < 120 && (dx * aim.x + dy * aim.y) > -20) ultDamageObj(s, o, ultATK(s, 2), '#bdf7ff');
         }
+        ultHitFoes(s, hx, hy, 64, ultATK(s, 2));     // slice incoming orbs / chip the boss
         for (let i = 0; i < 14; i++) {
             const a = Math.atan2(aim.y, aim.x) + ultRand(-0.9, 0.9);
             s.particles.push({ x: hx, y: hy, vx: Math.cos(a) * ultRand(60, 360), vy: Math.sin(a) * ultRand(60, 360),
@@ -9777,11 +9820,91 @@
         playSFX && playSFX(big ? 'dmPower' : 'pop');
     }
 
+    // Aim toward the mouse cursor when it's active, else fall back to flight direction
+    function ultPointer(s) {
+        if (s.mouse && s.mouse.active) {
+            const dx = s.mouse.x - s.duck.x, dy = s.mouse.y - s.duck.y, m = Math.hypot(dx, dy) || 1;
+            return { x: dx / m, y: dy / m };
+        }
+        return ultAim(s);
+    }
+
+    // 🖱 Rapid blaster — a fast little ki bolt toward the cursor (tap-spam = machine-gun fire)
+    let ultBoltN = 0;
+    function ultRapidBolt(s) {
+        const d = s.duck, aim = ultPointer(s);
+        const hx = d.x + aim.x * 26, hy = d.y + aim.y * 26 - 4;
+        s.blasts.push({
+            x: hx, y: hy,
+            vx: aim.x * 1180 + d.vx * 0.25, vy: aim.y * 1180 + d.vy * 0.25,
+            r: s.super ? 8 : 6, dmg: ultATK(s, s.super ? 2 : 1), life: 1.0, charged: false,
+            hue: s.super ? 48 : 190,
+        });
+        if (Math.abs(aim.x) > 0.35) d.facing = aim.x > 0 ? 1 : -1;
+        const a0 = Math.atan2(aim.y, aim.x);
+        for (let i = 0; i < 4; i++) {
+            const a = a0 + ultRand(-0.5, 0.5);
+            s.particles.push({ x: hx, y: hy, vx: Math.cos(a) * ultRand(80, 280), vy: Math.sin(a) * ultRand(80, 280),
+                life: 0.22, max: 0.22, col: '#cffcff', r: ultRand(1.5, 3.5) });
+        }
+        s.shake = Math.max(s.shake, 2);
+        if ((ultBoltN++ & 1) === 0) playSFX && playSFX('pop');   // every other bolt, so it doesn't get noisy
+    }
+
+    // 🖱 Hold-to-charge release — unleashes a big blast scaled by how long you held
+    function ultChargedRelease(s, frac) {
+        const d = s.duck, aim = ultPointer(s);
+        s.blasts.push({
+            x: d.x + aim.x * 30, y: d.y + aim.y * 30 - 6,
+            vx: aim.x * (920 + frac * 280), vy: aim.y * (920 + frac * 280),
+            r: 14 + frac * 36, dmg: ultATK(s, 2 + Math.round(frac * 7)), life: 1.6, charged: true,
+            hue: s.super ? 48 : 200,
+        });
+        if (Math.abs(aim.x) > 0.2) d.facing = aim.x > 0 ? 1 : -1;
+        s.shake = Math.max(s.shake, 9 + frac * 9); s.flash = Math.max(s.flash, 0.22 + frac * 0.28);
+        s.rings.push({ x: d.x + aim.x * 30, y: d.y + aim.y * 30, r: 8, max: 60 + frac * 140, life: 1, col: ultPalette(s).glow });
+        for (let i = 0; i < 14; i++) {
+            const a = ultRand(0, Math.PI * 2), sp = ultRand(80, 320);
+            s.particles.push({ x: d.x, y: d.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.5, max: 0.5, col: ['#fff', '#cffcff', '#ffd54a'][i % 3], r: ultRand(2, 5), star: i % 3 === 0 });
+        }
+        playSFX && playSFX('dmPower');
+    }
+
+    function ultMouseMove(e) {
+        const s = ultState; if (!s) return;
+        const rect = canvas.getBoundingClientRect();
+        s.mouse.x = (e.clientX - rect.left) * (canvas.width / rect.width);
+        s.mouse.y = (e.clientY - rect.top) * (canvas.height / rect.height);
+        s.mouse.active = true;
+    }
+    function ultMouseDown(e) {
+        const s = ultState; if (!s) return;
+        e.preventDefault();
+        ultMouseMove(e);                 // make sure aim is current on the click
+        if (e.button === 0) {            // left — rapid blaster
+            s.mDown = true; s.mHoldT = 0;
+            ultRapidBolt(s); s.mFireCd = s.super ? 55 : 80;   // instant shot on click; stream continues while held
+        } else if (e.button === 2) {     // right — charge a super dash
+            s.rDown = true; s.rHoldT = 0;
+        }
+    }
+    function ultMouseUp(e) {
+        const s = ultState; if (!s) return;
+        if (e.button === 0) {
+            if (s.mDown && s.mHoldT >= 450) ultChargedRelease(s, Math.min(1, (s.mHoldT - 450) / 1100));
+            s.mDown = false; s.mHoldT = 0;
+        } else if (e.button === 2) {
+            if (s.rDown && s.dashCd <= 0) ultSuperDash(s, Math.min(1, s.rHoldT / 1200));
+            s.rDown = false; s.rHoldT = 0;
+        }
+    }
+    function ultPreventCtx(e) { e.preventDefault(); }
+
     function ultDash(s) {
         if (s.dashCd > 0) return;
         const d = s.duck, aim = ultAim(s);
         d.vx = aim.x * 1180; d.vy = aim.y * 1180;
-        s.dashT = 240; s.dashCd = 520; s.invul = 320;
+        s.dashT = 240; s.dashCd = 520; s.invul = 320; s.dashMax = 1300;
         s.shake = Math.max(s.shake, 5);
         for (let i = 0; i < 10; i++)
             s.particles.push({ x: d.x, y: d.y, vx: -aim.x * ultRand(40, 220) + ultRand(-40, 40), vy: -aim.y * ultRand(40, 220) + ultRand(-40, 40),
@@ -9789,8 +9912,98 @@
         playSFX && playSFX('dmPower');
     }
 
+    // 🖱R Super Dash — blink toward the cursor; hold builds charge for a longer, faster lunge
+    function ultSuperDash(s, frac) {
+        const d = s.duck;
+        let ax, ay;
+        if (s.mouse && s.mouse.active) { const dx = s.mouse.x - d.x, dy = s.mouse.y - d.y, m = Math.hypot(dx, dy) || 1; ax = dx / m; ay = dy / m; }
+        else { const a = ultAim(s); ax = a.x; ay = a.y; }
+        const speed = 1550 + frac * 1450;                 // super fast → even faster with charge
+        d.vx = ax * speed; d.vy = ay * speed;
+        s.dashT = 200 + frac * 360;                       // longer dash with charge → travels farther
+        s.dashMax = speed;                                // let the speed clamp allow the full burst
+        s.dashCd = 320; s.invul = Math.max(s.invul, s.dashT + 90);
+        s.shake = Math.max(s.shake, 9 + frac * 11);
+        s.flash = Math.max(s.flash, 0.16 + frac * 0.24);
+        d.facing = ax >= 0 ? 1 : -1;
+        const ang = Math.atan2(ay, ax), P = ultPalette(s);
+        s.rings.push({ x: d.x, y: d.y, r: 10, max: 80 + frac * 140, life: 1, col: P.glow });
+        for (let i = 0; i < 22 + ((frac * 22) | 0); i++) {
+            const a = ang + Math.PI + ultRand(-0.7, 0.7);
+            s.particles.push({ x: d.x, y: d.y, vx: Math.cos(a) * ultRand(140, 560), vy: Math.sin(a) * ultRand(140, 560),
+                life: 0.5, max: 0.5, col: i % 2 ? '#fff' : P.glow, r: ultRand(2, 5), star: i % 4 === 0 });
+        }
+        for (let i = 0; i < 20; i++) s.speedLines.push({ a: ang + ultRand(-0.3, 0.3), len: ultRand(140, 320), life: 1, max: 1 });
+        // flame jet bursting out the back of the launch
+        for (let i = 0; i < 16 + ((frac * 24) | 0); i++) {
+            const a = ang + Math.PI + ultRand(-0.6, 0.6), sp = ultRand(120, 460) * (0.7 + frac);
+            s.particles.push({ x: d.x, y: d.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+                life: 0.4 + 0.35 * frac, max: 0.75, r: ultRand(6, 13) + frac * 6, flame: true });
+        }
+        playSFX && playSFX('dmStreak');
+    }
+
+    // H — 360° spin slash: hits everything in a radius, short cooldown
+    function ultSpinSlash(s) {
+        if (s.spinCd > 0) return;
+        const d = s.duck, R = 150, P = ultPalette(s);
+        s.spinT = 360; s.spinCd = 900; s.invul = Math.max(s.invul, 200);
+        for (const o of s.objects) {
+            if (!o.dead && Math.hypot(o.x - d.x, o.y - d.y) < R + o.r) ultDamageObj(s, o, ultATK(s, 3), P.blade);
+        }
+        ultHitFoes(s, d.x, d.y, R, ultATK(s, 3));    // whirl shreds nearby orbs / boss
+        s.rings.push({ x: d.x, y: d.y, r: 20, max: R + 50, life: 1, col: P.glow });
+        s.shake = Math.max(s.shake, 8);
+        for (let i = 0; i < 26; i++) {
+            const a = (i / 26) * Math.PI * 2;
+            s.particles.push({ x: d.x + Math.cos(a) * 40, y: d.y + Math.sin(a) * 40,
+                vx: Math.cos(a) * ultRand(220, 480), vy: Math.sin(a) * ultRand(220, 480),
+                life: 0.5, max: 0.5, col: '#cffcff', r: ultRand(2, 5) });
+        }
+        playSFX && playSFX('weapon');
+    }
+
+    // G — ground nova: radial shockwave that blasts and knocks objects outward
+    function ultGroundPound(s) {
+        if (s.poundCd > 0) return;
+        const d = s.duck, R = 210, P = ultPalette(s);
+        s.poundCd = 1100; s.dashT = Math.max(s.dashT, 140);
+        s.shake = Math.max(s.shake, 14); s.flash = Math.max(s.flash, 0.25);
+        for (const o of s.objects) {
+            if (o.dead) continue;
+            const dist = Math.hypot(o.x - d.x, o.y - d.y);
+            if (dist < R + o.r) {
+                ultDamageObj(s, o, ultATK(s, 5), '#ffd54a');
+                const a = Math.atan2(o.y - d.y, o.x - d.x);
+                o.vx += Math.cos(a) * 340; o.vy += Math.sin(a) * 340;
+            }
+        }
+        ultHitFoes(s, d.x, d.y, R, ultATK(s, 5));    // nova vaporises orbs / hammers boss
+        s.rings.push({ x: d.x, y: d.y, r: 30, max: R + 90, life: 1, col: P.glow });
+        s.rings.push({ x: d.x, y: d.y, r: 10, max: R, life: 1, col: '#fff' });
+        for (let i = 0; i < 30; i++) {
+            const a = ultRand(0, Math.PI * 2), sp = ultRand(160, 560);
+            s.particles.push({ x: d.x, y: d.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+                life: 0.7, max: 0.7, col: ['#ffd54a', '#fff', '#ff9d3c'][i % 3], r: ultRand(2, 6), star: i % 4 === 0 });
+        }
+        playSFX && playSFX('dmPower');
+    }
+
+    // U — ULTIMATE BEAM: a swelling beam locked to the aim direction; needs a full special meter
+    function ultFireUltimate(s) {
+        if (s.beam || s.sp < 1) return;
+        const aim = ultAim(s);
+        s.sp = 0;
+        s.beam = { ang: Math.atan2(aim.y, aim.x), life: 750, max: 750 };
+        s.shake = Math.max(s.shake, 18); s.flash = Math.max(s.flash, 0.5);
+        for (let i = 0; i < 30; i++) s.speedLines.push({ a: ultRand(0, Math.PI * 2), len: ultRand(80, 240), life: 1, max: 1 });
+        playSFX && playSFX('dmStreak');
+    }
+
     function ultTryTransform(s) {
         if (s.super || s.power < 1) return;
+        if (s.hasSupered) s.form = (s.form + 1) % ULT_FORMS.length;   // first → form 0, then cycle
+        s.hasSupered = true;
         s.super = true; s.superT = 13000; s.power = 1;
         s.flash = Math.max(s.flash, 0.9); s.shake = Math.max(s.shake, 20);
         s.rings.push({ x: s.duck.x, y: s.duck.y, r: 10, max: 360, life: 1, col: '#ffd54a' });
@@ -9800,8 +10013,16 @@
                 life: 0.9, max: 0.9, col: ['#ffd54a', '#fff3b0', '#ff9d3c'][i % 3], r: ultRand(2.5, 6), star: i % 2 === 0 });
         }
         for (let i = 0; i < 26; i++) s.speedLines.push({ a: ultRand(0, Math.PI * 2), len: ultRand(80, 260), life: 1, max: 1 });
+        s.cutin = { name: ULT_FORMS[s.form].name, t: 0, max: 1300 };   // cinematic transform cut-in
+        s.hitstop = Math.max(s.hitstop, 90);                            // brief freeze for impact
         playSFX && playSFX('dmStreak');
     }
+
+    // Escalating combo callouts — anime hype announcer
+    const ULT_MILES = [
+        { n: 5, txt: 'NICE!' }, { n: 10, txt: 'GREAT!!' }, { n: 18, txt: 'INSANE!!' },
+        { n: 30, txt: 'GODLIKE!!!' }, { n: 50, txt: 'UNREAL!!!' }, { n: 75, txt: 'LEGENDARY!!!' },
+    ];
 
     function ultDamageObj(s, o, amount, col) {
         if (o.dead) return;
@@ -9810,11 +10031,18 @@
             o.dead = true;
             const cfg = ULT_OBJ[o.t];
             // combo + score + power
-            s.combo++; s.comboT = 2000;
-            const gain = (cfg.score) * Math.max(1, s.combo) * (s.super ? 2 : 1);
+            s.combo++; s.comboT = 2000; s.kills++;
+            for (const m of ULT_MILES) if (s.combo === m.n && s.comboMilestone < m.n) {
+                s.comboMilestone = m.n;
+                s.announce = { txt: m.txt, t: 0, max: 1050 };
+                s.shake = Math.max(s.shake, 11); s.flash = Math.max(s.flash, 0.2);
+                playSFX && playSFX('casinoJackpot');
+            }
+            const gain = (cfg.score) * Math.max(1, s.combo) * (ultForm(s) ? ultForm(s).score : 1);
             s.score += gain;
             if (s.score > s.best) { s.best = s.score; try { localStorage.setItem('ultimateBest', s.best); } catch (_) {} }
             s.power = Math.min(1, s.power + 0.13);
+            s.sp = Math.min(1, s.sp + 0.06);            // builds the ULTIMATE beam meter
             s.shake = Math.max(s.shake, s.super ? 12 : 8);
             s.hitstop = Math.max(s.hitstop, 55);
             s.rings.push({ x: o.x, y: o.y, r: 6, max: 90 + o.r * 2, life: 1, col: col || '#fff' });
@@ -9843,18 +10071,148 @@
         }
     }
 
+    // ── Fightback enemies: homing energy orbs you dodge, deflect (dash), or destroy ──
+    function ultSpawnFoe(s) {
+        const edge = Math.random() * 4 | 0; let x, y;
+        if (edge === 0) { x = -40; y = ultRand(0, s.H); }
+        else if (edge === 1) { x = s.W + 40; y = ultRand(0, s.H); }
+        else if (edge === 2) { x = ultRand(0, s.W); y = -40; }
+        else { x = ultRand(0, s.W); y = s.H + 40; }
+        s.foes.push({ x, y, vx: 0, vy: 0, r: 15, hp: 2, life: 11000, born: 0, hue: ultRand(285, 330), seed: ultRand(0, 6.28) });
+    }
+    function ultKillFoe(s, f, deflected) {
+        s.score += 120; s.sp = Math.min(1, s.sp + 0.05);
+        if (s.score > s.best) { s.best = s.score; try { localStorage.setItem('ultimateBest', s.best); } catch (_) {} }
+        s.shake = Math.max(s.shake, deflected ? 7 : 4);
+        s.rings.push({ x: f.x, y: f.y, r: 4, max: 64, life: 1, col: `hsl(${f.hue},100%,68%)` });
+        for (let i = 0; i < 14; i++) {
+            const a = ultRand(0, Math.PI * 2), sp = ultRand(60, 320);
+            s.particles.push({ x: f.x, y: f.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+                life: 0.5, max: 0.5, col: ['#fff', `hsl(${f.hue},100%,70%)`, '#ffd54a'][i % 3], r: ultRand(2, 5), star: i % 3 === 0 });
+        }
+        playSFX && playSFX(deflected ? 'weapon' : 'pop');
+    }
+    function ultPlayerHit(s, f) {
+        s.combo = 0; s.comboT = 0; s.comboMilestone = 0;
+        s.power = Math.max(0, s.power - 0.18);
+        s.invul = Math.max(s.invul, 750);              // mercy i-frames
+        s.shake = Math.max(s.shake, 16); s.flash = Math.max(s.flash, 0.5); s.hurt = 1;
+        const a = Math.atan2(s.duck.y - f.y, s.duck.x - f.x);
+        s.duck.vx += Math.cos(a) * 320; s.duck.vy += Math.sin(a) * 320;
+        for (let i = 0; i < 18; i++) {
+            const ang = ultRand(0, Math.PI * 2), sp = ultRand(80, 360);
+            s.particles.push({ x: s.duck.x, y: s.duck.y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
+                life: 0.5, max: 0.5, col: ['#ff4d6d', '#fff', '#ff9db0'][i % 3], r: ultRand(2, 5) });
+        }
+        playSFX && playSFX('dmPower');
+    }
+    // Pop any foes within a radius (used by melee + nova + spin); also chip the boss if in range
+    function ultHitFoes(s, x, y, R, bossDmg) {
+        for (let i = s.foes.length - 1; i >= 0; i--) {
+            const f = s.foes[i];
+            if (Math.hypot(f.x - x, f.y - y) < R + f.r) { ultKillFoe(s, f, false); s.foes.splice(i, 1); }
+        }
+        if (bossDmg && s.boss && Math.hypot(s.boss.x - x, s.boss.y - y) < R + s.boss.r) ultDamageBoss(s, bossDmg, '#fff');
+    }
+
+    // ── Mini-boss: a tanky orb-lord that chases, summons minions, and fires bursts ──
+    function ultSpawnBoss(s) {
+        s.bossCount++;
+        const hp = 55 + s.bossCount * 25;
+        s.boss = {
+            x: Math.random() < 0.5 ? -90 : s.W + 90, y: s.H * 0.45,
+            vx: 0, vy: 0, r: 58, hp, maxHp: hp,
+            phase: 'enter', phaseT: 1300, atkT: 2000, t: 0, hitFlash: 0, split: false, hue: 322,
+        };
+        s.announce = { txt: 'WARNING', t: 0, max: 1500 };
+        s.shake = Math.max(s.shake, 16); s.flash = Math.max(s.flash, 0.45);
+        playSFX && playSFX('dmStreak');
+    }
+    function ultBossMinion(s, ang, sp) {
+        const b = s.boss;
+        s.foes.push({ x: b.x + Math.cos(ang) * b.r, y: b.y + Math.sin(ang) * b.r,
+            vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, r: 13, hp: 2, born: 0, life: 9000,
+            hue: ultRand(290, 330), seed: ultRand(0, 6.28) });
+    }
+    function ultBossAttack(s) {
+        const b = s.boss, n = s.super ? 9 : 7;
+        s.shake = Math.max(s.shake, 8);
+        s.rings.push({ x: b.x, y: b.y, r: b.r, max: b.r + 130, life: 1, col: `hsl(${b.hue},100%,65%)` });
+        for (let i = 0; i < n; i++) ultBossMinion(s, (i / n) * Math.PI * 2 + b.t * 0.001, 250);
+        playSFX && playSFX('pop');
+    }
+    function ultDamageBoss(s, amount, col) {
+        const b = s.boss; if (!b || b.phase !== 'fight') return;
+        b.hp -= amount; b.hitFlash = 1;
+        for (let i = 0; i < 4; i++) { const a = ultRand(0, Math.PI * 2); s.particles.push({ x: b.x + Math.cos(a) * b.r, y: b.y + Math.sin(a) * b.r, vx: Math.cos(a) * ultRand(60, 220), vy: Math.sin(a) * ultRand(60, 220), life: 0.35, max: 0.35, col: col || '#fff', r: ultRand(2, 4) }); }
+        if (!b.split && b.hp <= b.maxHp * 0.5) {       // half-health → summon a reinforcement wave
+            b.split = true;
+            for (let i = 0; i < 6; i++) ultBossMinion(s, (i / 6) * Math.PI * 2, 300);
+            s.announce = { txt: 'REINFORCEMENTS!', t: 0, max: 1100 };
+            s.shake = Math.max(s.shake, 10);
+        }
+        if (b.hp <= 0) ultKillBoss(s);
+    }
+    function ultKillBoss(s) {
+        const b = s.boss; b.phase = 'dying'; b.phaseT = 850;
+        const bonus = 2500 * s.bossCount;
+        s.score += bonus;
+        if (s.score > s.best) { s.best = s.score; try { localStorage.setItem('ultimateBest', s.best); } catch (_) {} }
+        s.power = 1; s.sp = 1;                          // reward: refill both meters
+        s.announce = { txt: 'BOSS DOWN!', t: 0, max: 1500 };
+        s.shake = Math.max(s.shake, 26); s.flash = Math.max(s.flash, 0.85); s.hitstop = Math.max(s.hitstop, 130);
+        s.particles.push({ txt: '+' + bonus, x: b.x, y: b.y - b.r, life: 1.4, max: 1.4, col: '#ffd54a', size: 30 });
+        for (let i = 0; i < 70; i++) {
+            const a = ultRand(0, Math.PI * 2), sp = ultRand(120, 720);
+            s.particles.push({ x: b.x, y: b.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.9, max: 0.9, col: ['#fff', '#ffd54a', `hsl(${b.hue},100%,65%)`][i % 3], r: ultRand(3, 8), star: i % 2 === 0 });
+        }
+        for (let i = 0; i < 3; i++) s.rings.push({ x: b.x, y: b.y, r: 10 + i * 30, max: 280 + i * 120, life: 1, col: i % 2 ? '#fff' : `hsl(${b.hue},100%,65%)` });
+        playSFX && playSFX('casinoJackpot');
+    }
+
     function ultUpdate(s, dt, sec) {
         const d = s.duck;
         s.t += dt;
         // timers
         s.slashT = Math.max(0, s.slashT - dt);
+        s.spinT = Math.max(0, s.spinT - dt);
+        s.spinCd = Math.max(0, s.spinCd - dt);
+        s.poundCd = Math.max(0, s.poundCd - dt);
         s.dashT = Math.max(0, s.dashT - dt);
         s.dashCd = Math.max(0, s.dashCd - dt);
         s.invul = Math.max(0, s.invul - dt);
         s.shake = Math.max(0, s.shake - dt * 0.03);
         s.flash = Math.max(0, s.flash - sec * 2.2);
-        if (s.comboT > 0) { s.comboT -= dt; if (s.comboT <= 0) s.combo = 0; }
+        s.hurt = Math.max(0, s.hurt - sec * 2);
+        if (s.comboT > 0) { s.comboT -= dt; if (s.comboT <= 0) { s.combo = 0; s.comboMilestone = 0; } }
+        if (s.cutin) { s.cutin.t += dt; if (s.cutin.t >= s.cutin.max) s.cutin = null; }
+        if (s.announce) { s.announce.t += dt; if (s.announce.t >= s.announce.max) s.announce = null; }
         if (s.charging) s.ki = Math.min(1.2, s.ki + sec * 1.4);
+        // 🖱 mouse rapid blaster — stream bolts while held, build charge for the release
+        s.mFireCd = Math.max(0, s.mFireCd - dt);
+        if (s.mDown) {
+            s.mHoldT += dt;
+            if (s.mFireCd <= 0) { ultRapidBolt(s); s.mFireCd = s.super ? 55 : 80; }
+        }
+        if (s.rDown) {                               // charging the super dash → gathering flames
+            s.rHoldT += dt;
+            const cf = Math.min(1, s.rHoldT / 1200);
+            const n = 1 + (cf * 4 | 0);
+            for (let i = 0; i < n; i++) {
+                const a = ultRand(0, Math.PI * 2), rad = ultRand(8, 30 + cf * 16);
+                s.particles.push({ x: d.x + Math.cos(a) * rad, y: d.y + Math.sin(a) * rad,
+                    vx: Math.cos(a) * ultRand(20, 110) + d.vx * 0.05, vy: Math.sin(a) * ultRand(20, 110) - 70 - cf * 50,
+                    life: 0.4 + 0.35 * cf, max: 0.75, r: ultRand(4, 9) + cf * 6, flame: true });
+            }
+        }
+        // flame trail streaming off the duck mid-dash
+        if (s.dashT > 0) {
+            const dn = 2 + (Math.hypot(d.vx, d.vy) > 1800 ? 2 : 0);
+            for (let i = 0; i < dn; i++)
+                s.particles.push({ x: d.x + ultRand(-10, 10), y: d.y + ultRand(-10, 10),
+                    vx: -d.vx * 0.12 + ultRand(-50, 50), vy: -d.vy * 0.12 + ultRand(-50, 50),
+                    life: 0.45, max: 0.45, r: ultRand(5, 12), flame: true });
+        }
         if (s.super) { s.superT -= dt; s.power = Math.max(0, s.superT / 13000); if (s.superT <= 0) { s.super = false; s.flash = Math.max(s.flash, 0.4); } }
         s.bgHue = (s.bgHue + sec * (s.super ? 60 : 16)) % 360;
 
@@ -9866,14 +10224,16 @@
         if (s.keys['d'] || s.keys['arrowright']) ax += 1;
         if (ax || ay) {
             const m = Math.hypot(ax, ay); ax /= m; ay /= m;
-            const accel = (s.super ? 2700 : 2000) * sec;
+            const fSpd = ultForm(s) ? ultForm(s).spd : 1;
+            const accel = (s.super ? 2000 * fSpd : 2000) * sec;
             d.vx += ax * accel; d.vy += ay * accel;
             if (ax) d.facing = ax > 0 ? 1 : -1;
         }
         // drag + speed clamp (skip clamp during dash so the burst reads)
         const drag = Math.exp(-(s.dashT > 0 ? 0.6 : 2.4) * sec);
         d.vx *= drag; d.vy *= drag;
-        const maxSp = s.dashT > 0 ? 1300 : (s.super ? 940 : 640);
+        const fSpdClamp = ultForm(s) ? ultForm(s).spd : 1;
+        const maxSp = s.dashT > 0 ? Math.max(1300, s.dashMax || 0) : (s.super ? 640 * fSpdClamp : 640);
         const sp = Math.hypot(d.vx, d.vy);
         if (sp > maxSp) { d.vx = d.vx / sp * maxSp; d.vy = d.vy / sp * maxSp; }
         d.x += d.vx * sec; d.y += d.vy * sec;
@@ -9915,6 +10275,51 @@
         const target = s.super ? 13 : 10;
         if (s.objects.length < target && s.spawnT <= 0) { s.objects.push(ultMakeObject(s)); s.spawnT = 240; }
 
+        // ── fightback orbs: spawn, home in, collide ──
+        s.foeSpawnT -= dt;
+        const foeCap = s.super ? 8 : 5;
+        if (s.foeSpawnT <= 0 && s.foes.length < foeCap) { ultSpawnFoe(s); s.foeSpawnT = s.super ? 1300 : 2300; }
+        for (let i = s.foes.length - 1; i >= 0; i--) {
+            const f = s.foes[i]; f.life -= dt; f.born += dt;
+            const dx = d.x - f.x, dy = d.y - f.y, dist = Math.hypot(dx, dy) || 1;
+            const homeSp = 60 + Math.min(190, f.born * 0.035);     // accelerate the longer they chase
+            f.vx += (dx / dist * homeSp - f.vx) * Math.min(1, sec * 1.5);
+            f.vy += (dy / dist * homeSp - f.vy) * Math.min(1, sec * 1.5);
+            f.x += f.vx * sec; f.y += f.vy * sec;
+            if (dist < f.r + 22) {
+                if (s.invul > 0 || s.dashT > 0) { ultKillFoe(s, f, true); }   // dash/i-frames deflect them
+                else ultPlayerHit(s, f);
+                s.foes.splice(i, 1); continue;
+            }
+            if (f.life <= 0) s.foes.splice(i, 1);
+        }
+
+        // ── mini-boss: spawn on a kill milestone, then chase / attack / die ──
+        if (!s.boss && s.kills >= s.nextBoss) { ultSpawnBoss(s); s.nextBoss += 18; }
+        if (s.boss) {
+            const b = s.boss; b.t += dt; b.hitFlash = Math.max(0, b.hitFlash - sec * 4);
+            if (b.phase === 'enter') {
+                b.x += (s.W * 0.5 - b.x) * Math.min(1, sec * 1.4);
+                b.y += (s.H * 0.4 - b.y) * Math.min(1, sec * 1.4);
+                b.phaseT -= dt; if (b.phaseT <= 0) { b.phase = 'fight'; b.atkT = 1400; }
+            } else if (b.phase === 'fight') {
+                const bx = d.x - b.x, by = d.y - b.y, bd = Math.hypot(bx, by) || 1;
+                const pull = (bd - 250) * 0.7;                 // hover at a menacing mid-range
+                b.vx += (bx / bd * pull - b.vx) * Math.min(1, sec * 1.3);
+                b.vy += (by / bd * pull - b.vy) * Math.min(1, sec * 1.3);
+                b.x += b.vx * sec; b.y += b.vy * sec;
+                b.x = Math.max(80, Math.min(s.W - 80, b.x)); b.y = Math.max(80, Math.min(s.H - 90, b.y));
+                b.atkT -= dt; if (b.atkT <= 0) { ultBossAttack(s); b.atkT = s.super ? 1700 : 2400; }
+                if (bd < b.r + 22) {
+                    if (s.invul > 0 || s.dashT > 0) { ultDamageBoss(s, ultATK(s, 4), '#fff'); const a = Math.atan2(b.y - d.y, b.x - d.x); b.x += Math.cos(a) * 24; b.y += Math.sin(a) * 24; }
+                    else ultPlayerHit(s, { x: b.x, y: b.y });
+                }
+            } else if (b.phase === 'dying') {
+                b.phaseT -= dt; b.r *= 0.95;
+                if (b.phaseT <= 0) s.boss = null;
+            }
+        }
+
         // blasts
         for (let i = s.blasts.length - 1; i >= 0; i--) {
             const b = s.blasts[i];
@@ -9923,7 +10328,37 @@
             for (const o of s.objects) {
                 if (!o.dead && Math.hypot(o.x - b.x, o.y - b.y) < o.r + b.r) { ultDamageObj(s, o, b.dmg, `hsl(${b.hue},100%,70%)`); if (!b.charged) { hit = true; break; } }
             }
+            for (let j = s.foes.length - 1; j >= 0; j--) {
+                const f = s.foes[j];
+                if (Math.hypot(f.x - b.x, f.y - b.y) < f.r + b.r) { ultKillFoe(s, f, false); s.foes.splice(j, 1); if (!b.charged) { hit = true; break; } }
+            }
+            if (!hit && s.boss && s.boss.phase === 'fight' && Math.hypot(s.boss.x - b.x, s.boss.y - b.y) < s.boss.r + b.r) {
+                ultDamageBoss(s, b.dmg, `hsl(${b.hue},100%,70%)`); if (!b.charged) hit = true;
+            }
             if (hit || b.life <= 0 || b.x < -40 || b.x > s.W + 40 || b.y < -40 || b.y > s.H + 40) s.blasts.splice(i, 1);
+        }
+
+        // ── ultimate beam: continuous damage to anything along the locked ray ──
+        if (s.beam) {
+            const b = s.beam; b.life -= dt;
+            const ux = Math.cos(b.ang), uy = Math.sin(b.ang), halfW = 46;
+            for (const o of s.objects) {
+                if (o.dead) continue;
+                const rx = o.x - d.x, ry = o.y - d.y;
+                const along = rx * ux + ry * uy, perp = Math.abs(-rx * uy + ry * ux);
+                if (along > -o.r && perp < halfW + o.r) ultDamageObj(s, o, ultATK(s, 4) * sec * 14, '#fff');
+            }
+            for (let j = s.foes.length - 1; j >= 0; j--) {
+                const f = s.foes[j], rx = f.x - d.x, ry = f.y - d.y;
+                const along = rx * ux + ry * uy, perp = Math.abs(-rx * uy + ry * ux);
+                if (along > -f.r && perp < halfW + f.r) { ultKillFoe(s, f, false); s.foes.splice(j, 1); }
+            }
+            if (s.boss && s.boss.phase === 'fight') {
+                const rx = s.boss.x - d.x, ry = s.boss.y - d.y;
+                const along = rx * ux + ry * uy, perp = Math.abs(-rx * uy + ry * ux);
+                if (along > -s.boss.r && perp < halfW + s.boss.r) ultDamageBoss(s, ultATK(s, 4) * sec * 16, '#fff');
+            }
+            if (b.life <= 0) { s.beam = null; s.flash = Math.max(s.flash, 0.3); }
         }
 
         // debris
@@ -10062,7 +10497,9 @@
     // ── The articulate anime duck ──
     function drawUltDuck(s, x, y, lean, facing, alpha, isGhost) {
         const d = s.duck;
+        const P = ultPalette(s);                 // form-aware colour palette
         const slash = s.slashT / 280;            // 1→0 across a slash
+        const spin = s.spinT / 360;              // 1→0 across a spin slash
         const charge = s.charging ? Math.min(1, s.ki) : 0;
         const flap = Math.sin(s.t * 0.02) * 0.5 + 0.5;
         const t = s.t;
@@ -10076,9 +10513,7 @@
         if (!isGhost) {
             const auraR = 54 + flap * 6 + (s.super ? 16 : 0);
             const ag = ctx.createRadialGradient(0, 0, 8, 0, 0, auraR);
-            const c0 = s.super ? 'rgba(255,221,90,0.55)' : 'rgba(120,225,255,0.32)';
-            const c1 = s.super ? 'rgba(255,160,40,0)' : 'rgba(120,225,255,0)';
-            ag.addColorStop(0, c0); ag.addColorStop(1, c1);
+            ag.addColorStop(0, P.aura0); ag.addColorStop(1, P.aura1);
             ctx.fillStyle = ag; ctx.beginPath(); ctx.arc(0, 0, auraR, 0, Math.PI * 2); ctx.fill();
         }
 
@@ -10109,7 +10544,7 @@
             ctx.beginPath(); ctx.moveTo(2, 6); ctx.lineTo(-14, 18); ctx.stroke();
             const orbR = 6 + charge * 18;
             const og = ctx.createRadialGradient(-18, 20, 1, -18, 20, orbR);
-            og.addColorStop(0, '#fff'); og.addColorStop(0.5, s.super ? '#ffd54a' : '#7fe9ff'); og.addColorStop(1, 'rgba(120,230,255,0)');
+            og.addColorStop(0, '#fff'); og.addColorStop(0.5, P.glow); og.addColorStop(1, 'rgba(120,230,255,0)');
             ctx.fillStyle = og; ctx.beginPath(); ctx.arc(-18, 20, orbR, 0, Math.PI * 2); ctx.fill();
         } else {
             ctx.beginPath(); ctx.moveTo(2, 6); ctx.lineTo(-16, 22 + flap * 6); ctx.stroke();
@@ -10122,8 +10557,7 @@
 
         // body
         const bodyGrad = ctx.createLinearGradient(-20, -20, 20, 24);
-        if (s.super) { bodyGrad.addColorStop(0, '#fff6c0'); bodyGrad.addColorStop(1, '#ffcf3a'); }
-        else { bodyGrad.addColorStop(0, '#ffe27a'); bodyGrad.addColorStop(1, '#f5b400'); }
+        bodyGrad.addColorStop(0, P.bodyA); bodyGrad.addColorStop(1, P.bodyB);
         ctx.fillStyle = bodyGrad;
         ctx.strokeStyle = 'rgba(120,70,0,0.5)'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.ellipse(0, 2, 26, 21, -0.18, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
@@ -10138,7 +10572,7 @@
         ctx.beginPath(); ctx.arc(headX, headY, 15, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
 
         // spiky anime hair/crest flowing back-up
-        ctx.fillStyle = s.super ? '#ffe14d' : '#f0922f';
+        ctx.fillStyle = P.hair;
         for (let i = 0; i < 4; i++) {
             const baseA = -2.2 + i * 0.35;
             const sway = Math.sin(t * 0.01 + i) * 0.12 + d.vx * -0.0008 * facing;
@@ -10156,7 +10590,7 @@
         // anime eye + determined brow
         ctx.fillStyle = '#fff';
         ctx.beginPath(); ctx.ellipse(headX + 7, headY - 1, 5.5, 7, -0.2, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = s.super ? '#33e0ff' : '#1b2b3a';
+        ctx.fillStyle = P.eye;
         ctx.beginPath(); ctx.ellipse(headX + 8, headY, 3.2, 5, -0.2, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(headX + 9, headY - 2.5, 1.4, 0, Math.PI * 2); ctx.fill();
         ctx.strokeStyle = '#3a2400'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
@@ -10171,8 +10605,8 @@
         const bladeLen = 52, bladeA = swing - 0.5;
         const tipX = handX + Math.cos(bladeA) * bladeLen, tipY = handY + Math.sin(bladeA) * bladeLen;
         ctx.save();
-        ctx.shadowColor = s.super ? '#ffe14d' : '#7fe9ff'; ctx.shadowBlur = 16;
-        ctx.strokeStyle = s.super ? 'rgba(255,225,90,0.85)' : 'rgba(150,235,255,0.85)'; ctx.lineWidth = 7; ctx.lineCap = 'round';
+        ctx.shadowColor = P.glow; ctx.shadowBlur = 16;
+        ctx.strokeStyle = P.blade; ctx.lineWidth = 7; ctx.lineCap = 'round';
         ctx.beginPath(); ctx.moveTo(handX, handY); ctx.lineTo(tipX, tipY); ctx.stroke();
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5;
         ctx.beginPath(); ctx.moveTo(handX, handY); ctx.lineTo(tipX, tipY); ctx.stroke();
@@ -10185,8 +10619,23 @@
         if (slash > 0 && !isGhost) {
             ctx.save();
             ctx.globalAlpha = alpha * slash;
-            ctx.strokeStyle = s.super ? '#fff6b0' : '#cffcff'; ctx.lineWidth = 6 * slash; ctx.lineCap = 'round';
+            ctx.strokeStyle = P.super ? '#fff6b0' : '#cffcff'; ctx.lineWidth = 6 * slash; ctx.lineCap = 'round';
             ctx.beginPath(); ctx.arc(14, -4, 56, swing - 1.4, swing + 0.5); ctx.stroke();
+            ctx.restore();
+        }
+
+        // spin-slash whirl — twin blades sweeping a full circle around the duck
+        if (spin > 0 && !isGhost) {
+            ctx.save();
+            ctx.globalAlpha = alpha * spin;
+            ctx.shadowColor = P.glow; ctx.shadowBlur = 18;
+            ctx.strokeStyle = P.blade; ctx.lineWidth = 5 + 7 * spin; ctx.lineCap = 'round';
+            const sweep = (1 - spin) * Math.PI * 4;
+            for (let k = 0; k < 2; k++) {
+                ctx.beginPath();
+                ctx.arc(0, 0, 64, sweep + k * Math.PI, sweep + k * Math.PI + 1.1);
+                ctx.stroke();
+            }
             ctx.restore();
         }
 
@@ -10229,6 +10678,26 @@
         // objects
         for (const o of s.objects) drawUltObject(o);
 
+        // fightback orbs — pulsing energy spheres with a warning corona
+        for (const f of s.foes) {
+            const pul = 1 + 0.15 * Math.sin(s.t * 0.012 + f.seed);
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            const og = ctx.createRadialGradient(f.x, f.y, 1, f.x, f.y, f.r * 2.4 * pul);
+            og.addColorStop(0, `hsla(${f.hue},100%,75%,0.95)`);
+            og.addColorStop(0.4, `hsla(${f.hue},100%,60%,0.5)`);
+            og.addColorStop(1, `hsla(${f.hue},100%,55%,0)`);
+            ctx.fillStyle = og; ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 2.4 * pul, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 0.5, 0, Math.PI * 2); ctx.fill();
+            // crackling orbit ring
+            ctx.strokeStyle = `hsla(${f.hue},100%,80%,0.8)`; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(f.x, f.y, f.r * pul, 0, Math.PI * 2); ctx.stroke();
+            ctx.restore();
+        }
+
+        // mini-boss
+        if (s.boss) drawUltBoss(s);
+
         // debris
         for (const p of s.debris) {
             ctx.save(); ctx.globalAlpha = Math.max(0, p.life); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
@@ -10255,6 +10724,26 @@
             ctx.restore();
         }
 
+        // ultimate beam — fired from the duck along its locked angle
+        if (s.beam) {
+            const b = s.beam, P = ultPalette(s), prog = 1 - b.life / b.max;
+            const swell = Math.sin(Math.min(1, prog * 1.5) * Math.PI * 0.5);
+            const fade = b.life < 160 ? b.life / 160 : 1;
+            const w = 64 * swell * fade, len = Math.hypot(W, H);
+            ctx.save();
+            ctx.translate(d.x, d.y); ctx.rotate(b.ang);
+            ctx.globalCompositeOperation = 'lighter';
+            const bg = ctx.createLinearGradient(0, -w, 0, w);
+            bg.addColorStop(0, P.aura1); bg.addColorStop(0.5, P.glow); bg.addColorStop(1, P.aura1);
+            ctx.fillStyle = bg; ctx.fillRect(0, -w, len, w * 2);
+            ctx.fillStyle = `rgba(255,255,255,${0.85 * fade})`; ctx.fillRect(0, -w * 0.32, len, w * 0.64);
+            // muzzle flare
+            const fg = ctx.createRadialGradient(0, 0, 2, 0, 0, w * 1.6);
+            fg.addColorStop(0, '#fff'); fg.addColorStop(1, P.aura1);
+            ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(0, 0, w * 1.6, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        }
+
         // duck afterimages
         for (const g of s.trail) drawUltDuck(s, g.x, g.y, g.lean, g.facing, g.life * 0.34, true);
 
@@ -10271,6 +10760,13 @@
             } else if (p.star) {
                 ctx.translate(p.x, p.y); ctx.rotate(p.life * 6); ctx.fillStyle = p.col;
                 ctx.fillRect(-p.r * 1.6, -p.r * 0.35, p.r * 3.2, p.r * 0.7); ctx.fillRect(-p.r * 0.35, -p.r * 1.6, p.r * 0.7, p.r * 3.2);
+            } else if (p.flame) {
+                const lf = Math.max(0, p.life / (p.max || 1)), a = lf;
+                ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'lighter';
+                const mid = lf > 0.45 ? `rgba(255,196,70,${a * 0.85})` : `rgba(255,104,28,${a * 0.85})`;
+                const fg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
+                fg.addColorStop(0, `rgba(255,250,214,${a})`); fg.addColorStop(0.5, mid); fg.addColorStop(1, 'rgba(214,40,20,0)');
+                ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
             } else {
                 ctx.fillStyle = p.col; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
             }
@@ -10279,9 +10775,154 @@
 
         ctx.restore(); // end shake
 
+        if (s.mouse && s.mouse.active) drawUltReticle(s);
         drawUltHUD(s);
+        if (s.announce) drawUltAnnounce(s);
+        if (s.cutin) drawUltCutin(s);
 
         if (s.flash > 0) { ctx.save(); ctx.globalAlpha = Math.min(0.85, s.flash); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); ctx.restore(); }
+        // red damage vignette when an orb connects
+        if (s.hurt > 0) {
+            ctx.save();
+            const vg = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.75);
+            vg.addColorStop(0, 'rgba(255,0,40,0)'); vg.addColorStop(1, `rgba(255,0,40,${0.5 * s.hurt})`);
+            ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H); ctx.restore();
+        }
+    }
+
+    // BANKAI-style transform cut-in: cinematic bars + the form name slamming in
+    function drawUltCutin(s) {
+        const { W, H } = s, c = s.cutin, p = c.t / c.max, P = ultPalette(s);
+        ctx.save();
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        // cinematic bars slide in (first 18%) and out (last 22%)
+        const barIn = Math.min(1, p / 0.18), barOut = p > 0.78 ? 1 - (p - 0.78) / 0.22 : 1;
+        const barH = H * 0.16 * Math.max(0, Math.min(barIn, barOut));
+        ctx.fillStyle = 'rgba(0,0,0,0.82)';
+        ctx.fillRect(0, 0, W, barH); ctx.fillRect(0, H - barH, W, barH);
+        // diagonal energy sweep behind the text
+        const sweepX = (-0.3 + p * 1.6) * W;
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.5 * barOut;
+        const sg = ctx.createLinearGradient(sweepX - 200, 0, sweepX + 200, 0);
+        sg.addColorStop(0, 'rgba(255,255,255,0)'); sg.addColorStop(0.5, P.glow); sg.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = sg; ctx.fillRect(0, H / 2 - 70, W, 140);
+        ctx.restore();
+        // the form name slams from oversized → settle, then fades
+        const slam = p < 0.2 ? 2.4 - (p / 0.2) * 1.4 : 1;            // 2.4×→1×
+        const alpha = barOut;
+        ctx.globalAlpha = alpha;
+        ctx.font = `900 ${Math.round(64 * slam)}px system-ui, sans-serif`;
+        ctx.lineWidth = 8; ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+        ctx.strokeText(c.name, W / 2, H / 2);
+        ctx.fillStyle = P.glow; ctx.shadowColor = P.glow; ctx.shadowBlur = 30;
+        ctx.fillText(c.name, W / 2, H / 2);
+        ctx.shadowBlur = 0;
+        ctx.font = '800 20px system-ui, sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        ctx.globalAlpha = alpha * Math.max(0, 1 - p * 1.4);
+        ctx.fillText('★ TRANSFORM ★', W / 2, H / 2 + 52);
+        ctx.restore();
+    }
+
+    // The orb-lord — spiked, pulsing, with a hostile corona and HP bar
+    function drawUltBoss(s) {
+        const b = s.boss, pul = 1 + 0.06 * Math.sin(b.t * 0.006), spikes = 12;
+        ctx.save();
+        ctx.translate(b.x, b.y);
+        // corona
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const cg = ctx.createRadialGradient(0, 0, b.r * 0.4, 0, 0, b.r * 2.2 * pul);
+        cg.addColorStop(0, `hsla(${b.hue},100%,${b.hitFlash > 0 ? 85 : 60}%,0.7)`); cg.addColorStop(1, `hsla(${b.hue},100%,50%,0)`);
+        ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(0, 0, b.r * 2.2 * pul, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        // spiked body
+        ctx.beginPath();
+        for (let i = 0; i < spikes * 2; i++) {
+            const a = (i / (spikes * 2)) * Math.PI * 2 + b.t * 0.0015, rr = (i % 2 ? b.r * 1.32 : b.r) * pul;
+            const x = Math.cos(a) * rr, y = Math.sin(a) * rr; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        }
+        ctx.closePath();
+        const bg = ctx.createRadialGradient(0, 0, 4, 0, 0, b.r * 1.3);
+        bg.addColorStop(0, b.hitFlash > 0 ? '#ffffff' : '#3a0a2a'); bg.addColorStop(1, `hsl(${b.hue},75%,16%)`);
+        ctx.fillStyle = bg; ctx.fill();
+        ctx.strokeStyle = `hsl(${b.hue},100%,72%)`; ctx.lineWidth = 3; ctx.stroke();
+        // glowing single eye
+        ctx.fillStyle = b.hitFlash > 0 ? '#fff' : `hsl(${b.hue},100%,75%)`;
+        ctx.beginPath(); ctx.arc(0, 0, b.r * 0.42, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#1a0010'; ctx.beginPath(); ctx.ellipse(0, Math.sin(b.t * 0.004) * 4, b.r * 0.15, b.r * 0.32, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        // HP bar
+        if (b.phase !== 'dying') {
+            const w = 130, h = 11, x = b.x - w / 2, y = b.y - b.r * 1.32 - 26, frac = Math.max(0, b.hp / b.maxHp);
+            ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(x, y, w, h);
+            ctx.fillStyle = `hsl(${frac * 120},90%,55%)`; ctx.fillRect(x, y, w * frac, h);
+            ctx.strokeStyle = 'rgba(255,255,255,0.65)'; ctx.lineWidth = 1.5; ctx.strokeRect(x, y, w, h);
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 12px system-ui';
+            ctx.fillText(b.phase === 'enter' ? '⚠ BOSS ⚠' : 'ORB-LORD', b.x, y - 9);
+            ctx.restore();
+        }
+    }
+
+    // Escalating combo callout that pops and rises
+    function drawUltAnnounce(s) {
+        const { W } = s, a = s.announce, p = a.t / a.max;
+        const pop = p < 0.18 ? 0.4 + (p / 0.18) * 0.85 : 1.25 - Math.min(0.25, (p - 0.18) * 0.4);
+        ctx.save();
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.globalAlpha = Math.max(0, 1 - Math.max(0, (p - 0.7) / 0.3));
+        const y = 130 - p * 26;
+        ctx.font = `900 ${Math.round(52 * pop)}px system-ui, sans-serif`;
+        ctx.lineWidth = 7; ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+        ctx.strokeText(a.txt, W / 2, y);
+        ctx.fillStyle = `hsl(${(s.t * 0.6) % 360},95%,62%)`;
+        ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 24;
+        ctx.fillText(a.txt, W / 2, y);
+        ctx.restore();
+    }
+
+    // Anime targeting reticle that follows the cursor; fills a ring while charging
+    function drawUltReticle(s) {
+        const P = ultPalette(s), mx = s.mouse.x, my = s.mouse.y;
+        const chargeFrac = s.mDown ? Math.min(1, s.mHoldT / 1550) : 0;
+        const armed = chargeFrac >= 0.29;          // past the 450ms finisher threshold
+        ctx.save();
+        ctx.translate(mx, my);
+        ctx.globalCompositeOperation = 'lighter';
+        const rot = s.t * 0.004, pulse = 1 + 0.12 * Math.sin(s.t * 0.02);
+        ctx.strokeStyle = P.glow; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(0, 0, 16 * pulse, 0, Math.PI * 2); ctx.stroke();
+        for (let i = 0; i < 4; i++) {
+            const a = rot + i * Math.PI / 2;
+            ctx.beginPath(); ctx.moveTo(Math.cos(a) * 10, Math.sin(a) * 10); ctx.lineTo(Math.cos(a) * 22, Math.sin(a) * 22); ctx.stroke();
+        }
+        ctx.fillStyle = P.glow; ctx.beginPath(); ctx.arc(0, 0, 2.5, 0, Math.PI * 2); ctx.fill();
+        if (chargeFrac > 0) {
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+            ctx.beginPath(); ctx.arc(0, 0, 24, -Math.PI / 2, -Math.PI / 2 + chargeFrac * Math.PI * 2); ctx.stroke();
+            if (armed) {
+                ctx.strokeStyle = `rgba(255,255,255,${0.35 + 0.45 * Math.sin(s.t * 0.025)})`; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.arc(0, 0, 30 + chargeFrac * 4, 0, Math.PI * 2); ctx.stroke();
+            }
+        }
+        // dash lock-on — aim line from the duck + a bracket that tightens as the dash charges
+        if (s.rDown) {
+            const f = Math.min(1, s.rHoldT / 1200);
+            ctx.strokeStyle = `rgba(255,255,255,${0.22 + 0.45 * f})`; ctx.lineWidth = 2 + 3 * f;
+            ctx.setLineDash([10, 9]); ctx.lineDashOffset = -s.t * 0.06;
+            ctx.beginPath(); ctx.moveTo(s.duck.x - mx, s.duck.y - my); ctx.lineTo(0, 0); ctx.stroke();
+            ctx.setLineDash([]);
+            const br = 40 - 16 * f, gap = 9;            // four corner brackets closing in with charge
+            ctx.strokeStyle = P.glow; ctx.lineWidth = 3;
+            for (let q = 0; q < 4; q++) {
+                const sx = q & 1 ? 1 : -1, sy = q & 2 ? 1 : -1;
+                ctx.beginPath();
+                ctx.moveTo(sx * br, sy * (br - gap)); ctx.lineTo(sx * br, sy * br); ctx.lineTo(sx * (br - gap), sy * br);
+                ctx.stroke();
+            }
+        }
+        ctx.restore();
     }
 
     function drawUltHUD(s) {
@@ -10303,22 +10944,40 @@
         ctx.fillStyle = grd; ctx.fillRect(pbX, pbY, pbW * s.power, pbH);
         ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1.5; ctx.strokeRect(pbX, pbY, pbW, pbH);
         ctx.fillStyle = '#fff'; ctx.font = 'bold 11px system-ui'; ctx.textAlign = 'center';
-        ctx.fillText(s.super ? 'SUPER FORM!' : (s.power >= 1 ? 'SPACE → POWER UP!' : 'POWER'), pbX + pbW / 2, pbY + pbH / 2);
+        const fForm = ultForm(s);
+        ctx.fillText(fForm ? '★ ' + fForm.name + ' ★' : (s.power >= 1 ? 'SPACE → POWER UP!' : 'POWER'), pbX + pbW / 2, pbY + pbH / 2);
         if (s.power >= 1 && !s.super) { ctx.strokeStyle = `rgba(255,255,255,${0.4 + 0.4 * Math.sin(s.t * 0.01)})`; ctx.lineWidth = 3; ctx.strokeRect(pbX - 2, pbY - 2, pbW + 4, pbH + 4); }
 
-        // combo
+        // ULTIMATE (special) meter
+        const sbY = pbY + pbH + 8;
+        ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(pbX, sbY, pbW, pbH);
+        const sgrd = ctx.createLinearGradient(pbX, 0, pbX + pbW, 0);
+        sgrd.addColorStop(0, '#06b6d4'); sgrd.addColorStop(0.5, '#3b82f6'); sgrd.addColorStop(1, '#a855f7');
+        ctx.fillStyle = sgrd; ctx.fillRect(pbX, sbY, pbW * s.sp, pbH);
+        ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1.5; ctx.strokeRect(pbX, sbY, pbW, pbH);
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 11px system-ui'; ctx.textAlign = 'center';
+        ctx.fillText(s.sp >= 1 ? 'U → ULTIMATE BEAM!' : 'ULTIMATE', pbX + pbW / 2, sbY + pbH / 2);
+        if (s.sp >= 1 && !s.beam) { ctx.strokeStyle = `rgba(120,220,255,${0.45 + 0.45 * Math.sin(s.t * 0.012)})`; ctx.lineWidth = 3; ctx.strokeRect(pbX - 2, sbY - 2, pbW + 4, pbH + 4); }
+
+        // combo + live score multiplier badge
         if (s.combo > 1) {
             ctx.textAlign = 'center';
             const pop = 1 + Math.max(0, (s.comboT - 1700) / 300) * 0.4;
             ctx.font = `bold ${Math.round(34 * pop)}px system-ui, sans-serif`;
             ctx.fillStyle = `hsl(${(s.t * 0.3) % 360},90%,65%)`;
             ctx.fillText(s.combo + '× COMBO', W / 2, 44);
+            const mult = s.combo * (ultForm(s) ? ultForm(s).score : 1);
+            const tier = mult >= 60 ? '#ff3b6b' : mult >= 30 ? '#ffd54a' : '#9be7ff';
+            ctx.font = `900 ${Math.round(22 * pop)}px system-ui, sans-serif`;
+            ctx.fillStyle = tier; ctx.shadowColor = tier; ctx.shadowBlur = 14;
+            ctx.fillText('SCORE ×' + mult, W / 2, 74);
+            ctx.shadowBlur = 0;
         }
 
         // controls hint
         ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,0.7)';
         ctx.font = '13px system-ui, sans-serif';
-        ctx.fillText('WASD / Arrows  Fly      J  Slash      K  Ki Blast (hold to charge)      Shift  Dash      Space  POWER UP', W / 2, H - 22);
+        ctx.fillText('WASD Fly   🖱L Blast (hold=charge)   🖱R Super-Dash (hold=farther)   J Slash   H Spin   G Nova   U Ultimate   Space Power-Up', W / 2, H - 22);
         ctx.restore();
     }
 
