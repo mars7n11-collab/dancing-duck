@@ -9680,7 +9680,7 @@
             eye: f.eye, bodyA: '#fff6c0', bodyB: rb ? ultRainbow(s, 1) : f.glow, super: true,
         };
     }
-    const ultATK = (s, base) => base * (ultForm(s) ? ultForm(s).dmg : 1);
+    const ultATK = (s, base) => base * (ultForm(s) ? ultForm(s).dmg : 1) * (s.lb > 0 ? 1.5 : 1);
 
     function ultMakeObject(s) {
         const t = ULT_TYPES[(Math.random() * ULT_TYPES.length) | 0];
@@ -9709,6 +9709,7 @@
             keys: {},
             power: 0, super: false, superT: 0, form: 0,
             sp: 0, beam: null,                              // special meter + active ultimate beam
+            od: 0, lb: 0,                                   // overdrive meter + active LIMIT BREAK timer
             charging: false, ki: 0,
             mouse: { x: W * 0.6, y: H * 0.5, active: false }, mDown: false, mHoldT: 0, mFireCd: 0,
             rDown: false, rHoldT: 0, dashMax: 0,            // right-click super dash (hold to charge)
@@ -9763,7 +9764,7 @@
     function ultKeyDown(e) {
         const s = ultState; if (!s) return;
         const k = e.key === ' ' ? 'space' : e.key.toLowerCase();
-        if ([...ULT_MOVE_KEYS, 'j', 'k', 'l', 'shift', 'space', 'h', 'g', 'u'].includes(k)) e.preventDefault();
+        if ([...ULT_MOVE_KEYS, 'j', 'k', 'l', 'shift', 'space', 'h', 'g', 'u', 'x'].includes(k)) e.preventDefault();
         if (s.keys[k]) return;          // ignore key-repeat for edge triggers
         s.keys[k] = true;
         if (k === 'j') ultSlash(s);
@@ -9772,6 +9773,7 @@
         else if (k === 'h') ultSpinSlash(s);
         else if (k === 'g') ultGroundPound(s);
         else if (k === 'u') ultFireUltimate(s);
+        else if (k === 'x') ultLimitBreak(s);
         else if (k === 'space') ultTryTransform(s);
     }
     function ultKeyUp(e) {
@@ -9991,13 +9993,33 @@
 
     // U — ULTIMATE BEAM: a swelling beam locked to the aim direction; needs a full special meter
     function ultFireUltimate(s) {
-        if (s.beam || s.sp < 1) return;
+        if (s.beam || (s.sp < 1 && s.lb <= 0)) return;
         const aim = ultAim(s);
-        s.sp = 0;
+        if (s.lb <= 0) s.sp = 0;                         // overdrive fires for free
         s.beam = { ang: Math.atan2(aim.y, aim.x), life: 750, max: 750 };
         s.shake = Math.max(s.shake, 18); s.flash = Math.max(s.flash, 0.5);
         for (let i = 0; i < 30; i++) s.speedLines.push({ a: ultRand(0, Math.PI * 2), len: ultRand(80, 240), life: 1, max: 1 });
         playSFX && playSFX('dmStreak');
+    }
+
+    // X — LIMIT BREAK: screen-clearing nova + a window of infinite-ultimate overdrive
+    function ultLimitBreak(s) {
+        if (s.od < 1 || s.lb > 0) return;
+        const d = s.duck;
+        s.lb = 8000;
+        if (!s.super) { s.super = true; s.superT = Math.max(s.superT, 8000); }   // force super for the duration
+        // nova: vaporise every object, every foe, and gut the boss
+        for (const o of s.objects) if (!o.dead) ultDamageObj(s, o, 9999, '#fff');
+        for (let i = s.foes.length - 1; i >= 0; i--) ultKillFoe(s, s.foes[i], false);
+        s.foes.length = 0;
+        if (s.boss && s.boss.phase === 'fight') ultDamageBoss(s, s.boss.maxHp * 0.45, '#fff');
+        s.od = 0;   // reset AFTER the nova so its own kills don't refund the meter
+        s.flash = 1; s.shake = Math.max(s.shake, 30); s.hitstop = Math.max(s.hitstop, 150);
+        s.announce = { txt: 'LIMIT BREAK!', t: 0, max: 1900 };
+        for (let i = 0; i < 4; i++) s.rings.push({ x: d.x, y: d.y, r: 10 + i * 24, max: Math.hypot(s.W, s.H) * (0.7 + i * 0.12), life: 1, col: i % 2 ? '#fff' : ultPalette(s).glow });
+        for (let i = 0; i < 90; i++) { const a = ultRand(0, Math.PI * 2), sp = ultRand(200, 900); s.particles.push({ x: d.x, y: d.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.9, max: 0.9, r: ultRand(4, 11), flame: true }); }
+        for (let i = 0; i < 40; i++) s.speedLines.push({ a: ultRand(0, Math.PI * 2), len: ultRand(140, 360), life: 1, max: 1 });
+        playSFX && playSFX('casinoJackpot');
     }
 
     function ultTryTransform(s) {
@@ -10042,6 +10064,7 @@
             s.score += gain;
             if (s.score > s.best) { s.best = s.score; try { localStorage.setItem('ultimateBest', s.best); } catch (_) {} }
             s.power = Math.min(1, s.power + 0.13);
+            s.od = Math.min(1, s.od + (s.sp >= 1 ? 0.04 : 0.018));   // OVERDRIVE; fills faster once ULTIMATE is capped
             s.sp = Math.min(1, s.sp + 0.06);            // builds the ULTIMATE beam meter
             s.shake = Math.max(s.shake, s.super ? 12 : 8);
             s.hitstop = Math.max(s.hitstop, 55);
@@ -10158,7 +10181,7 @@
         const bonus = 2500 * s.bossCount;
         s.score += bonus;
         if (s.score > s.best) { s.best = s.score; try { localStorage.setItem('ultimateBest', s.best); } catch (_) {} }
-        s.power = 1; s.sp = 1;                          // reward: refill both meters
+        s.power = 1; s.sp = 1; s.od = Math.min(1, s.od + 0.45);   // reward: refill meters + a big overdrive chunk
         s.announce = { txt: 'BOSS DOWN!', t: 0, max: 1500 };
         s.shake = Math.max(s.shake, 26); s.flash = Math.max(s.flash, 0.85); s.hitstop = Math.max(s.hitstop, 130);
         s.particles.push({ txt: '+' + bonus, x: b.x, y: b.y - b.r, life: 1.4, max: 1.4, col: '#ffd54a', size: 30 });
@@ -10184,6 +10207,7 @@
         s.shake = Math.max(0, s.shake - dt * 0.03);
         s.flash = Math.max(0, s.flash - sec * 2.2);
         s.hurt = Math.max(0, s.hurt - sec * 2);
+        if (s.lb > 0) { s.lb -= dt; s.sp = 1; if (s.lb <= 0) { s.lb = 0; s.flash = Math.max(s.flash, 0.4); } }   // overdrive keeps ULTIMATE topped off
         if (s.comboT > 0) { s.comboT -= dt; if (s.comboT <= 0) { s.combo = 0; s.comboMilestone = 0; } }
         if (s.cutin) { s.cutin.t += dt; if (s.cutin.t >= s.cutin.max) s.cutin = null; }
         if (s.announce) { s.announce.t += dt; if (s.announce.t >= s.announce.max) s.announce = null; }
@@ -10780,6 +10804,16 @@
         if (s.announce) drawUltAnnounce(s);
         if (s.cutin) drawUltCutin(s);
 
+        // OVERDRIVE screen tint — pulsing rainbow edge-glow while LIMIT BREAK is live
+        if (s.lb > 0) {
+            ctx.save();
+            const fade = s.lb < 800 ? s.lb / 800 : 1;
+            const og = ctx.createRadialGradient(W / 2, H / 2, H * 0.25, W / 2, H / 2, H * 0.8);
+            og.addColorStop(0, 'rgba(0,0,0,0)');
+            og.addColorStop(1, `hsla(${(s.t * 0.5) % 360},100%,60%,${0.3 * fade})`);
+            ctx.fillStyle = og; ctx.fillRect(0, 0, W, H);
+            ctx.restore();
+        }
         if (s.flash > 0) { ctx.save(); ctx.globalAlpha = Math.min(0.85, s.flash); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); ctx.restore(); }
         // red damage vignette when an orb connects
         if (s.hurt > 0) {
@@ -10959,6 +10993,24 @@
         ctx.fillText(s.sp >= 1 ? 'U → ULTIMATE BEAM!' : 'ULTIMATE', pbX + pbW / 2, sbY + pbH / 2);
         if (s.sp >= 1 && !s.beam) { ctx.strokeStyle = `rgba(120,220,255,${0.45 + 0.45 * Math.sin(s.t * 0.012)})`; ctx.lineWidth = 3; ctx.strokeRect(pbX - 2, sbY - 2, pbW + 4, pbH + 4); }
 
+        // OVERDRIVE meter (or live timer while LIMIT BREAK is active)
+        const obY = sbY + pbH + 8;
+        ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(pbX, obY, pbW, pbH);
+        if (s.lb > 0) {
+            const lf = s.lb / 8000, hue = (s.t * 0.5) % 360;
+            ctx.fillStyle = `hsl(${hue},100%,60%)`; ctx.fillRect(pbX, obY, pbW * lf, pbH);
+            ctx.fillStyle = '#000'; ctx.font = '900 11px system-ui'; ctx.textAlign = 'center';
+            ctx.fillText('⚡ OVERDRIVE ' + (s.lb / 1000).toFixed(1) + 's', pbX + pbW / 2, obY + pbH / 2);
+        } else {
+            const ogrd = ctx.createLinearGradient(pbX, 0, pbX + pbW, 0);
+            ogrd.addColorStop(0, '#f43f5e'); ogrd.addColorStop(0.5, '#f59e0b'); ogrd.addColorStop(1, '#facc15');
+            ctx.fillStyle = ogrd; ctx.fillRect(pbX, obY, pbW * s.od, pbH);
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 11px system-ui'; ctx.textAlign = 'center';
+            ctx.fillText(s.od >= 1 ? 'X → LIMIT BREAK!' : 'OVERDRIVE', pbX + pbW / 2, obY + pbH / 2);
+            if (s.od >= 1) { ctx.strokeStyle = `rgba(255,200,80,${0.5 + 0.5 * Math.sin(s.t * 0.02)})`; ctx.lineWidth = 3; ctx.strokeRect(pbX - 2, obY - 2, pbW + 4, pbH + 4); }
+        }
+        ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1.5; ctx.strokeRect(pbX, obY, pbW, pbH);
+
         // combo + live score multiplier badge
         if (s.combo > 1) {
             ctx.textAlign = 'center';
@@ -10977,7 +11029,7 @@
         // controls hint
         ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,0.7)';
         ctx.font = '13px system-ui, sans-serif';
-        ctx.fillText('WASD Fly   🖱L Blast (hold=charge)   🖱R Super-Dash (hold=farther)   J Slash   H Spin   G Nova   U Ultimate   Space Power-Up', W / 2, H - 22);
+        ctx.fillText('WASD Fly   🖱L Blast (hold=charge)   🖱R Super-Dash   J Slash   H Spin   G Nova   U Ultimate   X LIMIT BREAK   Space Power-Up', W / 2, H - 22);
         ctx.restore();
     }
 
