@@ -9710,6 +9710,7 @@
             power: 0, super: false, superT: 0, form: 0,
             sp: 0, beam: null,                              // special meter + active ultimate beam
             od: 0, lb: 0,                                   // overdrive meter + active LIMIT BREAK timer
+            star: null, starCd: 0,                          // radial multi-beam burst (R)
             charging: false, ki: 0,
             mouse: { x: W * 0.6, y: H * 0.5, active: false }, mDown: false, mHoldT: 0, mFireCd: 0,
             rDown: false, rHoldT: 0, dashMax: 0,            // right-click super dash (hold to charge)
@@ -9764,7 +9765,7 @@
     function ultKeyDown(e) {
         const s = ultState; if (!s) return;
         const k = e.key === ' ' ? 'space' : e.key.toLowerCase();
-        if ([...ULT_MOVE_KEYS, 'j', 'k', 'l', 'shift', 'space', 'h', 'g', 'u', 'x'].includes(k)) e.preventDefault();
+        if ([...ULT_MOVE_KEYS, 'j', 'k', 'l', 'shift', 'space', 'h', 'g', 'u', 'x', 'r'].includes(k)) e.preventDefault();
         if (s.keys[k]) return;          // ignore key-repeat for edge triggers
         s.keys[k] = true;
         if (k === 'j') ultSlash(s);
@@ -9773,6 +9774,7 @@
         else if (k === 'h') ultSpinSlash(s);
         else if (k === 'g') ultGroundPound(s);
         else if (k === 'u') ultFireUltimate(s);
+        else if (k === 'r') ultStarBeams(s);
         else if (k === 'x') ultLimitBreak(s);
         else if (k === 'space') ultTryTransform(s);
     }
@@ -10002,6 +10004,21 @@
         playSFX && playSFX('dmStreak');
     }
 
+    // R — STAR BEAM: fire energy beams in every direction at once, then slowly sweep
+    function ultStarBeams(s) {
+        if (s.starCd > 0) return;
+        s.starCd = 1500;
+        s.star = { t: 0, life: 520, max: 520, n: s.super ? 12 : 8, rot0: ultRand(0, Math.PI * 2) };
+        s.shake = Math.max(s.shake, 13); s.flash = Math.max(s.flash, 0.35);
+        s.rings.push({ x: s.duck.x, y: s.duck.y, r: 14, max: 220, life: 1, col: ultPalette(s).glow });
+        for (let i = 0; i < 24; i++) {
+            const a = ultRand(0, Math.PI * 2);
+            s.particles.push({ x: s.duck.x, y: s.duck.y, vx: Math.cos(a) * ultRand(140, 460), vy: Math.sin(a) * ultRand(140, 460),
+                life: 0.5, max: 0.5, col: '#fff', r: ultRand(2, 5), star: i % 2 === 0 });
+        }
+        playSFX && playSFX('dmStreak');
+    }
+
     // X — LIMIT BREAK: screen-clearing nova + a window of infinite-ultimate overdrive
     function ultLimitBreak(s) {
         if (s.od < 1 || s.lb > 0) return;
@@ -10201,6 +10218,7 @@
         s.spinT = Math.max(0, s.spinT - dt);
         s.spinCd = Math.max(0, s.spinCd - dt);
         s.poundCd = Math.max(0, s.poundCd - dt);
+        s.starCd = Math.max(0, s.starCd - dt);
         s.dashT = Math.max(0, s.dashT - dt);
         s.dashCd = Math.max(0, s.dashCd - dt);
         s.invul = Math.max(0, s.invul - dt);
@@ -10383,6 +10401,29 @@
                 if (along > -s.boss.r && perp < halfW + s.boss.r) ultDamageBoss(s, ultATK(s, 4) * sec * 16, '#fff');
             }
             if (b.life <= 0) { s.beam = null; s.flash = Math.max(s.flash, 0.3); }
+        }
+
+        // ── star beam: N rays radiating from the duck, slowly sweeping ──
+        if (s.star) {
+            const st = s.star; st.t += dt;
+            const spin = st.t * 0.0016, halfW = 28, step = Math.PI * 2 / st.n;
+            for (let k = 0; k < st.n; k++) {
+                const ang = st.rot0 + k * step + spin, ux = Math.cos(ang), uy = Math.sin(ang);
+                for (const o of s.objects) {
+                    if (o.dead) continue;
+                    const rx = o.x - d.x, ry = o.y - d.y, along = rx * ux + ry * uy, perp = Math.abs(-rx * uy + ry * ux);
+                    if (along > -o.r && perp < halfW + o.r) ultDamageObj(s, o, ultATK(s, 2) * sec * 6, '#fff');   // light vs scenery (keeps the sweep smooth)
+                }
+                for (let j = s.foes.length - 1; j >= 0; j--) {
+                    const f = s.foes[j], rx = f.x - d.x, ry = f.y - d.y, along = rx * ux + ry * uy, perp = Math.abs(-rx * uy + ry * ux);
+                    if (along > -f.r && perp < halfW + f.r) { ultKillFoe(s, f, false); s.foes.splice(j, 1); }
+                }
+                if (s.boss && s.boss.phase === 'fight') {
+                    const rx = s.boss.x - d.x, ry = s.boss.y - d.y, along = rx * ux + ry * uy, perp = Math.abs(-rx * uy + ry * ux);
+                    if (along > -s.boss.r && perp < halfW + s.boss.r) ultDamageBoss(s, ultATK(s, 3) * sec * 10, '#fff');
+                }
+            }
+            if (st.t >= st.life) s.star = null;
         }
 
         // debris
@@ -10768,6 +10809,27 @@
             ctx.restore();
         }
 
+        // star beam — N rays radiating from the duck
+        if (s.star) {
+            const st = s.star, P = ultPalette(s), spin = st.t * 0.0016, step = Math.PI * 2 / st.n;
+            const fade = st.t < 110 ? st.t / 110 : (st.life - st.t < 150 ? (st.life - st.t) / 150 : 1);
+            const w = 24 * Math.max(0, fade), len = Math.hypot(W, H);
+            ctx.save();
+            ctx.translate(d.x, d.y); ctx.globalCompositeOperation = 'lighter';
+            for (let k = 0; k < st.n; k++) {
+                ctx.save(); ctx.rotate(st.rot0 + k * step + spin);
+                const bg = ctx.createLinearGradient(0, -w, 0, w);
+                bg.addColorStop(0, P.aura1); bg.addColorStop(0.5, P.glow); bg.addColorStop(1, P.aura1);
+                ctx.fillStyle = bg; ctx.fillRect(0, -w, len, w * 2);
+                ctx.fillStyle = `rgba(255,255,255,${0.8 * fade})`; ctx.fillRect(0, -w * 0.3, len, w * 0.6);
+                ctx.restore();
+            }
+            const cg = ctx.createRadialGradient(0, 0, 2, 0, 0, w * 2.4);
+            cg.addColorStop(0, '#fff'); cg.addColorStop(1, P.aura1);
+            ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(0, 0, w * 2.4, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        }
+
         // duck afterimages
         for (const g of s.trail) drawUltDuck(s, g.x, g.y, g.lean, g.facing, g.life * 0.34, true);
 
@@ -11029,7 +11091,7 @@
         // controls hint
         ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,0.7)';
         ctx.font = '13px system-ui, sans-serif';
-        ctx.fillText('WASD Fly   🖱L Blast (hold=charge)   🖱R Super-Dash   J Slash   H Spin   G Nova   U Ultimate   X LIMIT BREAK   Space Power-Up', W / 2, H - 22);
+        ctx.fillText('WASD Fly   🖱L Blast   🖱R Dash   J Slash   H Spin   G Nova   R Star-Beam   U Ultimate   X LIMIT BREAK   Space Power-Up', W / 2, H - 22);
         ctx.restore();
     }
 
