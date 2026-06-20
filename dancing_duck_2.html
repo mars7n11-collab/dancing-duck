@@ -9659,10 +9659,13 @@
 
     // Super-form roster — Space transforms into the first, then cycles through the rest.
     const ULT_FORMS = [
-        { name: 'GOLD SAIYAN',  glow: '#ffd54a', eye: '#33e0ff', dmg: 1.6, spd: 1.5, score: 2 },
-        { name: 'CRIMSON FURY', glow: '#ff5d73', eye: '#fff04d', dmg: 2.4, spd: 1.3, score: 2 },
-        { name: 'AZURE BOLT',   glow: '#5ad1ff', eye: '#ffffff', dmg: 1.5, spd: 2.0, score: 2 },
-        { name: 'PRISM GOD',    glow: 'rainbow', eye: '#ffffff', dmg: 2.8, spd: 2.1, score: 3 },
+        { name: 'GOLD SAIYAN',     glow: '#ffd54a', eye: '#33e0ff', dmg: 1.6, spd: 1.5, score: 2 },
+        { name: 'CRIMSON FURY',    glow: '#ff5d73', eye: '#fff04d', dmg: 2.4, spd: 1.3, score: 2 },
+        { name: 'AZURE BOLT',      glow: '#5ad1ff', eye: '#ffffff', dmg: 1.5, spd: 2.0, score: 2 },
+        { name: 'PRISM GOD',       glow: 'rainbow', eye: '#ffffff', dmg: 2.8, spd: 2.1, score: 3 },
+        { name: 'VOID REAPER',     glow: '#b14dff', eye: '#00ffc8', dmg: 3.2, spd: 1.9, score: 3 },
+        { name: 'INFERNO KING',    glow: '#ff6a00', eye: '#fff2a8', dmg: 3.4, spd: 1.7, score: 3 },
+        { name: 'COSMIC OVERLORD', glow: 'rainbow', eye: '#aef9ff', dmg: 4.2, spd: 2.6, score: 4 },
     ];
     const hexA = (h, a) => { const n = parseInt(h.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
     function ultForm(s) { return s.super ? ULT_FORMS[((s.form % ULT_FORMS.length) + ULT_FORMS.length) % ULT_FORMS.length] : null; }
@@ -9711,6 +9714,8 @@
             sp: 0, beam: null,                              // special meter + active ultimate beam
             od: 0, lb: 0,                                   // overdrive meter + active LIMIT BREAK timer
             star: null, starCd: 0,                          // radial multi-beam burst (R)
+            hole: null, holeCd: 0,                          // SINGULARITY black-hole (Q)
+            rush: null, rushCd: 0,                          // PHANTOM RUSH teleport barrage (E)
             pickups: [], frenzyT: 0, shieldT: 0, dblT: 0,   // power-up drops + active buff timers
             charging: false, ki: 0,
             mouse: { x: W * 0.6, y: H * 0.5, active: false }, mDown: false, mHoldT: 0, mFireCd: 0,
@@ -9766,7 +9771,7 @@
     function ultKeyDown(e) {
         const s = ultState; if (!s) return;
         const k = e.key === ' ' ? 'space' : e.key.toLowerCase();
-        if ([...ULT_MOVE_KEYS, 'j', 'k', 'l', 'shift', 'space', 'h', 'g', 'u', 'x', 'r'].includes(k)) e.preventDefault();
+        if ([...ULT_MOVE_KEYS, 'j', 'k', 'l', 'shift', 'space', 'h', 'g', 'u', 'x', 'r', 'q', 'e'].includes(k)) e.preventDefault();
         if (s.keys[k]) return;          // ignore key-repeat for edge triggers
         s.keys[k] = true;
         if (k === 'j') ultSlash(s);
@@ -9776,6 +9781,8 @@
         else if (k === 'g') ultGroundPound(s);
         else if (k === 'u') ultFireUltimate(s);
         else if (k === 'r') ultStarBeams(s);
+        else if (k === 'q') ultBlackHole(s);
+        else if (k === 'e') ultPhantomRush(s);
         else if (k === 'x') ultLimitBreak(s);
         else if (k === 'space') ultTryTransform(s);
     }
@@ -10020,6 +10027,44 @@
         playSFX && playSFX('dmStreak');
     }
 
+    // Q — SINGULARITY: hurl a black hole at the aim point; it drags everything in, then detonates
+    function ultBlackHole(s) {
+        if (s.holeCd > 0 || s.hole) return;
+        const d = s.duck, aim = ultAim(s);
+        const reach = 260;
+        s.holeCd = 4200;
+        s.hole = {
+            x: d.x + aim.x * reach, y: d.y + aim.y * reach,
+            t: 0, life: 1700, max: 1700, r: 0, detonated: false,
+        };
+        s.shake = Math.max(s.shake, 12); s.flash = Math.max(s.flash, 0.28);
+        s.rings.push({ x: s.hole.x, y: s.hole.y, r: 8, max: 200, life: 1, col: '#b14dff' });
+        for (let i = 0; i < 26; i++) {
+            const a = ultRand(0, Math.PI * 2), rr = ultRand(120, 240);
+            s.particles.push({ x: s.hole.x + Math.cos(a) * rr, y: s.hole.y + Math.sin(a) * rr,
+                vx: -Math.cos(a) * ultRand(120, 360), vy: -Math.sin(a) * ultRand(120, 360),
+                life: 0.6, max: 0.6, col: i % 2 ? '#d8b4fe' : '#7c3aed', r: ultRand(2, 5), star: i % 3 === 0 });
+        }
+        playSFX && playSFX('dmStreak');
+    }
+
+    // E — PHANTOM RUSH: blink between every target on screen, slashing each in an instant flurry
+    function ultPhantomRush(s) {
+        if (s.rushCd > 0 || s.rush) return;
+        const list = [];
+        for (const o of s.objects) if (!o.dead) list.push({ obj: o });
+        for (const f of s.foes) list.push({ foe: f });
+        if (s.boss && s.boss.phase === 'fight') for (let i = 0; i < 4; i++) list.push({ boss: true });
+        if (!list.length) return;                          // nothing to rush — don't waste the cooldown
+        for (let i = list.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; const t = list[i]; list[i] = list[j]; list[j] = t; }
+        s.rush = { list, i: 0, stepT: 0, step: s.super ? 46 : 60, ret: { x: s.duck.x, y: s.duck.y } };
+        s.rushCd = 3600;
+        s.invul = Math.max(s.invul, 900);
+        s.shake = Math.max(s.shake, 10); s.flash = Math.max(s.flash, 0.3);
+        s.announce = { txt: 'PHANTOM RUSH!', t: 0, max: 1100 };
+        playSFX && playSFX('dmStreak');
+    }
+
     // X — LIMIT BREAK: screen-clearing nova + a window of infinite-ultimate overdrive
     function ultLimitBreak(s) {
         if (s.od < 1 || s.lb > 0) return;
@@ -10064,7 +10109,7 @@
         { n: 30, txt: 'GODLIKE!!!' }, { n: 50, txt: 'UNREAL!!!' }, { n: 75, txt: 'LEGENDARY!!!' },
     ];
 
-    function ultDamageObj(s, o, amount, col) {
+    function ultDamageObj(s, o, amount, col, chained) {
         if (o.dead) return;
         o.hp -= amount; o.hitFlash = 1;
         if (o.hp <= 0) {
@@ -10103,6 +10148,15 @@
                     life: 0.6, max: 0.6, col: ['#fff', '#ffd54a', col || '#9be7ff'][i % 3], r: ultRand(2, 6), star: i % 3 === 0 });
             }
             playSFX && playSFX(s.combo >= 4 ? 'casinoJackpot' : 'weapon');
+            // CHAIN REACTION: at a hot combo, a kill detonates and ignites its neighbours
+            if (!chained && s.combo >= 8) {
+                const CR = 150;
+                s.rings.push({ x: o.x, y: o.y, r: 8, max: CR + 40, life: 1, col: '#ff9d3c' });
+                s.flash = Math.max(s.flash, 0.18);
+                for (let i = 0; i < 18; i++) { const a = ultRand(0, Math.PI * 2), spd = ultRand(140, 520); s.particles.push({ x: o.x, y: o.y, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, life: 0.55, max: 0.55, col: ['#fff', '#ffae3c', '#ff5d3c'][i % 3], r: ultRand(2, 6), star: i % 3 === 0 }); }
+                for (const n2 of s.objects) { if (n2.dead || n2 === o) continue; if (Math.hypot(n2.x - o.x, n2.y - o.y) < CR + n2.r) ultDamageObj(s, n2, ultATK(s, 99), '#ff9d3c', true); }
+                ultHitFoes(s, o.x, o.y, CR, ultATK(s, 6));
+            }
         } else {
             s.shake = Math.max(s.shake, 3);
             for (let i = 0; i < 6; i++) {
@@ -10252,6 +10306,8 @@
         s.spinCd = Math.max(0, s.spinCd - dt);
         s.poundCd = Math.max(0, s.poundCd - dt);
         s.starCd = Math.max(0, s.starCd - dt);
+        s.holeCd = Math.max(0, s.holeCd - dt);
+        s.rushCd = Math.max(0, s.rushCd - dt);
         s.dashT = Math.max(0, s.dashT - dt);
         s.dashCd = Math.max(0, s.dashCd - dt);
         s.invul = Math.max(0, s.invul - dt);
@@ -10472,6 +10528,69 @@
                 }
             }
             if (st.t >= st.life) s.star = null;
+        }
+
+        // ── SINGULARITY black hole: drag everything inward, grind the core, then detonate ──
+        if (s.hole) {
+            const h = s.hole; h.t += dt;
+            const grow = Math.min(1, h.t / 260);
+            h.r = 34 * grow;
+            const PULL = 280, GRIND = 64;
+            for (const o of s.objects) {
+                if (o.dead) continue;
+                const dx = h.x - o.x, dy = h.y - o.y, dist = Math.hypot(dx, dy) || 1;
+                if (dist < PULL) { const f = (1 - dist / PULL) * 900 * sec; o.vx += dx / dist * f; o.vy += dy / dist * f; }
+                if (dist < GRIND) ultDamageObj(s, o, ultATK(s, 6) * sec * 14, '#c084fc');
+            }
+            for (let i = s.foes.length - 1; i >= 0; i--) {
+                const f = s.foes[i], dx = h.x - f.x, dy = h.y - f.y, dist = Math.hypot(dx, dy) || 1;
+                if (dist < PULL) { const fr = (1 - dist / PULL) * 1100 * sec; f.vx += dx / dist * fr; f.vy += dy / dist * fr; }
+                if (dist < GRIND) { ultKillFoe(s, f, false); s.foes.splice(i, 1); }
+            }
+            if (s.boss && s.boss.phase === 'fight') {
+                const dist = Math.hypot(h.x - s.boss.x, h.y - s.boss.y);
+                if (dist < GRIND + s.boss.r) ultDamageBoss(s, ultATK(s, 4) * sec * 12, '#c084fc');
+            }
+            for (const p of s.debris) { const dx = h.x - p.x, dy = h.y - p.y, dist = Math.hypot(dx, dy) || 1; if (dist < PULL) { const f = (1 - dist / PULL) * 1400 * sec; p.vx += dx / dist * f; p.vy += dy / dist * f; } }
+            // swirling intake motes
+            if (Math.random() < 0.9) { const a = ultRand(0, Math.PI * 2), rr = ultRand(150, 240); s.particles.push({ x: h.x + Math.cos(a) * rr, y: h.y + Math.sin(a) * rr, vx: -Math.cos(a + 0.9) * 240, vy: -Math.sin(a + 0.9) * 240, life: 0.7, max: 0.7, col: ultRand(0, 1) < 0.5 ? '#c084fc' : '#7c3aed', r: ultRand(2, 4) }); }
+            if (h.t >= h.life && !h.detonated) {           // collapse → cataclysmic detonation
+                h.detonated = true;
+                const R = 320;
+                for (const o of s.objects) if (!o.dead && Math.hypot(o.x - h.x, o.y - h.y) < R + o.r) { ultDamageObj(s, o, ultATK(s, 99), '#fff'); const a = Math.atan2(o.y - h.y, o.x - h.x); o.vx += Math.cos(a) * 620; o.vy += Math.sin(a) * 620; }
+                ultHitFoes(s, h.x, h.y, R, ultATK(s, 12));
+                s.flash = Math.max(s.flash, 0.9); s.shake = Math.max(s.shake, 28); s.hitstop = Math.max(s.hitstop, 110);
+                for (let i = 0; i < 4; i++) s.rings.push({ x: h.x, y: h.y, r: 8, max: R + i * 80, life: 1, col: i % 2 ? '#fff' : '#b14dff' });
+                for (let i = 0; i < 80; i++) { const a = ultRand(0, Math.PI * 2), spd = ultRand(220, 900); s.particles.push({ x: h.x, y: h.y, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, life: 0.9, max: 0.9, col: ['#fff', '#c084fc', '#7c3aed'][i % 3], r: ultRand(3, 8), star: i % 4 === 0 }); }
+                s.announce = { txt: 'SINGULARITY!', t: 0, max: 1100 };
+                playSFX && playSFX('casinoJackpot');
+                s.hole = null;
+            }
+        }
+
+        // ── PHANTOM RUSH: blink the duck between targets, slashing each on arrival ──
+        if (s.rush) {
+            const ru = s.rush; ru.stepT -= dt;
+            while (ru.stepT <= 0 && ru.i < ru.list.length) {
+                const tgt = ru.list[ru.i]; ru.i++;
+                let tx, ty, hit = false;
+                if (tgt.obj && !tgt.obj.dead) { tx = tgt.obj.x; ty = tgt.obj.y; ultDamageObj(s, tgt.obj, ultATK(s, 8), '#fff'); hit = true; }
+                else if (tgt.foe && s.foes.includes(tgt.foe)) { tx = tgt.foe.x; ty = tgt.foe.y; const fi = s.foes.indexOf(tgt.foe); ultKillFoe(s, tgt.foe, false); s.foes.splice(fi, 1); hit = true; }
+                else if (tgt.boss && s.boss) { const a = ultRand(0, Math.PI * 2), rr = s.boss.r + 30; tx = s.boss.x + Math.cos(a) * rr; ty = s.boss.y + Math.sin(a) * rr; ultDamageBoss(s, ultATK(s, 6), '#fff'); hit = true; }
+                if (hit) {
+                    s.trail.push({ x: d.x, y: d.y, lean: d.lean, facing: d.facing, life: 1 });
+                    d.x = tx; d.y = ty; d.vx = 0; d.vy = 0;
+                    s.rings.push({ x: tx, y: ty, r: 6, max: 70, life: 1, col: ultPalette(s).glow });
+                    for (let i = 0; i < 8; i++) { const a = ultRand(0, Math.PI * 2); s.particles.push({ x: tx, y: ty, vx: Math.cos(a) * ultRand(120, 360), vy: Math.sin(a) * ultRand(120, 360), life: 0.4, max: 0.4, col: '#fff', r: ultRand(2, 4), star: i % 2 === 0 }); }
+                    s.shake = Math.max(s.shake, 7); s.hitstop = Math.max(s.hitstop, 22);
+                    playSFX && playSFX('weapon');
+                }
+                ru.stepT += ru.step;
+            }
+            if (ru.i >= ru.list.length) {                  // flurry done — settle back into flight
+                s.rush = null; s.invul = Math.max(s.invul, 200);
+                s.flash = Math.max(s.flash, 0.3); s.shake = Math.max(s.shake, 12);
+            }
         }
 
         // debris
@@ -10901,6 +11020,36 @@
             ctx.restore();
         }
 
+        // SINGULARITY black hole — swirling accretion disk around a void core
+        if (s.hole) {
+            const h = s.hole, prog = h.t / h.max;
+            const fade = h.t < 200 ? h.t / 200 : (h.life - h.t < 200 ? Math.max(0, (h.life - h.t) / 200) : 1);
+            const collapse = h.life - h.t < 260 ? (h.life - h.t) / 260 : 1;   // core shrinks just before detonation
+            const core = (14 + h.r) * Math.max(0.2, collapse);
+            ctx.save();
+            ctx.translate(h.x, h.y);
+            // pull-in haze
+            ctx.globalCompositeOperation = 'lighter';
+            const hg = ctx.createRadialGradient(0, 0, core, 0, 0, 240 * fade);
+            hg.addColorStop(0, `rgba(177,77,255,${0.5 * fade})`); hg.addColorStop(0.5, `rgba(124,58,237,${0.22 * fade})`); hg.addColorStop(1, 'rgba(124,58,237,0)');
+            ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(0, 0, 240 * fade, 0, Math.PI * 2); ctx.fill();
+            // spiralling accretion arms
+            ctx.rotate(h.t * 0.012);
+            for (let k = 0; k < 3; k++) {
+                ctx.rotate(Math.PI * 2 / 3);
+                ctx.strokeStyle = `rgba(216,180,254,${0.7 * fade})`; ctx.lineWidth = 3;
+                ctx.beginPath();
+                for (let a = 0; a < Math.PI * 1.6; a += 0.25) { const rr = core + a * 30; const x = Math.cos(a) * rr, y = Math.sin(a) * rr; a === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
+                ctx.stroke();
+            }
+            ctx.rotate(-h.t * 0.012);
+            // event-horizon ring + black core
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.fillStyle = '#05010f'; ctx.beginPath(); ctx.arc(0, 0, core, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = `rgba(255,255,255,${0.9 * fade})`; ctx.lineWidth = 2.5 + 2 * Math.sin(h.t * 0.02); ctx.stroke();
+            ctx.restore();
+        }
+
         // duck afterimages
         for (const g of s.trail) drawUltDuck(s, g.x, g.y, g.lean, g.facing, g.life * 0.34, true);
 
@@ -11180,7 +11329,7 @@
         // controls hint
         ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,0.7)';
         ctx.font = '13px system-ui, sans-serif';
-        ctx.fillText('WASD Fly   🖱L Blast   🖱R Dash   J Slash   H Spin   G Nova   R Star-Beam   U Ultimate   X LIMIT BREAK   Space Power-Up', W / 2, H - 22);
+        ctx.fillText('WASD Fly   🖱L Blast   🖱R Dash   J Slash   H Spin   G Nova   Q Black Hole   E Phantom Rush   R Star-Beam   U Ultimate   X LIMIT BREAK   Space Power-Up', W / 2, H - 22);
         ctx.restore();
     }
 
