@@ -9711,6 +9711,7 @@
             sp: 0, beam: null,                              // special meter + active ultimate beam
             od: 0, lb: 0,                                   // overdrive meter + active LIMIT BREAK timer
             star: null, starCd: 0,                          // radial multi-beam burst (R)
+            pickups: [], frenzyT: 0, shieldT: 0, dblT: 0,   // power-up drops + active buff timers
             charging: false, ki: 0,
             mouse: { x: W * 0.6, y: H * 0.5, active: false }, mDown: false, mHoldT: 0, mFireCd: 0,
             rDown: false, rHoldT: 0, dashMax: 0,            // right-click super dash (hold to charge)
@@ -9887,7 +9888,7 @@
         ultMouseMove(e);                 // make sure aim is current on the click
         if (e.button === 0) {            // left — rapid blaster
             s.mDown = true; s.mHoldT = 0;
-            ultRapidBolt(s); s.mFireCd = s.super ? 55 : 80;   // instant shot on click; stream continues while held
+            ultRapidBolt(s); s.mFireCd = (s.super ? 55 : 80) * (s.frenzyT > 0 ? 0.45 : 1);   // instant shot on click; stream continues while held
         } else if (e.button === 2) {     // right — charge a super dash
             s.rDown = true; s.rHoldT = 0;
         }
@@ -10077,8 +10078,9 @@
                 s.shake = Math.max(s.shake, 11); s.flash = Math.max(s.flash, 0.2);
                 playSFX && playSFX('casinoJackpot');
             }
-            const gain = (cfg.score) * Math.max(1, s.combo) * (ultForm(s) ? ultForm(s).score : 1);
+            const gain = (cfg.score) * Math.max(1, s.combo) * (ultForm(s) ? ultForm(s).score : 1) * (s.dblT > 0 ? 2 : 1);
             s.score += gain;
+            if (Math.random() < 0.08) ultDropPickup(s, o.x, o.y);
             if (s.score > s.best) { s.best = s.score; try { localStorage.setItem('ultimateBest', s.best); } catch (_) {} }
             s.power = Math.min(1, s.power + 0.13);
             s.od = Math.min(1, s.od + (s.sp >= 1 ? 0.04 : 0.018));   // OVERDRIVE; fills faster once ULTIMATE is capped
@@ -10112,6 +10114,30 @@
     }
 
     // ── Fightback enemies: homing energy orbs you dodge, deflect (dash), or destroy ──
+    // ── Power-up drops: glowing buffs that magnetise to the duck ──
+    const ULT_PICKUPS = {
+        frenzy: { col: '#ff3b6b', sym: '⚡', label: 'FRENZY', dur: 6000 },
+        shield: { col: '#3bd0ff', sym: '🛡', label: 'SHIELD', dur: 6000 },
+        double: { col: '#ffd54a', sym: '✕2', label: '2× SCORE', dur: 9000 },
+    };
+    const ULT_PK_KEYS = Object.keys(ULT_PICKUPS);
+    function ultDropPickup(s, x, y, force) {
+        if (!force && (s.pickups.length >= 4 || Math.random() > 0.5)) return;
+        const t = ULT_PK_KEYS[(Math.random() * ULT_PK_KEYS.length) | 0];
+        s.pickups.push({ x, y, vx: ultRand(-50, 50), vy: ultRand(-70, -20), r: 16, t, life: 9000, seed: ultRand(0, 6.28) });
+    }
+    function ultCollect(s, p) {
+        const cfg = ULT_PICKUPS[p.t];
+        if (p.t === 'frenzy') s.frenzyT = cfg.dur;
+        else if (p.t === 'shield') s.shieldT = cfg.dur;
+        else if (p.t === 'double') s.dblT = cfg.dur;
+        s.flash = Math.max(s.flash, 0.22); s.shake = Math.max(s.shake, 5);
+        s.particles.push({ txt: cfg.label, x: p.x, y: p.y - 12, life: 1.1, max: 1.1, col: cfg.col, size: 20 });
+        s.rings.push({ x: p.x, y: p.y, r: 6, max: 80, life: 1, col: cfg.col });
+        for (let i = 0; i < 14; i++) { const a = ultRand(0, Math.PI * 2), sp = ultRand(70, 300); s.particles.push({ x: p.x, y: p.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.5, max: 0.5, col: ['#fff', cfg.col][i % 2], r: ultRand(2, 5), star: i % 2 === 0 }); }
+        playSFX && playSFX('casinoJackpot');
+    }
+
     function ultSpawnFoe(s) {
         const edge = Math.random() * 4 | 0; let x, y;
         if (edge === 0) { x = -40; y = ultRand(0, s.H); }
@@ -10121,7 +10147,8 @@
         s.foes.push({ x, y, vx: 0, vy: 0, r: 15, hp: 2, life: 11000, born: 0, hue: ultRand(285, 330), seed: ultRand(0, 6.28) });
     }
     function ultKillFoe(s, f, deflected) {
-        s.score += 120; s.sp = Math.min(1, s.sp + 0.05);
+        s.score += 120 * (s.dblT > 0 ? 2 : 1); s.sp = Math.min(1, s.sp + 0.05);
+        if (Math.random() < 0.14) ultDropPickup(s, f.x, f.y);
         if (s.score > s.best) { s.best = s.score; try { localStorage.setItem('ultimateBest', s.best); } catch (_) {} }
         s.shake = Math.max(s.shake, deflected ? 7 : 4);
         s.rings.push({ x: f.x, y: f.y, r: 4, max: 64, life: 1, col: `hsl(${f.hue},100%,68%)` });
@@ -10133,6 +10160,11 @@
         playSFX && playSFX(deflected ? 'weapon' : 'pop');
     }
     function ultPlayerHit(s, f) {
+        if (s.shieldT > 0 || s.invul > 0) {            // SHIELD (or mercy frames) absorbs the hit
+            s.shake = Math.max(s.shake, 6); s.flash = Math.max(s.flash, 0.18);
+            s.rings.push({ x: s.duck.x, y: s.duck.y, r: 30, max: 90, life: 1, col: '#3bd0ff' });
+            return;
+        }
         s.combo = 0; s.comboT = 0; s.comboMilestone = 0;
         s.power = Math.max(0, s.power - 0.18);
         s.invul = Math.max(s.invul, 750);              // mercy i-frames
@@ -10199,6 +10231,7 @@
         s.score += bonus;
         if (s.score > s.best) { s.best = s.score; try { localStorage.setItem('ultimateBest', s.best); } catch (_) {} }
         s.power = 1; s.sp = 1; s.od = Math.min(1, s.od + 0.45);   // reward: refill meters + a big overdrive chunk
+        ultDropPickup(s, b.x - 30, b.y, true); ultDropPickup(s, b.x + 30, b.y, true);   // guaranteed loot
         s.announce = { txt: 'BOSS DOWN!', t: 0, max: 1500 };
         s.shake = Math.max(s.shake, 26); s.flash = Math.max(s.flash, 0.85); s.hitstop = Math.max(s.hitstop, 130);
         s.particles.push({ txt: '+' + bonus, x: b.x, y: b.y - b.r, life: 1.4, max: 1.4, col: '#ffd54a', size: 30 });
@@ -10225,6 +10258,7 @@
         s.shake = Math.max(0, s.shake - dt * 0.03);
         s.flash = Math.max(0, s.flash - sec * 2.2);
         s.hurt = Math.max(0, s.hurt - sec * 2);
+        s.frenzyT = Math.max(0, s.frenzyT - dt); s.shieldT = Math.max(0, s.shieldT - dt); s.dblT = Math.max(0, s.dblT - dt);
         if (s.lb > 0) { s.lb -= dt; s.sp = 1; if (s.lb <= 0) { s.lb = 0; s.flash = Math.max(s.flash, 0.4); } }   // overdrive keeps ULTIMATE topped off
         if (s.comboT > 0) { s.comboT -= dt; if (s.comboT <= 0) { s.combo = 0; s.comboMilestone = 0; } }
         if (s.cutin) { s.cutin.t += dt; if (s.cutin.t >= s.cutin.max) s.cutin = null; }
@@ -10234,7 +10268,7 @@
         s.mFireCd = Math.max(0, s.mFireCd - dt);
         if (s.mDown) {
             s.mHoldT += dt;
-            if (s.mFireCd <= 0) { ultRapidBolt(s); s.mFireCd = s.super ? 55 : 80; }
+            if (s.mFireCd <= 0) { ultRapidBolt(s); s.mFireCd = (s.super ? 55 : 80) * (s.frenzyT > 0 ? 0.45 : 1); }
         }
         if (s.rDown) {                               // charging the super dash → gathering flames
             s.rHoldT += dt;
@@ -10334,6 +10368,20 @@
                 s.foes.splice(i, 1); continue;
             }
             if (f.life <= 0) s.foes.splice(i, 1);
+        }
+
+        // ── power-up drops: drift, then magnetise to the duck and get collected ──
+        for (let i = s.pickups.length - 1; i >= 0; i--) {
+            const p = s.pickups[i]; p.life -= dt;
+            const dx = d.x - p.x, dy = d.y - p.y, dist = Math.hypot(dx, dy) || 1;
+            if (dist < 150) {                            // within range: home in toward the duck
+                const pull = (1 - dist / 150) * 900 * sec;
+                p.vx += dx / dist * pull; p.vy += dy / dist * pull;
+            } else { p.vy += 80 * sec; }                 // otherwise float gently downward
+            p.vx *= Math.exp(-1.6 * sec); p.vy *= Math.exp(-1.6 * sec);
+            p.x += p.vx * sec; p.y += p.vy * sec;
+            if (dist < p.r + 26) { ultCollect(s, p); s.pickups.splice(i, 1); continue; }
+            if (p.life <= 0) s.pickups.splice(i, 1);
         }
 
         // ── mini-boss: spawn on a kill milestone, then chase / attack / die ──
@@ -10743,6 +10791,29 @@
         // objects
         for (const o of s.objects) drawUltObject(o);
 
+        // power-up drops — glowing collectible buffs with a pulsing halo + glyph
+        for (const p of s.pickups) {
+            const cfg = ULT_PICKUPS[p.t];
+            const pul = 1 + 0.18 * Math.sin(s.t * 0.01 + p.seed);
+            const fade = p.life < 1500 ? Math.max(0.2, p.life / 1500) : 1;   // blink out as it expires
+            const blink = p.life < 1500 ? 0.5 + 0.5 * Math.sin(s.t * 0.03) : 1;
+            ctx.save();
+            ctx.globalAlpha = fade * blink;
+            ctx.globalCompositeOperation = 'lighter';
+            const pg = ctx.createRadialGradient(p.x, p.y, 1, p.x, p.y, p.r * 2.6 * pul);
+            pg.addColorStop(0, cfg.col); pg.addColorStop(0.45, cfg.col + '88'); pg.addColorStop(1, cfg.col + '00');
+            ctx.fillStyle = pg; ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 2.6 * pul, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+            ctx.save();
+            ctx.globalAlpha = fade * blink;
+            ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.beginPath(); ctx.arc(p.x, p.y, p.r * pul, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = cfg.col; ctx.lineWidth = 2.5; ctx.stroke();
+            ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.font = `${Math.round(p.r * 1.1)}px sans-serif`;
+            ctx.fillText(cfg.sym, p.x, p.y + 1);
+            ctx.restore();
+        }
+
         // fightback orbs — pulsing energy spheres with a warning corona
         for (const f of s.foes) {
             const pul = 1 + 0.15 * Math.sin(s.t * 0.012 + f.seed);
@@ -11072,6 +11143,24 @@
             if (s.od >= 1) { ctx.strokeStyle = `rgba(255,200,80,${0.5 + 0.5 * Math.sin(s.t * 0.02)})`; ctx.lineWidth = 3; ctx.strokeRect(pbX - 2, obY - 2, pbW + 4, pbH + 4); }
         }
         ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1.5; ctx.strokeRect(pbX, obY, pbW, pbH);
+
+        // active power-up buff chips — show remaining seconds for each live buff
+        const buffs = [];
+        if (s.frenzyT > 0) buffs.push({ c: ULT_PICKUPS.frenzy, t: s.frenzyT });
+        if (s.shieldT > 0) buffs.push({ c: ULT_PICKUPS.shield, t: s.shieldT });
+        if (s.dblT > 0) buffs.push({ c: ULT_PICKUPS.double, t: s.dblT });
+        if (buffs.length) {
+            let bx = pbX; const by = obY + pbH + 8, bh = 20;
+            ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = 'bold 12px system-ui';
+            for (const b of buffs) {
+                const lbl = `${b.c.sym} ${b.c.label} ${(b.t / 1000).toFixed(1)}s`;
+                const bw = ctx.measureText(lbl).width + 16;
+                ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 6); ctx.fill();
+                ctx.strokeStyle = b.c.col; ctx.lineWidth = 1.5; ctx.stroke();
+                ctx.fillStyle = b.c.col; ctx.fillText(lbl, bx + 8, by + bh / 2 + 1);
+                bx += bw + 6;
+            }
+        }
 
         // combo + live score multiplier badge
         if (s.combo > 1) {
