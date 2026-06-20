@@ -9717,11 +9717,13 @@
             hole: null, holeCd: 0,                          // SINGULARITY black-hole (Q)
             rush: null, rushCd: 0,                          // PHANTOM RUSH teleport barrage (E)
             storm: null, stormCd: 0, meteors: [],           // METEOR STORM bombardment (T)
+            halo: null, haloCd: 0,                          // HALO BLADE — extended spinning sword (F)
             pickups: [], frenzyT: 0, shieldT: 0, dblT: 0,   // power-up drops + active buff timers
             charging: false, ki: 0,
             mouse: { x: W * 0.6, y: H * 0.5, active: false }, mDown: false, mHoldT: 0, mFireCd: 0,
             rDown: false, rHoldT: 0, dashMax: 0,            // right-click super dash (hold to charge)
             slashT: 0, spinT: 0, spinCd: 0, poundCd: 0, dashT: 0, dashCd: 0, invul: 0,
+            slashCombo: 0, slashComboT: 0, slashWaves: [],   // J combo counter + flying crescent waves
             blasts: [], objects: [], debris: [], particles: [], rings: [], trail: [], speedLines: [],
             foes: [], foeSpawnT: 3000,                      // homing energy orbs that fight back
             boss: null, kills: 0, nextBoss: 12, bossCount: 0,   // mini-boss encounters
@@ -9772,7 +9774,7 @@
     function ultKeyDown(e) {
         const s = ultState; if (!s) return;
         const k = e.key === ' ' ? 'space' : e.key.toLowerCase();
-        if ([...ULT_MOVE_KEYS, 'j', 'k', 'l', 'shift', 'space', 'h', 'g', 'u', 'x', 'r', 'q', 'e', 't'].includes(k)) e.preventDefault();
+        if ([...ULT_MOVE_KEYS, 'j', 'k', 'l', 'shift', 'space', 'h', 'g', 'u', 'x', 'r', 'q', 'e', 't', 'f'].includes(k)) e.preventDefault();
         if (s.keys[k]) return;          // ignore key-repeat for edge triggers
         s.keys[k] = true;
         if (k === 'j') ultSlash(s);
@@ -9785,6 +9787,7 @@
         else if (k === 'q') ultBlackHole(s);
         else if (k === 'e') ultPhantomRush(s);
         else if (k === 't') ultMeteorStorm(s);
+        else if (k === 'f') ultHaloBlade(s);
         else if (k === 'x') ultLimitBreak(s);
         else if (k === 'space') ultTryTransform(s);
     }
@@ -9803,21 +9806,46 @@
     }
 
     function ultSlash(s) {
-        s.slashT = 280;
-        const d = s.duck, aim = ultAim(s);
-        const hx = d.x + aim.x * 70, hy = d.y + aim.y * 70;
-        // damage objects within the slash arc
+        const d = s.duck, aim = ultAim(s), P = ultPalette(s);
+        const ang = Math.atan2(aim.y, aim.x);
+        // 3-hit combo: each press chains; the 3rd is a heavier finisher
+        s.slashCombo = (s.slashComboT > 0 ? s.slashCombo % 3 : 0) + 1;
+        s.slashComboT = 600;
+        const finisher = s.slashCombo === 3;
+        s.slashT = finisher ? 360 : 240;
+        const reach = finisher ? 200 : 150;
+        const hemi = -reach * 0.35;                  // how far behind the duck the arc still bites
+        const dmg = ultATK(s, finisher ? 9 : 5);
+        // heavy wide arc — everything in front within reach gets carved
         for (const o of s.objects) {
+            if (o.dead) continue;
             const dx = o.x - d.x, dy = o.y - d.y, dist = Math.hypot(dx, dy);
-            if (dist < 120 && (dx * aim.x + dy * aim.y) > -20) ultDamageObj(s, o, ultATK(s, 2), '#bdf7ff');
+            if (dist < reach + o.r && (dx * aim.x + dy * aim.y) > hemi) {
+                ultDamageObj(s, o, dmg, P.blade);
+                o.vx += aim.x * (finisher ? 360 : 180); o.vy += aim.y * (finisher ? 360 : 180);
+            }
         }
-        ultHitFoes(s, hx, hy, 64, ultATK(s, 2));     // slice incoming orbs / chip the boss
-        for (let i = 0; i < 14; i++) {
-            const a = Math.atan2(aim.y, aim.x) + ultRand(-0.9, 0.9);
-            s.particles.push({ x: hx, y: hy, vx: Math.cos(a) * ultRand(60, 360), vy: Math.sin(a) * ultRand(60, 360),
-                life: 0.4, max: 0.4, col: '#a8f7ff', r: ultRand(2, 5) });
+        ultHitFoes(s, d.x + aim.x * reach * 0.5, d.y + aim.y * reach * 0.5, reach * 0.62, dmg);
+        // launch a flying crescent slash wave that keeps cutting downrange
+        s.slashWaves.push({
+            x: d.x + aim.x * 24, y: d.y + aim.y * 24, ang,
+            vx: aim.x * (finisher ? 920 : 760), vy: aim.y * (finisher ? 920 : 760),
+            reach: finisher ? 130 : 100, thick: finisher ? 34 : 26,
+            life: 560, max: 560, dmg, hue: P.super ? 48 : 190, big: finisher, hit: [],
+        });
+        // juice: hitstop, shake, flash, a fan of blade sparks + a slash ring
+        s.hitstop = Math.max(s.hitstop, finisher ? 90 : 45);
+        s.shake = Math.max(s.shake, finisher ? 16 : 9);
+        s.flash = Math.max(s.flash, finisher ? 0.42 : 0.22);
+        s.rings.push({ x: d.x + aim.x * reach * 0.4, y: d.y + aim.y * reach * 0.4, r: 8, max: reach * (finisher ? 1.4 : 1), life: 1, col: P.glow });
+        const n = finisher ? 26 : 16;
+        for (let i = 0; i < n; i++) {
+            const a = ang + ultRand(-0.9, 0.9), sp = ultRand(120, finisher ? 620 : 420);
+            s.particles.push({ x: d.x + aim.x * 50, y: d.y + aim.y * 50, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+                life: 0.45, max: 0.45, col: i % 2 ? '#fff' : P.glow, r: ultRand(2, 6), star: i % 3 === 0 });
         }
-        playSFX && playSFX('weapon');
+        if (finisher) s.announce = { txt: 'TRIPLE SLASH!', t: 0, max: 850 };
+        playSFX && playSFX(finisher ? 'dmPower' : 'dmStreak');
     }
 
     function ultFireBlast(s) {
@@ -9975,6 +10003,25 @@
                 life: 0.5, max: 0.5, col: '#cffcff', r: ultRand(2, 5) });
         }
         playSFX && playSFX('weapon');
+    }
+
+    // F — HALO BLADE: the katana extends to huge reach and sweeps several full turns,
+    //     tracing a glowing ring of light and shredding everything it passes through
+    function ultHaloBlade(s) {
+        if (s.haloCd > 0 || s.halo) return;
+        const d = s.duck;
+        s.haloCd = 2600;
+        s.halo = {
+            t: 0, life: s.super ? 900 : 780,
+            reach: s.super ? 250 : 210,
+            turns: 5.5,                                  // whirls several full spins, fast
+            rot0: Math.atan2(d.vy, d.vx) || 0,
+            swept: 0,                                    // how much arc the blade has covered
+        };
+        s.invul = Math.max(s.invul, s.halo.life + 80);   // spinning blade guards the duck
+        s.shake = Math.max(s.shake, 9); s.flash = Math.max(s.flash, 0.28);
+        s.rings.push({ x: d.x, y: d.y, r: 16, max: s.halo.reach, life: 1, col: ultPalette(s).glow });
+        playSFX && playSFX('dmStreak');
     }
 
     // G — ground nova: radial shockwave that blasts and knocks objects outward
@@ -10363,6 +10410,8 @@
         s.holeCd = Math.max(0, s.holeCd - dt);
         s.rushCd = Math.max(0, s.rushCd - dt);
         s.stormCd = Math.max(0, s.stormCd - dt);
+        s.haloCd = Math.max(0, s.haloCd - dt);
+        s.slashComboT = Math.max(0, s.slashComboT - dt);
         s.dashT = Math.max(0, s.dashT - dt);
         s.dashCd = Math.max(0, s.dashCd - dt);
         s.invul = Math.max(0, s.invul - dt);
@@ -10552,6 +10601,29 @@
             if (hit || b.life <= 0 || b.x < -40 || b.x > s.W + 40 || b.y < -40 || b.y > s.H + 40) s.blasts.splice(i, 1);
         }
 
+        // ── slash waves: crescent blades that fly downrange, cutting each target once ──
+        for (let i = s.slashWaves.length - 1; i >= 0; i--) {
+            const w = s.slashWaves[i]; w.life -= dt;
+            w.x += w.vx * sec; w.y += w.vy * sec;
+            const ux = Math.cos(w.ang), uy = Math.sin(w.ang);
+            for (const o of s.objects) {
+                if (o.dead || w.hit.includes(o)) continue;
+                const rx = o.x - w.x, ry = o.y - w.y, along = Math.abs(rx * ux + ry * uy), perp = Math.abs(-rx * uy + ry * ux);
+                if (along < w.thick + o.r && perp < w.reach + o.r) { ultDamageObj(s, o, w.dmg, `hsl(${w.hue},100%,75%)`); o.vx += ux * 220; o.vy += uy * 220; w.hit.push(o); }
+            }
+            for (let j = s.foes.length - 1; j >= 0; j--) {
+                const f = s.foes[j], rx = f.x - w.x, ry = f.y - w.y, along = Math.abs(rx * ux + ry * uy), perp = Math.abs(-rx * uy + ry * ux);
+                if (along < w.thick + f.r && perp < w.reach + f.r) { ultKillFoe(s, f, false); s.foes.splice(j, 1); }
+            }
+            if (s.boss && s.boss.phase === 'fight' && !w.hit.includes(s.boss)) {
+                const rx = s.boss.x - w.x, ry = s.boss.y - w.y, along = Math.abs(rx * ux + ry * uy), perp = Math.abs(-rx * uy + ry * ux);
+                if (along < w.thick + s.boss.r && perp < w.reach + s.boss.r) { ultDamageBoss(s, w.dmg * 1.5, `hsl(${w.hue},100%,75%)`); w.hit.push(s.boss); }
+            }
+            // trailing shimmer along the crescent
+            if (Math.random() < 0.8) { const off = ultRand(-w.reach, w.reach); s.particles.push({ x: w.x - uy * off, y: w.y + ux * off, vx: -w.vx * 0.1, vy: -w.vy * 0.1, life: 0.35, max: 0.35, col: i % 2 ? '#fff' : `hsl(${w.hue},100%,72%)`, r: ultRand(2, 5) }); }
+            if (w.life <= 0 || w.x < -80 || w.x > s.W + 80 || w.y < -80 || w.y > s.H + 80) s.slashWaves.splice(i, 1);
+        }
+
         // ── ultimate beam: continuous damage to anything along the locked ray ──
         if (s.beam) {
             const b = s.beam; b.life -= dt;
@@ -10596,6 +10668,39 @@
                 }
             }
             if (st.t >= st.life) s.star = null;
+        }
+
+        // ── HALO BLADE: an extended katana sweeps full turns around the duck ──
+        if (s.halo) {
+            const hb = s.halo; const prevT = hb.t; hb.t += dt;
+            const prog = Math.min(1, hb.t / hb.life);
+            const ang = hb.rot0 + prog * hb.turns * Math.PI * 2;
+            hb.swept = prog * hb.turns * Math.PI * 2;
+            const ux = Math.cos(ang), uy = Math.sin(ang), halfW = 26, reach = hb.reach;
+            // sweep damage along the blade spoke (centred on the duck, which can keep flying)
+            for (const o of s.objects) {
+                if (o.dead) continue;
+                const rx = o.x - d.x, ry = o.y - d.y, along = rx * ux + ry * uy, perp = Math.abs(-rx * uy + ry * ux);
+                if (along > -o.r && along < reach + o.r && perp < halfW + o.r) ultDamageObj(s, o, ultATK(s, 4) * sec * 16, ultPalette(s).blade);
+            }
+            for (let j = s.foes.length - 1; j >= 0; j--) {
+                const f = s.foes[j], rx = f.x - d.x, ry = f.y - d.y, along = rx * ux + ry * uy, perp = Math.abs(-rx * uy + ry * ux);
+                if (along > -f.r && along < reach + f.r && perp < halfW + f.r) { ultKillFoe(s, f, false); s.foes.splice(j, 1); }
+            }
+            if (s.boss && s.boss.phase === 'fight') {
+                const rx = s.boss.x - d.x, ry = s.boss.y - d.y, along = rx * ux + ry * uy, perp = Math.abs(-rx * uy + ry * ux);
+                if (along > -s.boss.r && along < reach + s.boss.r && perp < halfW + s.boss.r) ultDamageBoss(s, ultATK(s, 4) * sec * 14, ultPalette(s).blade);
+            }
+            // sparkle motes flung off the blade tip as it carves the halo
+            if (Math.random() < 0.9) { const tx = d.x + ux * reach, ty = d.y + uy * reach; s.particles.push({ x: tx, y: ty, vx: -uy * ultRand(80, 220), vy: ux * ultRand(80, 220), life: 0.5, max: 0.5, col: ['#fff', ultPalette(s).glow][(Math.random() * 2) | 0], r: ultRand(2, 5), star: Math.random() < 0.5 }); }
+            if (prevT < hb.life && hb.t >= hb.life) {      // finale: the completed halo bursts outward
+                s.rings.push({ x: d.x, y: d.y, r: reach * 0.5, max: reach + 80, life: 1, col: ultPalette(s).glow });
+                s.rings.push({ x: d.x, y: d.y, r: reach * 0.5, max: reach + 40, life: 1, col: '#fff' });
+                s.flash = Math.max(s.flash, 0.4); s.shake = Math.max(s.shake, 14);
+                for (let i = 0; i < 30; i++) { const a = ultRand(0, Math.PI * 2); s.particles.push({ x: d.x + Math.cos(a) * reach, y: d.y + Math.sin(a) * reach, vx: Math.cos(a) * ultRand(160, 480), vy: Math.sin(a) * ultRand(160, 480), life: 0.6, max: 0.6, col: ['#fff', ultPalette(s).glow][i % 2], r: ultRand(2, 6), star: i % 3 === 0 }); }
+                playSFX && playSFX('weapon');
+            }
+            if (hb.t >= hb.life) s.halo = null;
         }
 
         // ── SINGULARITY black hole: drag everything inward, grind the core, then detonate ──
@@ -11067,6 +11172,22 @@
             ctx.restore();
         }
 
+        // slash waves — flying crescents of light
+        for (const w of s.slashWaves) {
+            const fade = w.life < 140 ? w.life / 140 : 1;
+            ctx.save();
+            ctx.translate(w.x, w.y); ctx.rotate(w.ang);
+            ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = fade;
+            // bowed crescent: an arc bulging in the travel direction
+            const r = w.reach, bow = w.big ? 46 : 34;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = `hsl(${w.hue},100%,72%)`; ctx.lineWidth = w.big ? 16 : 12;
+            ctx.beginPath(); ctx.moveTo(-bow * 0.6, -r); ctx.quadraticCurveTo(bow, 0, -bow * 0.6, r); ctx.stroke();
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = w.big ? 6 : 4;
+            ctx.beginPath(); ctx.moveTo(-bow * 0.6, -r); ctx.quadraticCurveTo(bow, 0, -bow * 0.6, r); ctx.stroke();
+            ctx.restore();
+        }
+
         // ultimate beam — fired from the duck along its locked angle
         if (s.beam) {
             const b = s.beam, P = ultPalette(s), prog = 1 - b.life / b.max;
@@ -11108,6 +11229,36 @@
             ctx.restore();
         }
 
+        // HALO BLADE — an extended katana spinning a ring of light around the duck
+        if (s.halo) {
+            const hb = s.halo, P = ultPalette(s);
+            const prog = Math.min(1, hb.t / hb.life);
+            const fade = hb.life - hb.t < 140 ? (hb.life - hb.t) / 140 : 1;
+            const ang = hb.rot0 + prog * hb.turns * Math.PI * 2, reach = hb.reach;
+            ctx.save();
+            ctx.translate(d.x, d.y);
+            ctx.globalCompositeOperation = 'lighter';
+            // the traced halo ring of light — an arc growing as the blade sweeps (wraps past one turn = full ring)
+            const arc = Math.min(Math.PI * 2, hb.swept);
+            ctx.strokeStyle = P.glow; ctx.globalAlpha = (0.5 + 0.4 * prog) * fade; ctx.lineWidth = 7 + 4 * Math.sin(hb.t * 0.03);
+            ctx.beginPath(); ctx.arc(0, 0, reach, hb.rot0, hb.rot0 + arc); ctx.stroke();
+            ctx.strokeStyle = '#fff'; ctx.globalAlpha = 0.85 * fade; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.arc(0, 0, reach, hb.rot0, hb.rot0 + arc); ctx.stroke();
+            // the extended blade itself, from the duck out to the halo edge
+            ctx.globalAlpha = fade; ctx.rotate(ang);
+            const bg = ctx.createLinearGradient(0, 0, reach, 0);
+            bg.addColorStop(0, '#fff'); bg.addColorStop(0.4, P.glow); bg.addColorStop(1, P.aura1);
+            ctx.strokeStyle = bg; ctx.lineWidth = 13; ctx.lineCap = 'round';
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(reach, 0); ctx.stroke();
+            ctx.strokeStyle = `rgba(255,255,255,${fade})`; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(reach, 0); ctx.stroke();
+            // glint at the blade tip
+            const tg = ctx.createRadialGradient(reach, 0, 1, reach, 0, 22);
+            tg.addColorStop(0, '#fff'); tg.addColorStop(1, P.aura1);
+            ctx.fillStyle = tg; ctx.beginPath(); ctx.arc(reach, 0, 22, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        }
+
         // SINGULARITY black hole — swirling accretion disk around a void core
         if (s.hole) {
             const h = s.hole, prog = h.t / h.max;
@@ -11138,12 +11289,33 @@
             ctx.restore();
         }
 
-        // duck afterimages
-        for (const g of s.trail) drawUltDuck(s, g.x, g.y, g.lean, g.facing, g.life * 0.34, true);
+        // duck afterimages (skipped during HALO BLADE so ghost bodies don't betray the spin)
+        if (!s.halo) for (const g of s.trail) drawUltDuck(s, g.x, g.y, g.lean, g.facing, g.life * 0.34, true);
 
-        // the duck (skip if hidden during hitstop? keep visible)
-        const invFlick = s.invul > 0 && (Math.sin(s.t * 0.05) > 0) ? 0.5 : 1;
-        drawUltDuck(s, d.x, d.y, d.lean, d.facing, invFlick, false);
+        // the duck — during HALO BLADE the body spins too fast to read, so it becomes a blazing orb
+        if (s.halo) {
+            const P = ultPalette(s), hb = s.halo;
+            const fade = hb.life - hb.t < 140 ? (hb.life - hb.t) / 140 : 1;
+            ctx.save();
+            ctx.translate(d.x, d.y);
+            ctx.globalCompositeOperation = 'lighter';
+            // motion-blur swirl: a few faint arcs whipping around to sell the spin
+            ctx.strokeStyle = P.glow; ctx.lineWidth = 5;
+            for (let k = 0; k < 4; k++) {
+                ctx.globalAlpha = 0.22 * fade;
+                const a0 = hb.t * 0.09 + k * Math.PI / 2;
+                ctx.beginPath(); ctx.arc(0, 0, 30, a0, a0 + 1.1); ctx.stroke();
+            }
+            // bright core orb covering the body
+            ctx.globalAlpha = fade;
+            const og = ctx.createRadialGradient(0, 0, 2, 0, 0, 40);
+            og.addColorStop(0, '#fff'); og.addColorStop(0.45, '#fff'); og.addColorStop(0.7, P.glow); og.addColorStop(1, P.aura1);
+            ctx.fillStyle = og; ctx.beginPath(); ctx.arc(0, 0, 40, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        } else {
+            const invFlick = s.invul > 0 && (Math.sin(s.t * 0.05) > 0) ? 0.5 : 1;
+            drawUltDuck(s, d.x, d.y, d.lean, d.facing, invFlick, false);
+        }
 
         // particles (sparks + floating score text)
         for (const p of s.particles) {
@@ -11417,7 +11589,7 @@
         // controls hint
         ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,0.7)';
         ctx.font = '13px system-ui, sans-serif';
-        ctx.fillText('WASD Fly   🖱L Blast   🖱R Dash   J Slash   H Spin   G Nova   Q Black Hole   E Phantom Rush   T Meteor Storm   R Star-Beam   U Ultimate   X LIMIT BREAK   Space Power-Up', W / 2, H - 22);
+        ctx.fillText('WASD Fly   🖱L Blast   🖱R Dash   J Slash   H Spin   F Halo Blade   G Nova   Q Black Hole   E Phantom Rush   T Meteor Storm   R Star-Beam   U Ultimate   X LIMIT BREAK   Space Power-Up', W / 2, H - 22);
         ctx.restore();
     }
 
