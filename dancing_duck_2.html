@@ -9716,6 +9716,7 @@
             star: null, starCd: 0,                          // radial multi-beam burst (R)
             hole: null, holeCd: 0,                          // SINGULARITY black-hole (Q)
             rush: null, rushCd: 0,                          // PHANTOM RUSH teleport barrage (E)
+            storm: null, stormCd: 0, meteors: [],           // METEOR STORM bombardment (T)
             pickups: [], frenzyT: 0, shieldT: 0, dblT: 0,   // power-up drops + active buff timers
             charging: false, ki: 0,
             mouse: { x: W * 0.6, y: H * 0.5, active: false }, mDown: false, mHoldT: 0, mFireCd: 0,
@@ -9771,7 +9772,7 @@
     function ultKeyDown(e) {
         const s = ultState; if (!s) return;
         const k = e.key === ' ' ? 'space' : e.key.toLowerCase();
-        if ([...ULT_MOVE_KEYS, 'j', 'k', 'l', 'shift', 'space', 'h', 'g', 'u', 'x', 'r', 'q', 'e'].includes(k)) e.preventDefault();
+        if ([...ULT_MOVE_KEYS, 'j', 'k', 'l', 'shift', 'space', 'h', 'g', 'u', 'x', 'r', 'q', 'e', 't'].includes(k)) e.preventDefault();
         if (s.keys[k]) return;          // ignore key-repeat for edge triggers
         s.keys[k] = true;
         if (k === 'j') ultSlash(s);
@@ -9783,6 +9784,7 @@
         else if (k === 'r') ultStarBeams(s);
         else if (k === 'q') ultBlackHole(s);
         else if (k === 'e') ultPhantomRush(s);
+        else if (k === 't') ultMeteorStorm(s);
         else if (k === 'x') ultLimitBreak(s);
         else if (k === 'space') ultTryTransform(s);
     }
@@ -10065,6 +10067,35 @@
         playSFX && playSFX('dmStreak');
     }
 
+    // T — METEOR STORM: rain flaming meteors that detonate across the arena
+    function ultMeteorStorm(s) {
+        if (s.stormCd > 0 || s.storm) return;
+        s.storm = { t: 0, life: s.super ? 3200 : 2400, next: 0 };
+        s.stormCd = 6000;
+        s.shake = Math.max(s.shake, 8); s.flash = Math.max(s.flash, 0.24);
+        s.announce = { txt: 'METEOR STORM!', t: 0, max: 1200 };
+        playSFX && playSFX('dmStreak');
+    }
+    function ultSpawnMeteor(s) {
+        const ix = ultRand(60, s.W - 60), iy = ultRand(120, s.H - 60);   // impact point
+        s.meteors.push({ x: ix - ultRand(60, 160), y: -ultRand(20, 220), ix, iy, vy: ultRand(900, 1300), r: ultRand(13, 22), seed: ultRand(0, 6.28) });
+    }
+    function ultMeteorImpact(s, m) {
+        const R = 60 + m.r * 3;
+        s.rings.push({ x: m.ix, y: m.iy, r: 8, max: R + 30, life: 1, col: '#ff8a2b' });
+        s.rings.push({ x: m.ix, y: m.iy, r: 4, max: R * 0.6, life: 1, col: '#fff' });
+        s.shake = Math.max(s.shake, 12); s.flash = Math.max(s.flash, 0.22);
+        for (const o of s.objects) {
+            if (o.dead) continue;
+            const dist = Math.hypot(o.x - m.ix, o.y - m.iy);
+            if (dist < R + o.r) { ultDamageObj(s, o, ultATK(s, 6), '#ff8a2b'); const a = Math.atan2(o.y - m.iy, o.x - m.ix); o.vx += Math.cos(a) * 280; o.vy += Math.sin(a) * 280; }
+        }
+        ultHitFoes(s, m.ix, m.iy, R, ultATK(s, 7));
+        if (s.boss && s.boss.phase === 'fight' && Math.hypot(s.boss.x - m.ix, s.boss.y - m.iy) < R + s.boss.r) ultDamageBoss(s, ultATK(s, 5), '#ff8a2b');
+        for (let i = 0; i < 22; i++) { const a = ultRand(0, Math.PI * 2), sp = ultRand(120, 520); s.particles.push({ x: m.ix, y: m.iy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60, life: 0.55, max: 0.55, r: ultRand(5, 12), flame: true }); }
+        playSFX && playSFX('pop');
+    }
+
     // X — LIMIT BREAK: screen-clearing nova + a window of infinite-ultimate overdrive
     function ultLimitBreak(s) {
         if (s.od < 1 || s.lb > 0) return;
@@ -10192,17 +10223,40 @@
         playSFX && playSFX('casinoJackpot');
     }
 
+    // Foe archetypes: standard grunt, fast erratic darter, and a splitter that bursts into shards
+    const ULT_FOE_KINDS = {
+        grunt:    { r: 15, hueLo: 285, hueHi: 330, score: 120, spd: 1.0,  drop: 0.14 },
+        darter:   { r: 11, hueLo: 168, hueHi: 198, score: 180, spd: 1.7,  drop: 0.14 },
+        splitter: { r: 21, hueLo: 24,  hueHi: 48,  score: 200, spd: 0.82, drop: 0.22 },
+    };
+    function ultMakeFoe(s, x, y, kind, isShard) {
+        const c = ULT_FOE_KINDS[kind];
+        s.foes.push({ x, y, vx: 0, vy: 0, r: isShard ? c.r * 0.7 : c.r, hp: 2, life: 11000, born: 0,
+            hue: ultRand(c.hueLo, c.hueHi), seed: ultRand(0, 6.28), kind, spd: c.spd, score: isShard ? 70 : c.score, drop: isShard ? 0.05 : c.drop, shard: !!isShard });
+    }
     function ultSpawnFoe(s) {
         const edge = Math.random() * 4 | 0; let x, y;
         if (edge === 0) { x = -40; y = ultRand(0, s.H); }
         else if (edge === 1) { x = s.W + 40; y = ultRand(0, s.H); }
         else if (edge === 2) { x = ultRand(0, s.W); y = -40; }
         else { x = ultRand(0, s.W); y = s.H + 40; }
-        s.foes.push({ x, y, vx: 0, vy: 0, r: 15, hp: 2, life: 11000, born: 0, hue: ultRand(285, 330), seed: ultRand(0, 6.28) });
+        // introduce tougher archetypes as the run heats up
+        let kind = 'grunt'; const roll = Math.random();
+        if (s.kills > 8 && roll < 0.24) kind = 'splitter';
+        else if (s.kills > 4 && roll < 0.5) kind = 'darter';
+        ultMakeFoe(s, x, y, kind, false);
     }
     function ultKillFoe(s, f, deflected) {
-        s.score += 120 * (s.dblT > 0 ? 2 : 1); s.sp = Math.min(1, s.sp + 0.05);
-        if (Math.random() < 0.14) ultDropPickup(s, f.x, f.y);
+        s.score += (f.score || 120) * (s.dblT > 0 ? 2 : 1); s.sp = Math.min(1, s.sp + 0.05);
+        // SPLITTER bursts into two fast shards when destroyed
+        if (f.kind === 'splitter' && !f.shard) {
+            for (let i = 0; i < 2; i++) {
+                const a = ultRand(0, Math.PI * 2);
+                ultMakeFoe(s, f.x, f.y, 'darter', true);
+                const sh = s.foes[s.foes.length - 1]; sh.vx = Math.cos(a) * 260; sh.vy = Math.sin(a) * 260;
+            }
+        }
+        if (Math.random() < (f.drop != null ? f.drop : 0.14)) ultDropPickup(s, f.x, f.y);
         if (s.score > s.best) { s.best = s.score; try { localStorage.setItem('ultimateBest', s.best); } catch (_) {} }
         s.shake = Math.max(s.shake, deflected ? 7 : 4);
         s.rings.push({ x: f.x, y: f.y, r: 4, max: 64, life: 1, col: `hsl(${f.hue},100%,68%)` });
@@ -10308,6 +10362,7 @@
         s.starCd = Math.max(0, s.starCd - dt);
         s.holeCd = Math.max(0, s.holeCd - dt);
         s.rushCd = Math.max(0, s.rushCd - dt);
+        s.stormCd = Math.max(0, s.stormCd - dt);
         s.dashT = Math.max(0, s.dashT - dt);
         s.dashCd = Math.max(0, s.dashCd - dt);
         s.invul = Math.max(0, s.invul - dt);
@@ -10414,7 +10469,7 @@
         for (let i = s.foes.length - 1; i >= 0; i--) {
             const f = s.foes[i]; f.life -= dt; f.born += dt;
             const dx = d.x - f.x, dy = d.y - f.y, dist = Math.hypot(dx, dy) || 1;
-            const homeSp = 60 + Math.min(190, f.born * 0.035);     // accelerate the longer they chase
+            const homeSp = (60 + Math.min(190, f.born * 0.035)) * (f.spd || 1);     // accelerate the longer they chase
             f.vx += (dx / dist * homeSp - f.vx) * Math.min(1, sec * 1.5);
             f.vy += (dy / dist * homeSp - f.vy) * Math.min(1, sec * 1.5);
             f.x += f.vx * sec; f.y += f.vy * sec;
@@ -10424,6 +10479,19 @@
                 s.foes.splice(i, 1); continue;
             }
             if (f.life <= 0) s.foes.splice(i, 1);
+        }
+
+        // ── METEOR STORM: spawn falling meteors over the storm window, detonate on impact ──
+        if (s.storm) {
+            s.storm.t += dt; s.storm.next -= dt;
+            if (s.storm.next <= 0) { ultSpawnMeteor(s); s.storm.next = s.super ? 95 : 140; }
+            if (s.storm.t >= s.storm.life) s.storm = null;     // stop spawning; existing meteors still fall
+        }
+        for (let i = s.meteors.length - 1; i >= 0; i--) {
+            const m = s.meteors[i];
+            m.x += (m.ix - m.x) * Math.min(1, sec * 6); m.y += m.vy * sec;
+            if (Math.random() < 0.8) s.particles.push({ x: m.x + ultRand(-4, 4), y: m.y - m.r, vx: ultRand(-30, 30), vy: -ultRand(40, 120), life: 0.4, max: 0.4, r: ultRand(4, 9), flame: true });
+            if (m.y >= m.iy) { ultMeteorImpact(s, m); s.meteors.splice(i, 1); }
         }
 
         // ── power-up drops: drift, then magnetise to the duck and get collected ──
@@ -10933,6 +11001,23 @@
             ctx.restore();
         }
 
+        // METEOR STORM — impact telegraphs on the ground + flaming meteors streaking down
+        for (const m of s.meteors) {
+            const R = 60 + m.r * 3;
+            ctx.save();
+            // ground telegraph ring at the impact point
+            ctx.globalAlpha = 0.5 + 0.3 * Math.sin(s.t * 0.02 + m.seed);
+            ctx.strokeStyle = '#ff8a2b'; ctx.lineWidth = 2; ctx.setLineDash([8, 8]);
+            ctx.beginPath(); ctx.arc(m.ix, m.iy, R * 0.6, 0, Math.PI * 2); ctx.stroke();
+            ctx.setLineDash([]);
+            // the meteor + fiery head
+            ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'lighter';
+            const mg = ctx.createRadialGradient(m.x, m.y, 1, m.x, m.y, m.r * 1.8);
+            mg.addColorStop(0, '#fff7d6'); mg.addColorStop(0.5, '#ff8a2b'); mg.addColorStop(1, 'rgba(214,40,20,0)');
+            ctx.fillStyle = mg; ctx.beginPath(); ctx.arc(m.x, m.y, m.r * 1.8, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        }
+
         // fightback orbs — pulsing energy spheres with a warning corona
         for (const f of s.foes) {
             const pul = 1 + 0.15 * Math.sin(s.t * 0.012 + f.seed);
@@ -10947,6 +11032,9 @@
             // crackling orbit ring
             ctx.strokeStyle = `hsla(${f.hue},100%,80%,0.8)`; ctx.lineWidth = 2;
             ctx.beginPath(); ctx.arc(f.x, f.y, f.r * pul, 0, Math.PI * 2); ctx.stroke();
+            // SPLITTER wears a second jagged ring; DARTER trails a motion streak
+            if (f.kind === 'splitter') { ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 1.45 * pul, 0, Math.PI * 2); ctx.stroke(); }
+            else if (f.kind === 'darter') { const sp = Math.hypot(f.vx, f.vy) || 1; ctx.strokeStyle = `hsla(${f.hue},100%,80%,0.6)`; ctx.lineWidth = f.r * 0.8; ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.lineTo(f.x - f.vx / sp * f.r * 2.4, f.y - f.vy / sp * f.r * 2.4); ctx.stroke(); }
             ctx.restore();
         }
 
@@ -11329,7 +11417,7 @@
         // controls hint
         ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,0.7)';
         ctx.font = '13px system-ui, sans-serif';
-        ctx.fillText('WASD Fly   🖱L Blast   🖱R Dash   J Slash   H Spin   G Nova   Q Black Hole   E Phantom Rush   R Star-Beam   U Ultimate   X LIMIT BREAK   Space Power-Up', W / 2, H - 22);
+        ctx.fillText('WASD Fly   🖱L Blast   🖱R Dash   J Slash   H Spin   G Nova   Q Black Hole   E Phantom Rush   T Meteor Storm   R Star-Beam   U Ultimate   X LIMIT BREAK   Space Power-Up', W / 2, H - 22);
         ctx.restore();
     }
 
