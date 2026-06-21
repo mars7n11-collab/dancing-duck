@@ -9726,7 +9726,11 @@
             slashCombo: 0, slashComboT: 0, slashWaves: [],   // J combo counter + flying crescent waves
             blasts: [], objects: [], debris: [], particles: [], rings: [], trail: [], speedLines: [],
             foes: [], foeSpawnT: 3000,                      // homing energy orbs that fight back
+            bossBullets: [],                                // SENTINEL boss projectiles
             boss: null, kills: 0, nextBoss: 12, bossCount: 0,   // mini-boss encounters
+            hp: 3, maxHp: 3,                                // lives — run ends when these run out
+            wave: 1, waveT: 22000, bossesDown: 0, bestCombo: 0,   // difficulty curve + run stats
+            over: false, overT: 0, survived: 0,             // game-over results screen
             combo: 0, comboT: 0, score: 0, best: +(localStorage.getItem('ultimateBest') || 0),
             comboMilestone: 0, announce: null, cutin: null, hurt: 0,   // combo callouts + transform cut-in + damage vignette
             shake: 0, flash: 0, hitstop: 0, zoom: 1, slowmo: 0, bgHue: ultRand(0, 360), t: 0,
@@ -9773,6 +9777,7 @@
     const ULT_MOVE_KEYS = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'];
     function ultKeyDown(e) {
         const s = ultState; if (!s) return;
+        if (s.over) { e.preventDefault(); if (s.overT > 600) ultState = initUltimate(); return; }   // restart from results
         const k = e.key === ' ' ? 'space' : e.key.toLowerCase();
         if ([...ULT_MOVE_KEYS, 'j', 'k', 'l', 'shift', 'space', 'h', 'g', 'u', 'x', 'r', 'q', 'e', 't', 'f'].includes(k)) e.preventDefault();
         if (s.keys[k]) return;          // ignore key-repeat for edge triggers
@@ -9923,6 +9928,7 @@
     function ultMouseDown(e) {
         const s = ultState; if (!s) return;
         e.preventDefault();
+        if (s.over) { if (s.overT > 600) ultState = initUltimate(); return; }   // restart from results
         ultMouseMove(e);                 // make sure aim is current on the click
         if (e.button === 0) {            // left — rapid blaster
             s.mDown = true; s.mHoldT = 0;
@@ -9947,6 +9953,7 @@
     function ultThreatNear(s, R) {
         const d = s.duck;
         for (const f of s.foes) if (Math.hypot(f.x - d.x, f.y - d.y) < R + f.r) return true;
+        for (const p of s.bossBullets) if (Math.hypot(p.x - d.x, p.y - d.y) < R + p.r) return true;
         if (s.boss && s.boss.phase === 'fight' && Math.hypot(s.boss.x - d.x, s.boss.y - d.y) < R + s.boss.r) return true;
         return false;
     }
@@ -10229,6 +10236,7 @@
             const cfg = ULT_OBJ[o.t];
             // combo + score + power
             s.combo++; s.comboT = 2000; s.kills++;
+            if (s.combo > s.bestCombo) s.bestCombo = s.combo;
             for (const m of ULT_MILES) if (s.combo === m.n && s.comboMilestone < m.n) {
                 s.comboMilestone = m.n;
                 s.announce = { txt: m.txt, t: 0, max: 1050 };
@@ -10313,7 +10321,8 @@
     };
     function ultMakeFoe(s, x, y, kind, isShard) {
         const c = ULT_FOE_KINDS[kind];
-        s.foes.push({ x, y, vx: 0, vy: 0, r: isShard ? c.r * 0.7 : c.r, hp: 2, life: 11000, born: 0,
+        const hp = isShard ? 2 : 2 + Math.floor((s.wave - 1) / 2);   // tougher orbs as the run escalates
+        s.foes.push({ x, y, vx: 0, vy: 0, r: isShard ? c.r * 0.7 : c.r, hp, life: 11000, born: 0,
             hue: ultRand(c.hueLo, c.hueHi), seed: ultRand(0, 6.28), kind, spd: c.spd, score: isShard ? 70 : c.score, drop: isShard ? 0.05 : c.drop, shard: !!isShard });
     }
     function ultSpawnFoe(s) {
@@ -10352,11 +10361,13 @@
         playSFX && playSFX(deflected ? 'weapon' : 'pop', { pitch: ultComboPitch(s) });
     }
     function ultPlayerHit(s, f) {
+        if (s.over) return;
         if (s.shieldT > 0 || s.invul > 0) {            // SHIELD (or mercy frames) absorbs the hit
             s.shake = Math.max(s.shake, 6); s.flash = Math.max(s.flash, 0.18);
             s.rings.push({ x: s.duck.x, y: s.duck.y, r: 30, max: 90, life: 1, col: '#3bd0ff' });
             return;
         }
+        s.hp = Math.max(0, s.hp - 1);                  // lose a heart
         s.combo = 0; s.comboT = 0; s.comboMilestone = 0;
         s.power = Math.max(0, s.power - 0.18);
         s.invul = Math.max(s.invul, 750);              // mercy i-frames
@@ -10368,7 +10379,19 @@
             s.particles.push({ x: s.duck.x, y: s.duck.y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
                 life: 0.5, max: 0.5, col: ['#ff4d6d', '#fff', '#ff9db0'][i % 3], r: ultRand(2, 5) });
         }
+        if (s.hp <= 0) { ultGameOver(s); return; }
         playSFX && playSFX('dmPower');
+    }
+    // End the run: capture stats, blow the duck apart, and surface the results screen
+    function ultGameOver(s) {
+        if (s.over) return;
+        s.over = true; s.overT = 0; s.survived = s.t;
+        s.announce = null; s.cutin = null; s.charging = false; s.mDown = false; s.rDown = false;
+        s.flash = 1; s.shake = Math.max(s.shake, 28);
+        for (let i = 0; i < 64; i++) { const a = ultRand(0, Math.PI * 2), sp = ultRand(120, 660); s.particles.push({ x: s.duck.x, y: s.duck.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.9, max: 0.9, col: ['#ff4d6d', '#fff', '#ffd54a'][i % 3], r: ultRand(3, 7), star: i % 3 === 0 }); }
+        for (let i = 0; i < 3; i++) s.rings.push({ x: s.duck.x, y: s.duck.y, r: 10 + i * 24, max: 260 + i * 120, life: 1, col: i % 2 ? '#fff' : '#ff4d6d' });
+        if (s.score >= s.best) { s.best = s.score; try { localStorage.setItem('ultimateBest', s.best); } catch (_) {} }
+        playSFX && playSFX('lose');
     }
     // Pop any foes within a radius (used by melee + nova + spin); also chip the boss if in range
     function ultHitFoes(s, x, y, R, bossDmg) {
@@ -10383,15 +10406,17 @@
     function ultSpawnBoss(s) {
         s.bossCount++;
         const hp = 55 + s.bossCount * 25;
-        // alternate archetypes: ORB-LORD (hover + summon) then VOID RAMMER (telegraphed lunges)
-        const kind = (s.bossCount % 2 === 1) ? 'orblord' : 'charger';
+        // cycle archetypes: ORB-LORD (hover + summon) → VOID RAMMER (lunges) → SENTINEL (bullet patterns)
+        const kind = ['orblord', 'charger', 'sentinel'][(s.bossCount - 1) % 3];
+        const R = { orblord: 58, charger: 52, sentinel: 56 }[kind];
+        const HUE = { orblord: 322, charger: 195, sentinel: 142 }[kind];
         s.boss = {
             kind,
             x: Math.random() < 0.5 ? -90 : s.W + 90, y: s.H * 0.45,
-            vx: 0, vy: 0, r: kind === 'charger' ? 52 : 58, hp, maxHp: hp,
+            vx: 0, vy: 0, r: R, hp, maxHp: hp,
             phase: 'enter', phaseT: 1300, atkT: 2000, t: 0, hitFlash: 0, split: false,
-            hue: kind === 'charger' ? 195 : 322,
-            move: 'aim', aimX: 1, aimY: 0, chargeT: 0,   // charger lunge state
+            hue: HUE,
+            move: 'aim', aimX: 1, aimY: 0, chargeT: 0, shot: 0,   // charger lunge + sentinel shot state
         };
         s.announce = { txt: 'WARNING', t: 0, max: 1500 };
         s.shake = Math.max(s.shake, 16); s.flash = Math.max(s.flash, 0.45); ultZoom(s, 0.09);
@@ -10410,6 +10435,25 @@
         for (let i = 0; i < n; i++) ultBossMinion(s, (i / n) * Math.PI * 2 + b.t * 0.001, 250);
         playSFX && playSFX('pop');
     }
+    // SENTINEL projectile + firing patterns (alternates an aimed spread with a radial ring)
+    function ultBossBullet(s, b, ang, spd) {
+        s.bossBullets.push({ x: b.x + Math.cos(ang) * b.r, y: b.y + Math.sin(ang) * b.r,
+            vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd, r: 8, life: 5200, hue: b.hue });
+    }
+    function ultSentinelFire(s, b) {
+        b.shot = (b.shot || 0) + 1;
+        s.shake = Math.max(s.shake, 7);
+        s.rings.push({ x: b.x, y: b.y, r: b.r, max: b.r + 80, life: 1, col: `hsl(${b.hue},100%,65%)` });
+        const spd = s.super ? 360 : 290;
+        if (b.shot % 2 === 1) {                          // aimed 5-shot spread toward the duck
+            const a0 = Math.atan2(s.duck.y - b.y, s.duck.x - b.x);
+            for (let i = -2; i <= 2; i++) ultBossBullet(s, b, a0 + i * 0.2, spd);
+        } else {                                         // full radial ring
+            const n = s.super ? 16 : 12;
+            for (let i = 0; i < n; i++) ultBossBullet(s, b, (i / n) * Math.PI * 2 + b.t * 0.001, spd * 0.85);
+        }
+        playSFX && playSFX('pop');
+    }
     function ultDamageBoss(s, amount, col) {
         const b = s.boss; if (!b || b.phase !== 'fight') return;
         b.hp -= amount; b.hitFlash = 1;
@@ -10426,6 +10470,7 @@
     }
     function ultKillBoss(s) {
         const b = s.boss; b.phase = 'dying'; b.phaseT = 850;
+        s.bossesDown++; s.bossBullets.length = 0;          // tally the kill + clear its lingering bullets
         const bonus = 2500 * s.bossCount;
         s.score += bonus;
         if (s.score > s.best) { s.best = s.score; try { localStorage.setItem('ultimateBest', s.best); } catch (_) {} }
@@ -10556,10 +10601,20 @@
         const target = s.super ? 13 : 10;
         if (s.objects.length < target && s.spawnT <= 0) { s.objects.push(ultMakeObject(s)); s.spawnT = 240; }
 
-        // ── fightback orbs: spawn, home in, collide ──
+        // ── difficulty curve: advance a wave on a timer, escalating spawn rate, count and toughness ──
+        s.waveT -= dt;
+        if (s.waveT <= 0) {
+            s.wave++; s.waveT = Math.max(13000, 22000 - s.wave * 700);
+            s.announce = { txt: 'WAVE ' + s.wave, t: 0, max: 1400 };
+            s.flash = Math.max(s.flash, 0.18); s.shake = Math.max(s.shake, 8);
+            playSFX && playSFX('dmStreak');
+        }
+
+        // ── fightback orbs: spawn, home in, collide (rate + cap scale with the wave) ──
         s.foeSpawnT -= dt;
-        const foeCap = s.super ? 8 : 5;
-        if (s.foeSpawnT <= 0 && s.foes.length < foeCap) { ultSpawnFoe(s); s.foeSpawnT = s.super ? 1300 : 2300; }
+        const foeCap = (s.super ? 8 : 5) + Math.floor(s.wave / 2);
+        const foeInt = Math.max(650, (s.super ? 1300 : 2300) - s.wave * 130);
+        if (s.foeSpawnT <= 0 && s.foes.length < foeCap) { ultSpawnFoe(s); s.foeSpawnT = foeInt; }
         for (let i = s.foes.length - 1; i >= 0; i--) {
             const f = s.foes[i]; f.life -= dt; f.born += dt;
             const dx = d.x - f.x, dy = d.y - f.y, dist = Math.hypot(dx, dy) || 1;
@@ -10641,6 +10696,14 @@
                         b.atkT -= dt; if (b.atkT <= 0) { b.move = 'aim'; b.atkT = s.super ? 800 : 1100; }
                     }
                     b.x = Math.max(40, Math.min(s.W - 40, b.x)); b.y = Math.max(40, Math.min(s.H - 50, b.y));
+                } else if (b.kind === 'sentinel') {
+                    // ── SENTINEL: hover at long range and rake the arena with bullet patterns ──
+                    const pull = (bd - 300) * 0.55;
+                    b.vx += (bx / bd * pull - b.vx) * Math.min(1, sec * 1.0);
+                    b.vy += (by / bd * pull - b.vy) * Math.min(1, sec * 1.0);
+                    b.x += b.vx * sec; b.y += b.vy * sec;
+                    b.x = Math.max(80, Math.min(s.W - 80, b.x)); b.y = Math.max(80, Math.min(s.H - 90, b.y));
+                    b.atkT -= dt; if (b.atkT <= 0) { ultSentinelFire(s, b); b.atkT = s.super ? 1500 : 2100; }
                 } else {
                     // ── ORB-LORD: hover at a menacing mid-range and summon minion bursts ──
                     const pull = (bd - 250) * 0.7;
@@ -10659,6 +10722,16 @@
                 b.phaseT -= dt; b.r *= 0.95;
                 if (b.phaseT <= 0) s.boss = null;
             }
+        }
+
+        // ── SENTINEL bullets: travel straight, threaten the duck (dash/shield/i-frames negate them) ──
+        for (let i = s.bossBullets.length - 1; i >= 0; i--) {
+            const p = s.bossBullets[i]; p.x += p.vx * sec; p.y += p.vy * sec; p.life -= dt;
+            if (Math.hypot(p.x - d.x, p.y - d.y) < p.r + 20) {
+                if (s.shieldT > 0 || s.invul > 0 || s.dashT > 0) { s.rings.push({ x: p.x, y: p.y, r: 2, max: 34, life: 1, col: '#fff' }); s.bossBullets.splice(i, 1); continue; }
+                ultPlayerHit(s, p); s.bossBullets.splice(i, 1); continue;
+            }
+            if (p.life <= 0 || p.x < -30 || p.x > s.W + 30 || p.y < -30 || p.y > s.H + 30) s.bossBullets.splice(i, 1);
         }
 
         // blasts
@@ -10844,13 +10917,18 @@
             }
         }
 
-        // debris
+        ultStepFX(s, sec);
+    }
+
+    // Advance cosmetic systems (debris, particles, rings, speed lines, aura). Split out so the
+    // game-over screen can keep the death blast animating while gameplay is frozen.
+    function ultStepFX(s, sec) {
+        const d = s.duck;
         for (let i = s.debris.length - 1; i >= 0; i--) {
             const p = s.debris[i];
             p.x += p.vx * sec; p.y += p.vy * sec; p.vx *= 0.97; p.vy *= 0.97; p.rot += p.vr * sec; p.life -= sec * 1.1;
             if (p.life <= 0) s.debris.splice(i, 1);
         }
-        // particles
         for (let i = s.particles.length - 1; i >= 0; i--) {
             const p = s.particles[i];
             p.x += (p.vx || 0) * sec; p.y += (p.vy || 0) * sec - (p.txt ? sec * 24 : 0);
@@ -10858,11 +10936,8 @@
             p.life -= sec * (p.txt ? 1 : 2.0);
             if (p.life <= 0) s.particles.splice(i, 1);
         }
-        // rings
         for (let i = s.rings.length - 1; i >= 0; i--) { const r = s.rings[i]; r.life -= sec * 2.2; if (r.life <= 0) s.rings.splice(i, 1); }
-        // speed lines
         for (let i = s.speedLines.length - 1; i >= 0; i--) { s.speedLines[i].life -= sec * 1.6; if (s.speedLines[i].life <= 0) s.speedLines.splice(i, 1); }
-        // aura motes in super
         if (s.super && Math.random() < 0.7) {
             const a = ultRand(0, Math.PI * 2), r = ultRand(20, 46);
             s.particles.push({ x: d.x + Math.cos(a) * r, y: d.y + Math.sin(a) * r, vx: Math.cos(a) * 40, vy: -ultRand(60, 160),
@@ -11252,6 +11327,16 @@
         // mini-boss
         if (s.boss) drawUltBoss(s);
 
+        // SENTINEL bullets — glowing energy pellets with a bright core
+        for (const p of s.bossBullets) {
+            ctx.save(); ctx.globalCompositeOperation = 'lighter';
+            const g = ctx.createRadialGradient(p.x, p.y, 1, p.x, p.y, p.r * 2.2);
+            g.addColorStop(0, '#fff'); g.addColorStop(0.4, `hsl(${p.hue},100%,68%)`); g.addColorStop(1, `hsla(${p.hue},100%,60%,0)`);
+            ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 2.2, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 0.5, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        }
+
         // debris
         for (const p of s.debris) {
             ctx.save(); ctx.globalAlpha = Math.max(0, p.life); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
@@ -11562,6 +11647,25 @@
             ctx.fillStyle = b.hitFlash > 0 ? '#fff' : `hsla(${b.hue},100%,${55 + heat * 30}%,1)`;
             ctx.beginPath(); ctx.arc(0, 0, b.r * 0.34, 0, Math.PI * 2); ctx.fill();
             ctx.restore();
+        } else if (b.kind === 'sentinel') {
+            // SENTINEL — rotating hexagonal turret with an aperture ring and a charging core
+            ctx.save(); ctx.rotate(b.t * 0.0008);
+            ctx.beginPath();
+            for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2, rr = b.r * pul; const x = Math.cos(a) * rr, y = Math.sin(a) * rr; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+            ctx.closePath();
+            const bg = ctx.createRadialGradient(0, 0, 4, 0, 0, b.r * 1.2);
+            bg.addColorStop(0, b.hitFlash > 0 ? '#ffffff' : '#0a2a1c'); bg.addColorStop(1, `hsl(${b.hue},70%,16%)`);
+            ctx.fillStyle = bg; ctx.fill();
+            ctx.strokeStyle = `hsl(${b.hue},100%,70%)`; ctx.lineWidth = 3; ctx.stroke();
+            // aperture spokes
+            ctx.strokeStyle = `hsla(${b.hue},100%,75%,0.6)`; ctx.lineWidth = 2;
+            for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; ctx.beginPath(); ctx.moveTo(Math.cos(a) * b.r * 0.45, Math.sin(a) * b.r * 0.45); ctx.lineTo(Math.cos(a) * b.r * 0.92, Math.sin(a) * b.r * 0.92); ctx.stroke(); }
+            ctx.restore();
+            // charging core — brightens as the next volley nears
+            const heat = 0.4 + 0.5 * Math.abs(Math.sin(b.t * 0.012));
+            ctx.fillStyle = b.hitFlash > 0 ? '#fff' : `hsl(${b.hue},100%,${55 + heat * 30}%)`;
+            ctx.beginPath(); ctx.arc(0, 0, b.r * 0.36, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#06180f'; ctx.beginPath(); ctx.arc(0, 0, b.r * 0.16, 0, Math.PI * 2); ctx.fill();
         } else {
             // ORB-LORD — spiked orb with a single eye
             ctx.beginPath();
@@ -11587,7 +11691,8 @@
             ctx.fillStyle = `hsl(${frac * 120},90%,55%)`; ctx.fillRect(x, y, w * frac, h);
             ctx.strokeStyle = 'rgba(255,255,255,0.65)'; ctx.lineWidth = 1.5; ctx.strokeRect(x, y, w, h);
             ctx.fillStyle = '#fff'; ctx.font = 'bold 12px system-ui';
-            ctx.fillText(b.phase === 'enter' ? '⚠ BOSS ⚠' : (b.kind === 'charger' ? 'VOID RAMMER' : 'ORB-LORD'), b.x, y - 9);
+            const bossName = { charger: 'VOID RAMMER', sentinel: 'SENTINEL', orblord: 'ORB-LORD' }[b.kind] || 'ORB-LORD';
+            ctx.fillText(b.phase === 'enter' ? '⚠ BOSS ⚠' : bossName, b.x, y - 9);
             ctx.restore();
         }
     }
@@ -11662,6 +11767,13 @@
         ctx.fillText('⚡ ' + s.score.toLocaleString(), 20, 30);
         ctx.font = '13px system-ui, sans-serif'; ctx.fillStyle = '#cbd5e1';
         ctx.fillText('BEST ' + s.best.toLocaleString(), 22, 54);
+
+        // lives (hearts) + wave — right column, clear of the Exit button
+        ctx.textAlign = 'right';
+        ctx.font = '22px system-ui';
+        for (let i = 0; i < s.maxHp; i++) { ctx.fillStyle = i < s.hp ? '#ff4d6d' : 'rgba(255,255,255,0.22)'; ctx.fillText('♥', W - 16 - i * 26, 74); }
+        ctx.fillStyle = '#ffd54a'; ctx.font = 'bold 15px system-ui';
+        ctx.fillText('WAVE ' + s.wave, W - 16, 100);
 
         // power meter
         const pbX = 20, pbY = 74, pbW = 220, pbH = 16;
@@ -11744,9 +11856,48 @@
         ctx.restore();
     }
 
+    // End-of-run results panel with the run's stats; slides/fades in via s.overT
+    function drawUltResults(s) {
+        const { W, H } = s, p = Math.min(1, s.overT / 500);
+        ctx.save();
+        ctx.fillStyle = `rgba(6,8,20,${0.74 * p})`; ctx.fillRect(0, 0, W, H);
+        const cx = W / 2, panelW = 430, panelH = 340, py = H / 2 - panelH / 2 + (1 - p) * 30;
+        ctx.globalAlpha = p;
+        ctx.fillStyle = 'rgba(20,16,40,0.92)'; ctx.strokeStyle = '#ff4d6d'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.roundRect(cx - panelW / 2, py, panelW, panelH, 16); ctx.fill(); ctx.stroke();
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#ff4d6d'; ctx.font = '900 42px system-ui, sans-serif';
+        ctx.fillText('GAME OVER', cx, py + 50);
+        const isBest = s.score >= s.best;
+        ctx.fillStyle = isBest ? '#ffd54a' : '#fff'; ctx.font = 'bold 30px system-ui';
+        ctx.fillText('⚡ ' + s.score.toLocaleString(), cx, py + 100);
+        if (isBest) { ctx.fillStyle = '#ffd54a'; ctx.font = 'bold 14px system-ui'; ctx.fillText('★ NEW BEST! ★', cx, py + 126); }
+        else { ctx.fillStyle = '#94a3b8'; ctx.font = '13px system-ui'; ctx.fillText('BEST ' + s.best.toLocaleString(), cx, py + 126); }
+        const rows = [['Wave reached', s.wave], ['Kills', s.kills], ['Bosses defeated', s.bossesDown], ['Best combo', s.bestCombo + '×'], ['Time survived', Math.round(s.survived / 1000) + 's']];
+        ctx.font = '16px system-ui'; let ry = py + 162;
+        for (const [k, v] of rows) {
+            ctx.textAlign = 'left'; ctx.fillStyle = '#9fb3c8'; ctx.fillText(k, cx - panelW / 2 + 36, ry);
+            ctx.textAlign = 'right'; ctx.fillStyle = '#fff'; ctx.fillText('' + v, cx + panelW / 2 - 36, ry);
+            ry += 28;
+        }
+        ctx.textAlign = 'center'; ctx.fillStyle = `rgba(255,255,255,${0.45 + 0.45 * Math.sin(s.t * 0.006)})`; ctx.font = 'bold 15px system-ui';
+        ctx.fillText('press any key / click to play again', cx, py + panelH - 26);
+        ctx.restore();
+    }
+
     function runUltimate(dt) {
         const s = ultState; if (!s) return;
         s.W = canvas.width; s.H = canvas.height;
+        if (s.over) {                          // run is over — freeze gameplay, animate lingering FX, show results
+            s.overT += dt; s.t += dt;
+            const fsec = Math.min(dt, 50) / 1000;
+            s.shake = Math.max(0, s.shake - dt * 0.03);
+            s.flash = Math.max(0, s.flash - fsec * 2.2);
+            s.zoom += (1 - s.zoom) * Math.min(1, dt * 0.011);
+            ultStepFX(s, fsec);
+            drawUltimate(s, dt); drawUltResults(s);
+            return;
+        }
         if (s.hitstop > 0) { s.hitstop -= dt; drawUltimate(s, dt); return; }   // freeze frames for impact
         // slow-motion (perfect-dodge reward): the timer ticks in real time while the world runs slow
         let scale = 1;
