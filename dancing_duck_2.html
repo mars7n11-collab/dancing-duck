@@ -9729,7 +9729,7 @@
             boss: null, kills: 0, nextBoss: 12, bossCount: 0,   // mini-boss encounters
             combo: 0, comboT: 0, score: 0, best: +(localStorage.getItem('ultimateBest') || 0),
             comboMilestone: 0, announce: null, cutin: null, hurt: 0,   // combo callouts + transform cut-in + damage vignette
-            shake: 0, flash: 0, hitstop: 0, zoom: 1, bgHue: ultRand(0, 360), t: 0,
+            shake: 0, flash: 0, hitstop: 0, zoom: 1, slowmo: 0, bgHue: ultRand(0, 360), t: 0,
             spawnT: 0,
         };
         for (let i = 0; i < 9; i++) s.objects.push(ultMakeObject(s));
@@ -9943,11 +9943,32 @@
     }
     function ultPreventCtx(e) { e.preventDefault(); }
 
+    // Is a foe / boss bearing down on the duck right now? (used to detect a last-second dodge)
+    function ultThreatNear(s, R) {
+        const d = s.duck;
+        for (const f of s.foes) if (Math.hypot(f.x - d.x, f.y - d.y) < R + f.r) return true;
+        if (s.boss && s.boss.phase === 'fight' && Math.hypot(s.boss.x - d.x, s.boss.y - d.y) < R + s.boss.r) return true;
+        return false;
+    }
+    // PERFECT DODGE — dashing while a threat is closing rewards skill: brief slow-mo, zoom, and meter gains
+    function ultPerfectDodge(s) {
+        if (s.slowmo > 140) return;                 // already mid-dodge — don't re-trigger
+        s.slowmo = 430;
+        ultZoom(s, 0.1); s.flash = Math.max(s.flash, 0.22); s.invul = Math.max(s.invul, 380);
+        s.od = Math.min(1, s.od + 0.15); s.sp = Math.min(1, s.sp + 0.08);   // reward overdrive + ultimate charge
+        s.announce = { txt: 'PERFECT DODGE!', t: 0, max: 900 };
+        s.rings.push({ x: s.duck.x, y: s.duck.y, r: 14, max: 250, life: 1, col: '#bff0ff' });
+        s.rings.push({ x: s.duck.x, y: s.duck.y, r: 22, max: 150, life: 1, col: '#fff' });
+        for (let i = 0; i < 18; i++) { const a = ultRand(0, Math.PI * 2), sp = ultRand(120, 440); s.particles.push({ x: s.duck.x, y: s.duck.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.6, max: 0.6, col: ['#fff', '#bff0ff'][i % 2], r: ultRand(2, 5), star: i % 2 === 0 }); }
+        playSFX && playSFX('dmPower', { pitch: 1.3 });
+    }
+
     function ultDash(s) {
         if (s.dashCd > 0) return;
         const d = s.duck, aim = ultAim(s);
         d.vx = aim.x * 1180; d.vy = aim.y * 1180;
         s.dashT = 240; s.dashCd = 520; s.invul = 320; s.dashMax = 1300;
+        if (ultThreatNear(s, 66)) ultPerfectDodge(s);   // dashed right as something closed in → reward
         s.shake = Math.max(s.shake, 5);
         for (let i = 0; i < 10; i++)
             s.particles.push({ x: d.x, y: d.y, vx: -aim.x * ultRand(40, 220) + ultRand(-40, 40), vy: -aim.y * ultRand(40, 220) + ultRand(-40, 40),
@@ -9966,6 +9987,7 @@
         s.dashT = 200 + frac * 360;                       // longer dash with charge → travels farther
         s.dashMax = speed;                                // let the speed clamp allow the full burst
         s.dashCd = 320; s.invul = Math.max(s.invul, s.dashT + 90);
+        if (ultThreatNear(s, 72)) ultPerfectDodge(s);   // last-second blink past a threat → reward
         s.shake = Math.max(s.shake, 9 + frac * 11);
         s.flash = Math.max(s.flash, 0.16 + frac * 0.24);
         d.facing = ax >= 0 ? 1 : -1;
@@ -11063,6 +11085,32 @@
         ctx.restore();
     }
 
+    // RGB-split / chromatic aberration over the whole frame, used while LIMIT BREAK overdrive is active.
+    // Captures the rendered scene, then rebuilds it from offset red + cyan channel layers so the edges fringe.
+    let ultAberrSrc = null, ultAberrLay = null;
+    function ultChromatic(s) {
+        const W = canvas.width, H = canvas.height;
+        if (!ultAberrSrc) { ultAberrSrc = document.createElement('canvas'); ultAberrLay = document.createElement('canvas'); }
+        if (ultAberrSrc.width !== W || ultAberrSrc.height !== H) { ultAberrSrc.width = ultAberrLay.width = W; ultAberrSrc.height = ultAberrLay.height = H; }
+        const sctx = ultAberrSrc.getContext('2d'), lctx = ultAberrLay.getContext('2d');
+        // grab the current scene
+        sctx.clearRect(0, 0, W, H); sctx.drawImage(canvas, 0, 0);
+        const fade = s.lb < 800 ? s.lb / 800 : 1;                 // ease the effect out as overdrive expires
+        const shift = (3 + 4 * Math.sin(s.t * 0.015)) * fade + s.shake * 0.35;   // wobble, amplified by screen shake
+        // isolate one channel of the captured scene into the working layer via multiply
+        const channel = (mask) => {
+            lctx.globalCompositeOperation = 'source-over'; lctx.clearRect(0, 0, W, H); lctx.drawImage(ultAberrSrc, 0, 0);
+            lctx.globalCompositeOperation = 'multiply'; lctx.fillStyle = mask; lctx.fillRect(0, 0, W, H);
+            lctx.globalCompositeOperation = 'source-over';
+        };
+        // rebuild the frame from two offset channel layers (red + cyan = full colour where aligned, fringes where shifted)
+        ctx.save();
+        ctx.clearRect(0, 0, W, H);
+        channel('#ff0000'); ctx.globalCompositeOperation = 'source-over'; ctx.drawImage(ultAberrLay, shift, 0);
+        channel('#00ffff'); ctx.globalCompositeOperation = 'lighter';     ctx.drawImage(ultAberrLay, -shift, 0);
+        ctx.restore();
+    }
+
     function drawUltimate(s, dt) {
         const { W, H } = s, d = s.duck;
         drawUltBackground(s);
@@ -11357,9 +11405,14 @@
             ctx.restore();
         }
 
-        ctx.restore(); // end shake
-
+        // reticle lives inside the camera transform so it tracks the zoomed scene (stays on-target during a punch-zoom)
         if (s.mouse && s.mouse.active) drawUltReticle(s);
+
+        ctx.restore(); // end shake + zoom
+
+        // RGB split — the frame fractures into red/cyan channels while LIMIT BREAK overdrive is live
+        if (s.lb > 0) ultChromatic(s);
+
         drawUltHUD(s);
         if (s.announce) drawUltAnnounce(s);
         if (s.cutin) drawUltCutin(s);
@@ -11375,6 +11428,20 @@
             ctx.restore();
         }
         if (s.flash > 0) { ctx.save(); ctx.globalAlpha = Math.min(0.85, s.flash); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); ctx.restore(); }
+        // PERFECT DODGE slow-mo — cinematic time-freeze: partial desaturation + cool blue vignette
+        if (s.slowmo > 0) {
+            const a = Math.min(1, s.slowmo / 430);
+            ctx.save();
+            ctx.globalCompositeOperation = 'saturation'; ctx.globalAlpha = 0.55 * a;   // drain colour for a frozen-moment look
+            ctx.fillStyle = 'hsl(0,0%,50%)'; ctx.fillRect(0, 0, W, H);
+            ctx.restore();
+            ctx.save();
+            const vg = ctx.createRadialGradient(W / 2, H / 2, H * 0.1, W / 2, H / 2, H * 0.72);
+            vg.addColorStop(0, 'rgba(150,215,255,0)');
+            vg.addColorStop(1, `rgba(40,110,205,${0.5 * a})`);
+            ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+            ctx.restore();
+        }
         // red damage vignette when an orb connects
         if (s.hurt > 0) {
             ctx.save();
@@ -11614,10 +11681,14 @@
     function runUltimate(dt) {
         const s = ultState; if (!s) return;
         s.W = canvas.width; s.H = canvas.height;
-        const sec = Math.min(dt, 50) / 1000;
         if (s.hitstop > 0) { s.hitstop -= dt; drawUltimate(s, dt); return; }   // freeze frames for impact
-        ultUpdate(s, dt, sec);
-        drawUltimate(s, dt);
+        // slow-motion (perfect-dodge reward): the timer ticks in real time while the world runs slow
+        let scale = 1;
+        if (s.slowmo > 0) { s.slowmo -= dt; scale = 0.32; }
+        const eff = dt * scale;
+        const sec = Math.min(eff, 50) / 1000;
+        ultUpdate(s, eff, sec);
+        drawUltimate(s, eff);
     }
 
     const ultimateDuckBtn = document.getElementById('ultimateDuckBtn');
