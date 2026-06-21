@@ -9729,7 +9729,7 @@
             boss: null, kills: 0, nextBoss: 12, bossCount: 0,   // mini-boss encounters
             combo: 0, comboT: 0, score: 0, best: +(localStorage.getItem('ultimateBest') || 0),
             comboMilestone: 0, announce: null, cutin: null, hurt: 0,   // combo callouts + transform cut-in + damage vignette
-            shake: 0, flash: 0, hitstop: 0, bgHue: ultRand(0, 360), t: 0,
+            shake: 0, flash: 0, hitstop: 0, zoom: 1, bgHue: ultRand(0, 360), t: 0,
             spawnT: 0,
         };
         for (let i = 0; i < 9; i++) s.objects.push(ultMakeObject(s));
@@ -9837,6 +9837,7 @@
         s.hitstop = Math.max(s.hitstop, finisher ? 90 : 45);
         s.shake = Math.max(s.shake, finisher ? 16 : 9);
         s.flash = Math.max(s.flash, finisher ? 0.42 : 0.22);
+        ultZoom(s, finisher ? 0.07 : 0.025);
         s.rings.push({ x: d.x + aim.x * reach * 0.4, y: d.y + aim.y * reach * 0.4, r: 8, max: reach * (finisher ? 1.4 : 1), life: 1, col: P.glow });
         const n = finisher ? 26 : 16;
         for (let i = 0; i < n; i++) {
@@ -10155,7 +10156,7 @@
         s.foes.length = 0;
         if (s.boss && s.boss.phase === 'fight') ultDamageBoss(s, s.boss.maxHp * 0.45, '#fff');
         s.od = 0;   // reset AFTER the nova so its own kills don't refund the meter
-        s.flash = 1; s.shake = Math.max(s.shake, 30); s.hitstop = Math.max(s.hitstop, 150);
+        s.flash = 1; s.shake = Math.max(s.shake, 30); s.hitstop = Math.max(s.hitstop, 150); ultZoom(s, 0.16);
         s.announce = { txt: 'LIMIT BREAK!', t: 0, max: 1900 };
         for (let i = 0; i < 4; i++) s.rings.push({ x: d.x, y: d.y, r: 10 + i * 24, max: Math.hypot(s.W, s.H) * (0.7 + i * 0.12), life: 1, col: i % 2 ? '#fff' : ultPalette(s).glow });
         for (let i = 0; i < 90; i++) { const a = ultRand(0, Math.PI * 2), sp = ultRand(200, 900); s.particles.push({ x: d.x, y: d.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.9, max: 0.9, r: ultRand(4, 11), flame: true }); }
@@ -10187,6 +10188,15 @@
         { n: 30, txt: 'GODLIKE!!!' }, { n: 50, txt: 'UNREAL!!!' }, { n: 75, txt: 'LEGENDARY!!!' },
     ];
 
+    // Impact zoom — briefly punch the camera in toward the action; ultUpdate eases it back to 1
+    function ultZoom(s, amt) { s.zoom = Math.max(s.zoom, 1 + amt); }
+    // Combo pitch — each kill in a chain rings ~1 semitone higher, climbing to an octave at a hot combo
+    function ultComboPitch(s) { return Math.pow(1.0595, Math.min(12, s.combo)); }
+    // Floating number popup (damage / score) that rises and fades via the txt-particle path
+    function ultPopNum(s, x, y, txt, col, size) {
+        s.particles.push({ txt, x: x + ultRand(-6, 6), y, life: 1, max: 1, col: col || '#fff', size: size || 18 });
+    }
+
     function ultDamageObj(s, o, amount, col, chained) {
         if (o.dead) return;
         o.hp -= amount; o.hitFlash = 1;
@@ -10209,7 +10219,8 @@
             s.od = Math.min(1, s.od + (s.sp >= 1 ? 0.04 : 0.018));   // OVERDRIVE; fills faster once ULTIMATE is capped
             s.sp = Math.min(1, s.sp + 0.06);            // builds the ULTIMATE beam meter
             s.shake = Math.max(s.shake, s.super ? 12 : 8);
-            s.hitstop = Math.max(s.hitstop, 55);
+            s.hitstop = Math.max(s.hitstop, 45 + Math.min(45, s.combo * 5));   // hotter combos freeze longer (zoom holds during the freeze, then snaps back)
+            ultZoom(s, Math.min(0.07, 0.02 + s.combo * 0.004));   // hotter combos punch the camera harder
             s.rings.push({ x: o.x, y: o.y, r: 6, max: 90 + o.r * 2, life: 1, col: col || '#fff' });
             s.particles.push({ txt: '+' + gain, x: o.x, y: o.y - o.r, life: 1, max: 1, col: '#ffd54a', size: 18 });
             // debris shards tinted like the object
@@ -10225,12 +10236,12 @@
                 s.particles.push({ x: o.x, y: o.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
                     life: 0.6, max: 0.6, col: ['#fff', '#ffd54a', col || '#9be7ff'][i % 3], r: ultRand(2, 6), star: i % 3 === 0 });
             }
-            playSFX && playSFX(s.combo >= 4 ? 'casinoJackpot' : 'weapon');
+            playSFX && playSFX('weapon', { pitch: ultComboPitch(s) });   // pitch climbs with the combo for an addictive ramp
             // CHAIN REACTION: at a hot combo, a kill detonates and ignites its neighbours
             if (!chained && s.combo >= 8) {
                 const CR = 150;
                 s.rings.push({ x: o.x, y: o.y, r: 8, max: CR + 40, life: 1, col: '#ff9d3c' });
-                s.flash = Math.max(s.flash, 0.18);
+                s.flash = Math.max(s.flash, 0.18); ultZoom(s, 0.06); s.hitstop = Math.max(s.hitstop, 80);
                 for (let i = 0; i < 18; i++) { const a = ultRand(0, Math.PI * 2), spd = ultRand(140, 520); s.particles.push({ x: o.x, y: o.y, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, life: 0.55, max: 0.55, col: ['#fff', '#ffae3c', '#ff5d3c'][i % 3], r: ultRand(2, 6), star: i % 3 === 0 }); }
                 for (const n2 of s.objects) { if (n2.dead || n2 === o) continue; if (Math.hypot(n2.x - o.x, n2.y - o.y) < CR + n2.r) ultDamageObj(s, n2, ultATK(s, 99), '#ff9d3c', true); }
                 ultHitFoes(s, o.x, o.y, CR, ultATK(s, 6));
@@ -10294,7 +10305,9 @@
         ultMakeFoe(s, x, y, kind, false);
     }
     function ultKillFoe(s, f, deflected) {
-        s.score += (f.score || 120) * (s.dblT > 0 ? 2 : 1); s.sp = Math.min(1, s.sp + 0.05);
+        const pts = (f.score || 120) * (s.dblT > 0 ? 2 : 1);
+        s.score += pts; s.sp = Math.min(1, s.sp + 0.05);
+        ultPopNum(s, f.x, f.y - f.r, '+' + pts, s.dblT > 0 ? '#ffd54a' : `hsl(${f.hue},100%,75%)`, 15);
         // SPLITTER bursts into two fast shards when destroyed
         if (f.kind === 'splitter' && !f.shard) {
             for (let i = 0; i < 2; i++) {
@@ -10312,7 +10325,7 @@
             s.particles.push({ x: f.x, y: f.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
                 life: 0.5, max: 0.5, col: ['#fff', `hsl(${f.hue},100%,70%)`, '#ffd54a'][i % 3], r: ultRand(2, 5), star: i % 3 === 0 });
         }
-        playSFX && playSFX(deflected ? 'weapon' : 'pop');
+        playSFX && playSFX(deflected ? 'weapon' : 'pop', { pitch: ultComboPitch(s) });
     }
     function ultPlayerHit(s, f) {
         if (s.shieldT > 0 || s.invul > 0) {            // SHIELD (or mercy frames) absorbs the hit
@@ -10323,7 +10336,7 @@
         s.combo = 0; s.comboT = 0; s.comboMilestone = 0;
         s.power = Math.max(0, s.power - 0.18);
         s.invul = Math.max(s.invul, 750);              // mercy i-frames
-        s.shake = Math.max(s.shake, 16); s.flash = Math.max(s.flash, 0.5); s.hurt = 1;
+        s.shake = Math.max(s.shake, 16); s.flash = Math.max(s.flash, 0.5); s.hurt = 1; ultZoom(s, 0.06);
         const a = Math.atan2(s.duck.y - f.y, s.duck.x - f.x);
         s.duck.vx += Math.cos(a) * 320; s.duck.vy += Math.sin(a) * 320;
         for (let i = 0; i < 18; i++) {
@@ -10352,7 +10365,7 @@
             phase: 'enter', phaseT: 1300, atkT: 2000, t: 0, hitFlash: 0, split: false, hue: 322,
         };
         s.announce = { txt: 'WARNING', t: 0, max: 1500 };
-        s.shake = Math.max(s.shake, 16); s.flash = Math.max(s.flash, 0.45);
+        s.shake = Math.max(s.shake, 16); s.flash = Math.max(s.flash, 0.45); ultZoom(s, 0.09);
         playSFX && playSFX('dmStreak');
     }
     function ultBossMinion(s, ang, sp) {
@@ -10372,6 +10385,8 @@
         const b = s.boss; if (!b || b.phase !== 'fight') return;
         b.hp -= amount; b.hitFlash = 1;
         for (let i = 0; i < 4; i++) { const a = ultRand(0, Math.PI * 2); s.particles.push({ x: b.x + Math.cos(a) * b.r, y: b.y + Math.sin(a) * b.r, vx: Math.cos(a) * ultRand(60, 220), vy: Math.sin(a) * ultRand(60, 220), life: 0.35, max: 0.35, col: col || '#fff', r: ultRand(2, 4) }); }
+        // floating damage number — bigger/redder for heavier hits
+        ultPopNum(s, b.x, b.y - b.r * 0.6, '-' + amount, amount >= 6 ? '#ff5d5d' : '#fff', amount >= 6 ? 26 : 18);
         if (!b.split && b.hp <= b.maxHp * 0.5) {       // half-health → summon a reinforcement wave
             b.split = true;
             for (let i = 0; i < 6; i++) ultBossMinion(s, (i / 6) * Math.PI * 2, 300);
@@ -10388,7 +10403,7 @@
         s.power = 1; s.sp = 1; s.od = Math.min(1, s.od + 0.45);   // reward: refill meters + a big overdrive chunk
         ultDropPickup(s, b.x - 30, b.y, true); ultDropPickup(s, b.x + 30, b.y, true);   // guaranteed loot
         s.announce = { txt: 'BOSS DOWN!', t: 0, max: 1500 };
-        s.shake = Math.max(s.shake, 26); s.flash = Math.max(s.flash, 0.85); s.hitstop = Math.max(s.hitstop, 130);
+        s.shake = Math.max(s.shake, 26); s.flash = Math.max(s.flash, 0.85); s.hitstop = Math.max(s.hitstop, 130); ultZoom(s, 0.13);
         s.particles.push({ txt: '+' + bonus, x: b.x, y: b.y - b.r, life: 1.4, max: 1.4, col: '#ffd54a', size: 30 });
         for (let i = 0; i < 70; i++) {
             const a = ultRand(0, Math.PI * 2), sp = ultRand(120, 720);
@@ -10416,6 +10431,7 @@
         s.dashCd = Math.max(0, s.dashCd - dt);
         s.invul = Math.max(0, s.invul - dt);
         s.shake = Math.max(0, s.shake - dt * 0.03);
+        s.zoom += (1 - s.zoom) * Math.min(1, dt * 0.011);   // impact zoom eases back to neutral (~250ms)
         s.flash = Math.max(0, s.flash - sec * 2.2);
         s.hurt = Math.max(0, s.hurt - sec * 2);
         s.frenzyT = Math.max(0, s.frenzyT - dt); s.shieldT = Math.max(0, s.shieldT - dt); s.dblT = Math.max(0, s.dblT - dt);
@@ -11052,6 +11068,8 @@
         drawUltBackground(s);
 
         ctx.save();
+        // impact zoom — punch the camera in toward the duck on big hits, then ease back
+        if (s.zoom > 1.001) { ctx.translate(d.x, d.y); ctx.scale(s.zoom, s.zoom); ctx.translate(-d.x, -d.y); }
         if (s.shake > 0) ctx.translate(ultRand(-s.shake, s.shake), ultRand(-s.shake, s.shake));
 
         // speed lines (manga) when fast / super / after transform
@@ -16854,11 +16872,14 @@
             master.gain.value = 0.35;
             master.connect(ac.destination);
 
+            // optional pitch multiplier (e.g. combo escalation): playSFX('pop', {pitch: 1.4})
+            const pitch = (opt && typeof opt === 'object' && opt.pitch) ? opt.pitch : 1;
+
             const tone = (freq, startT, dur, vol, wave='sine', detune=0) => {
                 const osc = ac.createOscillator();
                 const g   = ac.createGain();
                 osc.type = wave;
-                osc.frequency.value = freq;
+                osc.frequency.value = freq * pitch;
                 osc.detune.value = detune;
                 g.gain.setValueAtTime(vol, startT);
                 g.gain.exponentialRampToValueAtTime(0.0001, startT + dur);
@@ -16873,7 +16894,7 @@
                 const src = ac.createBufferSource();
                 src.buffer = buf;
                 const filt = ac.createBiquadFilter();
-                filt.type = 'highpass'; filt.frequency.value = hipass;
+                filt.type = 'highpass'; filt.frequency.value = hipass * pitch;
                 const g = ac.createGain();
                 g.gain.setValueAtTime(vol, startT);
                 g.gain.exponentialRampToValueAtTime(0.0001, startT + dur);
