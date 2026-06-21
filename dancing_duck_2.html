@@ -10294,11 +10294,13 @@
         frenzy: { col: '#ff3b6b', sym: '⚡', label: 'FRENZY', dur: 6000 },
         shield: { col: '#3bd0ff', sym: '🛡', label: 'SHIELD', dur: 6000 },
         double: { col: '#ffd54a', sym: '✕2', label: '2× SCORE', dur: 9000 },
+        heart:  { col: '#ff4d6d', sym: '❤', label: '+1 LIFE', dur: 0 },
     };
-    const ULT_PK_KEYS = Object.keys(ULT_PICKUPS);
+    const ULT_PK_KEYS = ['frenzy', 'shield', 'double'];   // buff trio; hearts drop separately/contextually
     function ultDropPickup(s, x, y, force) {
         if (!force && (s.pickups.length >= 4 || Math.random() > 0.5)) return;
-        const t = ULT_PK_KEYS[(Math.random() * ULT_PK_KEYS.length) | 0];
+        // when hurt, sometimes a life drops instead of a buff
+        const t = (s.hp < s.maxHp && Math.random() < 0.22) ? 'heart' : ULT_PK_KEYS[(Math.random() * ULT_PK_KEYS.length) | 0];
         s.pickups.push({ x, y, vx: ultRand(-50, 50), vy: ultRand(-70, -20), r: 16, t, life: 9000, seed: ultRand(0, 6.28) });
     }
     function ultCollect(s, p) {
@@ -10306,6 +10308,7 @@
         if (p.t === 'frenzy') s.frenzyT = cfg.dur;
         else if (p.t === 'shield') s.shieldT = cfg.dur;
         else if (p.t === 'double') s.dblT = cfg.dur;
+        else if (p.t === 'heart') s.hp = Math.min(s.maxHp, s.hp + 1);
         s.flash = Math.max(s.flash, 0.22); s.shake = Math.max(s.shake, 5);
         s.particles.push({ txt: cfg.label, x: p.x, y: p.y - 12, life: 1.1, max: 1.1, col: cfg.col, size: 20 });
         s.rings.push({ x: p.x, y: p.y, r: 6, max: 80, life: 1, col: cfg.col });
@@ -10393,12 +10396,25 @@
         if (s.score >= s.best) { s.best = s.score; try { localStorage.setItem('ultimateBest', s.best); } catch (_) {} }
         playSFX && playSFX('lose');
     }
-    // Pop any foes within a radius (used by melee + nova + spin); also chip the boss if in range
+    // Shoot down any SENTINEL bullets within a radius (the duck's attacks clear incoming fire)
+    function ultClearBullets(s, x, y, R) {
+        let cleared = 0;
+        for (let i = s.bossBullets.length - 1; i >= 0; i--) {
+            const p = s.bossBullets[i];
+            if (Math.hypot(p.x - x, p.y - y) < R + p.r) {
+                for (let k = 0; k < 5; k++) { const a = ultRand(0, Math.PI * 2); s.particles.push({ x: p.x, y: p.y, vx: Math.cos(a) * ultRand(40, 170), vy: Math.sin(a) * ultRand(40, 170), life: 0.3, max: 0.3, col: k % 2 ? '#fff' : `hsl(${p.hue},100%,75%)`, r: ultRand(1.5, 3.5) }); }
+                s.bossBullets.splice(i, 1); cleared++;
+            }
+        }
+        return cleared;
+    }
+    // Pop any foes within a radius (used by melee + nova + spin); clear bullets too; chip the boss if in range
     function ultHitFoes(s, x, y, R, bossDmg) {
         for (let i = s.foes.length - 1; i >= 0; i--) {
             const f = s.foes[i];
             if (Math.hypot(f.x - x, f.y - y) < R + f.r) { ultKillFoe(s, f, false); s.foes.splice(i, 1); }
         }
+        ultClearBullets(s, x, y, R);
         if (bossDmg && s.boss && Math.hypot(s.boss.x - x, s.boss.y - y) < R + s.boss.r) ultDamageBoss(s, bossDmg, '#fff');
     }
 
@@ -10749,6 +10765,7 @@
             if (!hit && s.boss && s.boss.phase === 'fight' && Math.hypot(s.boss.x - b.x, s.boss.y - b.y) < s.boss.r + b.r) {
                 ultDamageBoss(s, b.dmg, `hsl(${b.hue},100%,70%)`); if (!b.charged) hit = true;
             }
+            if (!hit && ultClearBullets(s, b.x, b.y, b.r) && !b.charged) hit = true;   // bolts knock out incoming bullets
             if (hit || b.life <= 0 || b.x < -40 || b.x > s.W + 40 || b.y < -40 || b.y > s.H + 40) s.blasts.splice(i, 1);
         }
 
@@ -10770,6 +10787,7 @@
                 const rx = s.boss.x - w.x, ry = s.boss.y - w.y, along = Math.abs(rx * ux + ry * uy), perp = Math.abs(-rx * uy + ry * ux);
                 if (along < w.thick + s.boss.r && perp < w.reach + s.boss.r) { ultDamageBoss(s, w.dmg * 1.5, `hsl(${w.hue},100%,75%)`); w.hit.push(s.boss); }
             }
+            ultClearBullets(s, w.x, w.y, w.reach);   // crescents slice through incoming bullets
             // trailing shimmer along the crescent
             if (Math.random() < 0.8) { const off = ultRand(-w.reach, w.reach); s.particles.push({ x: w.x - uy * off, y: w.y + ux * off, vx: -w.vx * 0.1, vy: -w.vy * 0.1, life: 0.35, max: 0.35, col: i % 2 ? '#fff' : `hsl(${w.hue},100%,72%)`, r: ultRand(2, 5) }); }
             if (w.life <= 0 || w.x < -80 || w.x > s.W + 80 || w.y < -80 || w.y > s.H + 80) s.slashWaves.splice(i, 1);
@@ -10794,6 +10812,10 @@
                 const rx = s.boss.x - d.x, ry = s.boss.y - d.y;
                 const along = rx * ux + ry * uy, perp = Math.abs(-rx * uy + ry * ux);
                 if (along > -s.boss.r && perp < halfW + s.boss.r) ultDamageBoss(s, ultATK(s, 4) * sec * 16, '#fff');
+            }
+            for (let j = s.bossBullets.length - 1; j >= 0; j--) {   // the beam vaporises bullets crossing it
+                const p = s.bossBullets[j], rx = p.x - d.x, ry = p.y - d.y;
+                if (rx * ux + ry * uy > -p.r && Math.abs(-rx * uy + ry * ux) < halfW + p.r) s.bossBullets.splice(j, 1);
             }
             if (b.life <= 0) { s.beam = null; s.flash = Math.max(s.flash, 0.3); }
         }
@@ -10837,6 +10859,10 @@
             for (let j = s.foes.length - 1; j >= 0; j--) {
                 const f = s.foes[j], rx = f.x - d.x, ry = f.y - d.y, along = rx * ux + ry * uy, perp = Math.abs(-rx * uy + ry * ux);
                 if (along > -f.r && along < reach + f.r && perp < halfW + f.r) { ultKillFoe(s, f, false); s.foes.splice(j, 1); }
+            }
+            for (let j = s.bossBullets.length - 1; j >= 0; j--) {   // the blade deflects bullets it sweeps through
+                const p = s.bossBullets[j], rx = p.x - d.x, ry = p.y - d.y, along = rx * ux + ry * uy, perp = Math.abs(-rx * uy + ry * ux);
+                if (along > -p.r && along < reach + p.r && perp < halfW + p.r) { ultClearBullets(s, p.x, p.y, 1); }
             }
             if (s.boss && s.boss.phase === 'fight') {
                 const rx = s.boss.x - d.x, ry = s.boss.y - d.y, along = rx * ux + ry * uy, perp = Math.abs(-rx * uy + ry * ux);
