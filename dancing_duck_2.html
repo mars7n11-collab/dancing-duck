@@ -10214,9 +10214,11 @@
     function ultZoom(s, amt) { s.zoom = Math.max(s.zoom, 1 + amt); }
     // Combo pitch — each kill in a chain rings ~1 semitone higher, climbing to an octave at a hot combo
     function ultComboPitch(s) { return Math.pow(1.0595, Math.min(12, s.combo)); }
-    // Floating number popup (damage / score) that rises and fades via the txt-particle path
+    // Floating number popup (damage / score). Each gets a horizontal fan + varied rise so bursts
+    // of simultaneous kills spread out instead of stacking into an unreadable pile.
     function ultPopNum(s, x, y, txt, col, size) {
-        s.particles.push({ txt, x: x + ultRand(-6, 6), y, life: 1, max: 1, col: col || '#fff', size: size || 18 });
+        s.particles.push({ txt, x: x + ultRand(-8, 8), y, vx: ultRand(-55, 55), vy: -ultRand(4, 24),
+            life: 1, max: 1, col: col || '#fff', size: size || 18 });
     }
 
     function ultDamageObj(s, o, amount, col, chained) {
@@ -10244,7 +10246,7 @@
             s.hitstop = Math.max(s.hitstop, 45 + Math.min(45, s.combo * 5));   // hotter combos freeze longer (zoom holds during the freeze, then snaps back)
             ultZoom(s, Math.min(0.07, 0.02 + s.combo * 0.004));   // hotter combos punch the camera harder
             s.rings.push({ x: o.x, y: o.y, r: 6, max: 90 + o.r * 2, life: 1, col: col || '#fff' });
-            s.particles.push({ txt: '+' + gain, x: o.x, y: o.y - o.r, life: 1, max: 1, col: '#ffd54a', size: 18 });
+            ultPopNum(s, o.x, o.y - o.r, '+' + gain, '#ffd54a', 18);
             // debris shards tinted like the object
             const n = 10 + (Math.random() * 6 | 0);
             for (let i = 0; i < n; i++) {
@@ -10381,10 +10383,15 @@
     function ultSpawnBoss(s) {
         s.bossCount++;
         const hp = 55 + s.bossCount * 25;
+        // alternate archetypes: ORB-LORD (hover + summon) then VOID RAMMER (telegraphed lunges)
+        const kind = (s.bossCount % 2 === 1) ? 'orblord' : 'charger';
         s.boss = {
+            kind,
             x: Math.random() < 0.5 ? -90 : s.W + 90, y: s.H * 0.45,
-            vx: 0, vy: 0, r: 58, hp, maxHp: hp,
-            phase: 'enter', phaseT: 1300, atkT: 2000, t: 0, hitFlash: 0, split: false, hue: 322,
+            vx: 0, vy: 0, r: kind === 'charger' ? 52 : 58, hp, maxHp: hp,
+            phase: 'enter', phaseT: 1300, atkT: 2000, t: 0, hitFlash: 0, split: false,
+            hue: kind === 'charger' ? 195 : 322,
+            move: 'aim', aimX: 1, aimY: 0, chargeT: 0,   // charger lunge state
         };
         s.announce = { txt: 'WARNING', t: 0, max: 1500 };
         s.shake = Math.max(s.shake, 16); s.flash = Math.max(s.flash, 0.45); ultZoom(s, 0.09);
@@ -10605,13 +10612,46 @@
                 b.phaseT -= dt; if (b.phaseT <= 0) { b.phase = 'fight'; b.atkT = 1400; }
             } else if (b.phase === 'fight') {
                 const bx = d.x - b.x, by = d.y - b.y, bd = Math.hypot(bx, by) || 1;
-                const pull = (bd - 250) * 0.7;                 // hover at a menacing mid-range
-                b.vx += (bx / bd * pull - b.vx) * Math.min(1, sec * 1.3);
-                b.vy += (by / bd * pull - b.vy) * Math.min(1, sec * 1.3);
-                b.x += b.vx * sec; b.y += b.vy * sec;
-                b.x = Math.max(80, Math.min(s.W - 80, b.x)); b.y = Math.max(80, Math.min(s.H - 90, b.y));
-                b.atkT -= dt; if (b.atkT <= 0) { ultBossAttack(s); b.atkT = s.super ? 1700 : 2400; }
-                if (bd < b.r + 22) {
+                if (b.kind === 'charger') {
+                    // ── VOID RAMMER: creep + lock on, then lunge across the arena ──
+                    if (b.move === 'aim') {
+                        const pull = (bd - 230) * 0.5;             // edge toward the duck while winding up
+                        b.vx += (bx / bd * pull - b.vx) * Math.min(1, sec * 1.1);
+                        b.vy += (by / bd * pull - b.vy) * Math.min(1, sec * 1.1);
+                        b.x += b.vx * sec; b.y += b.vy * sec;
+                        b.aimX = bx / bd; b.aimY = by / bd;        // track the duck until the lunge fires
+                        b.atkT -= dt;
+                        if (b.atkT <= 0) {                         // FIRE — commit to the locked direction
+                            b.move = 'charge'; b.chargeT = 520;
+                            const spd = s.super ? 1500 : 1200;
+                            b.vx = b.aimX * spd; b.vy = b.aimY * spd;
+                            s.shake = Math.max(s.shake, 10); ultZoom(s, 0.05);
+                            s.rings.push({ x: b.x, y: b.y, r: b.r, max: b.r + 130, life: 1, col: `hsl(${b.hue},100%,65%)` });
+                            playSFX && playSFX('dmStreak');
+                        }
+                    } else if (b.move === 'charge') {
+                        b.x += b.vx * sec; b.y += b.vy * sec; b.chargeT -= dt;
+                        if (Math.random() < 0.9) s.particles.push({ x: b.x + ultRand(-10, 10), y: b.y + ultRand(-10, 10), vx: -b.vx * 0.05, vy: -b.vy * 0.05, life: 0.4, max: 0.4, col: `hsl(${b.hue},100%,70%)`, r: ultRand(3, 7) });
+                        if (b.x < b.r || b.x > s.W - b.r) { b.vx *= -0.6; b.x = Math.max(b.r, Math.min(s.W - b.r, b.x)); s.shake = Math.max(s.shake, 9); }
+                        if (b.y < b.r || b.y > s.H - b.r) { b.vy *= -0.6; b.y = Math.max(b.r, Math.min(s.H - b.r, b.y)); s.shake = Math.max(s.shake, 9); }
+                        if (b.chargeT <= 0) { b.move = 'rest'; b.atkT = 700; }
+                    } else {                                       // rest — decelerate, wide-open to counterattack
+                        b.vx *= Math.exp(-3 * sec); b.vy *= Math.exp(-3 * sec);
+                        b.x += b.vx * sec; b.y += b.vy * sec;
+                        b.atkT -= dt; if (b.atkT <= 0) { b.move = 'aim'; b.atkT = s.super ? 800 : 1100; }
+                    }
+                    b.x = Math.max(40, Math.min(s.W - 40, b.x)); b.y = Math.max(40, Math.min(s.H - 50, b.y));
+                } else {
+                    // ── ORB-LORD: hover at a menacing mid-range and summon minion bursts ──
+                    const pull = (bd - 250) * 0.7;
+                    b.vx += (bx / bd * pull - b.vx) * Math.min(1, sec * 1.3);
+                    b.vy += (by / bd * pull - b.vy) * Math.min(1, sec * 1.3);
+                    b.x += b.vx * sec; b.y += b.vy * sec;
+                    b.x = Math.max(80, Math.min(s.W - 80, b.x)); b.y = Math.max(80, Math.min(s.H - 90, b.y));
+                    b.atkT -= dt; if (b.atkT <= 0) { ultBossAttack(s); b.atkT = s.super ? 1700 : 2400; }
+                }
+                // shared body collision (recompute distance after movement so a fast lunge still connects)
+                if (Math.hypot(d.x - b.x, d.y - b.y) < b.r + 22) {
                     if (s.invul > 0 || s.dashT > 0) { ultDamageBoss(s, ultATK(s, 4), '#fff'); const a = Math.atan2(b.y - d.y, b.x - d.x); b.x += Math.cos(a) * 24; b.y += Math.sin(a) * 24; }
                     else ultPlayerHit(s, { x: b.x, y: b.y });
                 }
@@ -11497,21 +11537,47 @@
         cg.addColorStop(0, `hsla(${b.hue},100%,${b.hitFlash > 0 ? 85 : 60}%,0.7)`); cg.addColorStop(1, `hsla(${b.hue},100%,50%,0)`);
         ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(0, 0, b.r * 2.2 * pul, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
-        // spiked body
-        ctx.beginPath();
-        for (let i = 0; i < spikes * 2; i++) {
-            const a = (i / (spikes * 2)) * Math.PI * 2 + b.t * 0.0015, rr = (i % 2 ? b.r * 1.32 : b.r) * pul;
-            const x = Math.cos(a) * rr, y = Math.sin(a) * rr; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        if (b.kind === 'charger') {
+            const ang = (b.move === 'charge') ? Math.atan2(b.vy, b.vx) : Math.atan2(b.aimY, b.aimX);
+            // danger lane telegraph while winding up — a warning cone along the locked direction
+            if (b.phase === 'fight' && b.move === 'aim') {
+                ctx.save(); ctx.rotate(ang); ctx.globalCompositeOperation = 'lighter';
+                const a = 0.3 + 0.4 * Math.abs(Math.sin(b.t * 0.02)), len = 560;
+                const lg = ctx.createLinearGradient(0, 0, len, 0);
+                lg.addColorStop(0, `hsla(${b.hue},100%,72%,${a})`); lg.addColorStop(1, `hsla(${b.hue},100%,72%,0)`);
+                ctx.fillStyle = lg; ctx.beginPath();
+                ctx.moveTo(b.r, -7); ctx.lineTo(len, -30); ctx.lineTo(len, 30); ctx.lineTo(b.r, 7); ctx.closePath(); ctx.fill();
+                ctx.restore();
+            }
+            // sleek arrowhead body pointing where it will strike
+            ctx.save(); ctx.rotate(ang);
+            ctx.beginPath();
+            ctx.moveTo(b.r * 1.5, 0); ctx.lineTo(-b.r * 0.55, b.r * 0.9); ctx.lineTo(-b.r * 0.2, 0); ctx.lineTo(-b.r * 0.55, -b.r * 0.9); ctx.closePath();
+            const bg = ctx.createLinearGradient(-b.r, 0, b.r * 1.5, 0);
+            bg.addColorStop(0, `hsl(${b.hue},75%,16%)`); bg.addColorStop(1, b.hitFlash > 0 ? '#ffffff' : `hsl(${b.hue},90%,40%)`);
+            ctx.fillStyle = bg; ctx.fill();
+            ctx.strokeStyle = `hsl(${b.hue},100%,74%)`; ctx.lineWidth = 3; ctx.stroke();
+            // glowing core eye, brighter the closer it is to firing
+            const heat = b.move === 'charge' ? 1 : (b.move === 'aim' ? 0.4 + 0.5 * Math.abs(Math.sin(b.t * 0.02)) : 0.3);
+            ctx.fillStyle = b.hitFlash > 0 ? '#fff' : `hsla(${b.hue},100%,${55 + heat * 30}%,1)`;
+            ctx.beginPath(); ctx.arc(0, 0, b.r * 0.34, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        } else {
+            // ORB-LORD — spiked orb with a single eye
+            ctx.beginPath();
+            for (let i = 0; i < spikes * 2; i++) {
+                const a = (i / (spikes * 2)) * Math.PI * 2 + b.t * 0.0015, rr = (i % 2 ? b.r * 1.32 : b.r) * pul;
+                const x = Math.cos(a) * rr, y = Math.sin(a) * rr; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+            }
+            ctx.closePath();
+            const bg = ctx.createRadialGradient(0, 0, 4, 0, 0, b.r * 1.3);
+            bg.addColorStop(0, b.hitFlash > 0 ? '#ffffff' : '#3a0a2a'); bg.addColorStop(1, `hsl(${b.hue},75%,16%)`);
+            ctx.fillStyle = bg; ctx.fill();
+            ctx.strokeStyle = `hsl(${b.hue},100%,72%)`; ctx.lineWidth = 3; ctx.stroke();
+            ctx.fillStyle = b.hitFlash > 0 ? '#fff' : `hsl(${b.hue},100%,75%)`;
+            ctx.beginPath(); ctx.arc(0, 0, b.r * 0.42, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#1a0010'; ctx.beginPath(); ctx.ellipse(0, Math.sin(b.t * 0.004) * 4, b.r * 0.15, b.r * 0.32, 0, 0, Math.PI * 2); ctx.fill();
         }
-        ctx.closePath();
-        const bg = ctx.createRadialGradient(0, 0, 4, 0, 0, b.r * 1.3);
-        bg.addColorStop(0, b.hitFlash > 0 ? '#ffffff' : '#3a0a2a'); bg.addColorStop(1, `hsl(${b.hue},75%,16%)`);
-        ctx.fillStyle = bg; ctx.fill();
-        ctx.strokeStyle = `hsl(${b.hue},100%,72%)`; ctx.lineWidth = 3; ctx.stroke();
-        // glowing single eye
-        ctx.fillStyle = b.hitFlash > 0 ? '#fff' : `hsl(${b.hue},100%,75%)`;
-        ctx.beginPath(); ctx.arc(0, 0, b.r * 0.42, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#1a0010'; ctx.beginPath(); ctx.ellipse(0, Math.sin(b.t * 0.004) * 4, b.r * 0.15, b.r * 0.32, 0, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
         // HP bar
         if (b.phase !== 'dying') {
@@ -11521,7 +11587,7 @@
             ctx.fillStyle = `hsl(${frac * 120},90%,55%)`; ctx.fillRect(x, y, w * frac, h);
             ctx.strokeStyle = 'rgba(255,255,255,0.65)'; ctx.lineWidth = 1.5; ctx.strokeRect(x, y, w, h);
             ctx.fillStyle = '#fff'; ctx.font = 'bold 12px system-ui';
-            ctx.fillText(b.phase === 'enter' ? '⚠ BOSS ⚠' : 'ORB-LORD', b.x, y - 9);
+            ctx.fillText(b.phase === 'enter' ? '⚠ BOSS ⚠' : (b.kind === 'charger' ? 'VOID RAMMER' : 'ORB-LORD'), b.x, y - 9);
             ctx.restore();
         }
     }
