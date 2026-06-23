@@ -9731,7 +9731,7 @@
             hp: 3, maxHp: 3,                                // lives — run ends when these run out
             wave: 1, waveT: 22000, bossesDown: 0, bestCombo: 0,   // difficulty curve + run stats
             over: false, overT: 0, survived: 0,             // game-over results screen
-            combo: 0, comboT: 0, score: 0, best: +(localStorage.getItem('ultimateBest') || 0),
+            combo: 0, comboT: 0, score: 0, scoreShown: 0, scorePunch: 0, best: +(localStorage.getItem('ultimateBest') || 0),
             comboMilestone: 0, announce: null, cutin: null, hurt: 0,   // combo callouts + transform cut-in + damage vignette
             shake: 0, flash: 0, hitstop: 0, zoom: 1, slowmo: 0, bgHue: ultRand(0, 360), t: 0,
             spawnT: 0,
@@ -10324,7 +10324,7 @@
     };
     function ultMakeFoe(s, x, y, kind, isShard) {
         const c = ULT_FOE_KINDS[kind];
-        const hp = isShard ? 2 : 2 + Math.floor((s.wave - 1) / 2);   // tougher orbs as the run escalates
+        const hp = isShard ? 2 : Math.min(7, 2 + Math.floor((s.wave - 1) / 2));   // tougher orbs as the run escalates (capped so they never become pure sponges)
         s.foes.push({ x, y, vx: 0, vy: 0, r: isShard ? c.r * 0.7 : c.r, hp, life: 11000, born: 0,
             hue: ultRand(c.hueLo, c.hueHi), seed: ultRand(0, 6.28), kind, spd: c.spd, score: isShard ? 70 : c.score, drop: isShard ? 0.05 : c.drop, shard: !!isShard });
     }
@@ -10491,6 +10491,7 @@
         s.score += bonus;
         if (s.score > s.best) { s.best = s.score; try { localStorage.setItem('ultimateBest', s.best); } catch (_) {} }
         s.power = 1; s.sp = 1; s.od = Math.min(1, s.od + 0.45);   // reward: refill meters + a big overdrive chunk
+        if (s.hp < s.maxHp) { s.hp++; s.rings.push({ x: s.duck.x, y: s.duck.y, r: 20, max: 110, life: 1, col: '#ff4d6d' }); }   // recovery path for the tight 3-HP economy — rewards surviving to the kill
         ultDropPickup(s, b.x - 30, b.y, true); ultDropPickup(s, b.x + 30, b.y, true);   // guaranteed loot
         s.announce = { txt: 'BOSS DOWN!', t: 0, max: 1500 };
         s.shake = Math.max(s.shake, 26); s.flash = Math.max(s.flash, 0.85); s.hitstop = Math.max(s.hitstop, 130); ultZoom(s, 0.13);
@@ -10527,6 +10528,13 @@
         s.frenzyT = Math.max(0, s.frenzyT - dt); s.shieldT = Math.max(0, s.shieldT - dt); s.dblT = Math.max(0, s.dblT - dt);
         if (s.lb > 0) { s.lb -= dt; s.sp = 1; if (s.lb <= 0) { s.lb = 0; s.flash = Math.max(s.flash, 0.4); } }   // overdrive keeps ULTIMATE topped off
         if (s.comboT > 0) { s.comboT -= dt; if (s.comboT <= 0) { s.combo = 0; s.comboMilestone = 0; } }
+        // animated score: ease the shown value up to the real score and punch the readout on each gain
+        if (s.score > s.scoreShown) {
+            const sd = s.score - s.scoreShown;
+            s.scoreShown = Math.min(s.score, s.scoreShown + Math.max(1, Math.ceil(sd * Math.min(1, sec * 16))));
+            s.scorePunch = Math.min(1, s.scorePunch + Math.min(0.55, sd / 1500));   // bigger gains kick harder
+        } else if (s.score < s.scoreShown) { s.scoreShown = s.score; }
+        s.scorePunch = Math.max(0, s.scorePunch - sec * 4.5);
         if (s.cutin) { s.cutin.t += dt; if (s.cutin.t >= s.cutin.max) s.cutin = null; }
         if (s.announce) { s.announce.t += dt; if (s.announce.t >= s.announce.max) s.announce = null; }
         if (s.charging) s.ki = Math.min(1.2, s.ki + sec * 1.4);
@@ -10628,7 +10636,7 @@
 
         // ── fightback orbs: spawn, home in, collide (rate + cap scale with the wave) ──
         s.foeSpawnT -= dt;
-        const foeCap = (s.super ? 8 : 5) + Math.floor(s.wave / 2);
+        const foeCap = Math.min(s.super ? 12 : 9, (s.super ? 8 : 5) + Math.floor(s.wave / 2));   // bound concurrent orbs so late waves stay chaotic, not a wall
         const foeInt = Math.max(650, (s.super ? 1300 : 2300) - s.wave * 130);
         if (s.foeSpawnT <= 0 && s.foes.length < foeCap) { ultSpawnFoe(s); s.foeSpawnT = foeInt; }
         for (let i = s.foes.length - 1; i >= 0; i--) {
@@ -11787,10 +11795,16 @@
         const { W, H } = s;
         ctx.save();
         ctx.textBaseline = 'middle';
-        // score
-        ctx.textAlign = 'left'; ctx.fillStyle = '#fff';
+        // score — eases up to the real value and punch-scales (glowing gold) on each gain
+        const scPunch = s.scorePunch || 0, scScale = 1 + scPunch * 0.4;
+        ctx.save();
+        ctx.translate(20, 30); ctx.scale(scScale, scScale);
+        ctx.textAlign = 'left';
         ctx.font = 'bold 26px system-ui, sans-serif';
-        ctx.fillText('⚡ ' + s.score.toLocaleString(), 20, 30);
+        if (scPunch > 0.04) { ctx.shadowColor = '#ffd54a'; ctx.shadowBlur = 16 * scPunch; ctx.fillStyle = `hsl(46,100%,${68 + scPunch * 27}%)`; }
+        else ctx.fillStyle = '#fff';
+        ctx.fillText('⚡ ' + Math.round(s.scoreShown).toLocaleString(), 0, 0);
+        ctx.restore();
         ctx.font = '13px system-ui, sans-serif'; ctx.fillStyle = '#cbd5e1';
         ctx.fillText('BEST ' + s.best.toLocaleString(), 22, 54);
 
@@ -11873,6 +11887,12 @@
             ctx.fillStyle = tier; ctx.shadowColor = tier; ctx.shadowBlur = 14;
             ctx.fillText('SCORE ×' + mult, W / 2, 74);
             ctx.shadowBlur = 0;
+            // draining timer bar — warns the combo is about to drop (flashes red in the final stretch)
+            const cf = Math.max(0, Math.min(1, s.comboT / 2000)), cbW = 132, cbX = W / 2 - cbW / 2, cbY = 90;
+            ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.beginPath(); ctx.roundRect(cbX, cbY, cbW, 5, 2.5); ctx.fill();
+            const low = cf < 0.32;
+            ctx.fillStyle = low ? `rgba(255,70,90,${0.55 + 0.45 * Math.sin(s.t * 0.03)})` : tier;
+            ctx.beginPath(); ctx.roundRect(cbX, cbY, cbW * cf, 5, 2.5); ctx.fill();
         }
 
         // controls hint
