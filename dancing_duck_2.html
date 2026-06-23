@@ -448,6 +448,7 @@
                     <button id="casinoBtn" class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors border-b border-white/5">🎰 Casino</button>
                     <button id="sdbBtn" class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors border-b border-white/5">🦆 Super Duck Bros</button>
                     <button id="duckMatchBtn" class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors border-b border-white/5">🥚 Duck Match</button>
+                    <button id="rpsBtn" class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors border-b border-white/5">✊ Rock Paper Scissors</button>
                     <button id="ultimateDuckBtn" class="w-full text-left px-4 py-2.5 text-sm font-bold hover:bg-white/10 transition-colors" style="background:linear-gradient(90deg,#f59e0b,#ec4899,#8b5cf6);-webkit-background-clip:text;background-clip:text;color:transparent;">⚡ ULTIMATE DUCK</button>
                 </div>
             </div>
@@ -471,6 +472,9 @@
 
     <!-- Duck Match floating exit button -->
     <button id="duckMatchExitBtn" style="display:none;position:absolute;top:14px;right:16px;z-index:60;background:rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.25);color:white;font-size:13px;font-weight:600;padding:6px 14px;border-radius:10px;cursor:pointer;">🥚 Exit Game</button>
+
+    <!-- Rock Paper Scissors floating exit button -->
+    <button id="rpsExitBtn" style="display:none;position:absolute;top:14px;right:16px;z-index:60;background:rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.25);color:white;font-size:13px;font-weight:600;padding:6px 14px;border-radius:10px;cursor:pointer;">✊ Exit Game</button>
 
     <!-- Skate Mode floating exit button -->
     <button id="skateExitBtn" style="display:none;position:absolute;top:14px;right:16px;z-index:60;background:rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.25);color:white;font-size:13px;font-weight:600;padding:6px 14px;border-radius:10px;cursor:pointer;">🛹 Exit Game</button>
@@ -679,6 +683,8 @@
     let casinoState = null;
     let isSDBMode = false;
     let sdbState = null;
+    let isRPSMode = false;
+    let rpsState = null;
     let isDuckMatchMode = false;
     let duckMatchState = null;
 
@@ -2510,7 +2516,7 @@
     }
 
     function pointerDown(e) {
-        if (isSkateMode || isFightingMode || isUltimateMode) return;   // fighters are keyboard-only; dragging reorders the ducks array and breaks P1/P2
+        if (isSkateMode || isFightingMode || isUltimateMode || isRPSMode) return;   // fighters are keyboard-only; dragging reorders the ducks array and breaks P1/P2
         const p = getPointerPos(e);
         lastPointer = p;
 
@@ -3513,7 +3519,7 @@
 
     // Dance-mode keydown (only when not in skate mode, not focused on an input)
     window.addEventListener('keydown', (e) => {
-        if (isSkateMode || isFightingMode || isUltimateMode) return;
+        if (isSkateMode || isFightingMode || isUltimateMode || isRPSMode) return;
         const active = document.activeElement;
         // If a slider has focus, steal focus back to body so dance keys work
         if (active && active.tagName === 'INPUT' && active.type === 'range') {
@@ -11959,6 +11965,464 @@
     ultimateDuckBtn.onclick = () => { if (isUltimateMode) exitUltimateMode(); else enterUltimateMode(); };
     ultimateExitBtn.onclick = () => exitUltimateMode();
 
+    // ═══════════════════════════════════════════════════════════════════════
+    //  ✊ ROCK PAPER SCISSORS — duck duel vs. a scheming CPU
+    //  Throw with R / P / S (or click a button). Best of 5. The CPU reads your
+    //  patterns. Hands are drawn as iconic cartoon gloves so they read instantly.
+    //  Self-contained: layout derives from canvas.width / canvas.height.
+    // ═══════════════════════════════════════════════════════════════════════
+    const RPS_TARGET = 5;                                   // first to this many round wins takes the match
+    const RPS_BEATS  = { rock: 'scissors', paper: 'rock', scissors: 'paper' };   // key beats value
+    const RPS_COUNTER = { rock: 'paper', paper: 'scissors', scissors: 'rock' };   // value beats key
+    const RPS_ALL = ['rock', 'paper', 'scissors'];
+    const RPS_LABEL = { rock: 'ROCK', paper: 'PAPER', scissors: 'SCISSORS' };
+    const RPS_KEY = { r: 'rock', p: 'paper', s: 'scissors' };
+    const RPS_BEAT_MS = 360;                                // length of each "Ro-Sham-Bo" shake beat
+    const rpsRand = (a, b) => a + Math.random() * (b - a);
+    const rpsPick = arr => arr[(Math.random() * arr.length) | 0];
+    function rpsGet(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : +v; } catch (e) { return d; } }
+    function rpsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+
+    function initRPS() {
+        return {
+            phase: 'shake', phaseT: 0, shakeT: 0, beat: 0,     // shake → reveal → result → matchover
+            pick: null, cpu: null, tooSlow: false, result: null,
+            pScore: 0, cScore: 0, round: 1,
+            streak: 0, bestStreak: rpsGet('rpsBestStreak', 0), matchWins: rpsGet('rpsMatchWins', 0),
+            hist: [], lastPick: null, lastCpu: null, lastResult: null,   // AI memory
+            pRecoil: 0, cRecoil: 0, pPunch: 0, cPunch: 0,      // loser knockback + winner emphasis
+            flash: 0, shake: 0, t: 0,
+            particles: [], rings: [], announce: null, matchWinner: null, hintT: 4200,
+        };
+    }
+
+    // ── The opponent: blends frequency analysis with the win-stay / lose-shift human tell,
+    //    countered ~55% of the time so it feels sharp but stays beatable. ──
+    function rpsAIPick(s) {
+        if (Math.random() < 0.42 || s.hist.length < 1) return rpsPick(RPS_ALL);   // randomness floor
+        let predicted = null;
+        if (s.lastResult === 'win')  predicted = s.lastPick;                 // winners tend to repeat
+        else if (s.lastResult === 'lose' && s.lastCpu) predicted = RPS_COUNTER[s.lastCpu];   // losers swap to what beat them
+        else if (s.lastResult === 'tie' && s.lastPick) predicted = RPS_COUNTER[s.lastPick];  // after a tie, swap up
+        // fold in a recency-weighted frequency favourite
+        const w = { rock: 0, paper: 0, scissors: 0 }; const recent = s.hist.slice(-10);
+        recent.forEach((m, i) => { w[m] += i + 1; });
+        let fav = null, bestW = -1; for (const k of RPS_ALL) if (w[k] > bestW) { bestW = w[k]; fav = k; }
+        if (!predicted || Math.random() < 0.4) predicted = fav;
+        return RPS_COUNTER[predicted] || rpsPick(RPS_ALL);
+    }
+
+    function rpsBurst(s, x, y, col, n) {
+        for (let i = 0; i < n; i++) { const a = rpsRand(0, Math.PI * 2), sp = rpsRand(80, 380);
+            s.particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60, life: 0.8, max: 0.8,
+                col: col[i % col.length], r: rpsRand(3, 7), star: i % 3 === 0, grav: 1 }); }
+    }
+
+    function rpsShoot(s) {
+        if (!s.pick) { s.pick = rpsPick(RPS_ALL); s.tooSlow = true; } else s.tooSlow = false;
+        s.cpu = rpsAIPick(s);                                // AI reads history BEFORE we append this throw
+        if (s.pick === s.cpu) s.result = 'tie';
+        else if (RPS_BEATS[s.pick] === s.cpu) s.result = 'win';
+        else s.result = 'lose';
+        s.hist.push(s.pick);
+
+        const cx = s.W / 2;
+        s.flash = Math.max(s.flash, 0.35); s.shake = Math.max(s.shake, 14);
+        if (s.result === 'win') {
+            s.pScore++; s.streak = Math.max(1, s.streak + 1);
+            if (s.streak > s.bestStreak) { s.bestStreak = s.streak; rpsSet('rpsBestStreak', s.bestStreak); }
+            s.cRecoil = 1; s.pPunch = 1;
+            s.announce = { txt: s.streak >= 3 ? `WIN!  ${s.streak}× STREAK` : 'YOU WIN!', col: '#34d399', t: 0, max: 1100 };
+            rpsBurst(s, cx, s.H * 0.46, ['#34d399', '#a7f3d0', '#fff', '#ffd54a'], 30);
+            playSFX && playSFX('casinoJackpot');
+        } else if (s.result === 'lose') {
+            s.cScore++; s.streak = 0;
+            s.pRecoil = 1; s.cPunch = 1;
+            s.announce = { txt: 'YOU LOSE', col: '#f87171', t: 0, max: 1100 };
+            rpsBurst(s, cx, s.H * 0.46, ['#f87171', '#fca5a5', '#475569'], 16);
+            playSFX && playSFX('dmPower');
+        } else {
+            s.announce = { txt: 'DRAW', col: '#fbbf24', t: 0, max: 900 };
+            s.rings.push({ x: cx, y: s.H * 0.46, r: 20, max: 150, life: 1, col: '#fbbf24' });
+            playSFX && playSFX('pop');
+        }
+        s.lastPick = s.pick; s.lastCpu = s.cpu; s.lastResult = s.result;
+
+        if (s.pScore >= RPS_TARGET || s.cScore >= RPS_TARGET) {
+            s.matchWinner = s.pScore > s.cScore ? 'player' : 'cpu';
+            if (s.matchWinner === 'player') { s.matchWins++; rpsSet('rpsMatchWins', s.matchWins); }
+        }
+        s.phase = 'reveal'; s.phaseT = 480;
+    }
+
+    function rpsNextRound(s) {
+        s.pick = null; s.cpu = null; s.result = null; s.tooSlow = false;
+        s.round++; s.beat = 0; s.shakeT = 0; s.phase = 'shake'; s.phaseT = 0;
+    }
+
+    function rpsUpdate(s, dt) {
+        s.t += dt; const sec = dt / 1000;
+        if (s.hintT > 0) s.hintT -= dt;
+        // decay feedback
+        s.flash = Math.max(0, s.flash - sec * 1.8);
+        s.shake = Math.max(0, s.shake - dt * 0.04);
+        s.pRecoil = Math.max(0, s.pRecoil - sec * 2.2); s.cRecoil = Math.max(0, s.cRecoil - sec * 2.2);
+        s.pPunch = Math.max(0, s.pPunch - sec * 2.6);   s.cPunch = Math.max(0, s.cPunch - sec * 2.6);
+        if (s.announce) { s.announce.t += dt; if (s.announce.t >= s.announce.max) s.announce = null; }
+        // particles + rings
+        for (let i = s.particles.length - 1; i >= 0; i--) { const p = s.particles[i];
+            p.life -= sec; if (p.grav) p.vy += 900 * sec; p.x += p.vx * sec; p.y += p.vy * sec;
+            if (p.life <= 0) s.particles.splice(i, 1); }
+        for (let i = s.rings.length - 1; i >= 0; i--) { const r = s.rings[i];
+            r.r += (r.max - r.r) * Math.min(1, sec * 6); r.life -= sec * 1.6; if (r.life <= 0) s.rings.splice(i, 1); }
+
+        if (s.phase === 'shake') {
+            s.shakeT += dt;
+            const newBeat = Math.min(3, Math.floor(s.shakeT / RPS_BEAT_MS));
+            if (newBeat !== s.beat && newBeat <= 3) {
+                s.beat = newBeat;
+                if (newBeat >= 1 && newBeat <= 3) {            // fists collide on the beat — impact burst at centre
+                    s.shake = Math.max(s.shake, 9);
+                    const ix = s.W / 2, iy = s.H * 0.45 + 14;
+                    s.rings.push({ x: ix, y: iy, r: 8, max: 70, life: 1, col: '#fff7cf' });
+                    for (let i = 0; i < 8; i++) { const a = -Math.PI / 2 + rpsRand(-1.1, 1.1); const sp = rpsRand(120, 300);
+                        s.particles.push({ x: ix, y: iy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.4, max: 0.4, col: i % 2 ? '#fff' : '#ffd54a', r: rpsRand(2, 4), grav: 1 }); }
+                    playSFX && playSFX('pop', { pitch: 1 + newBeat * 0.12 });
+                }
+            }
+            if (s.shakeT >= RPS_BEAT_MS * 3 + 200) rpsShoot(s);   // "SHOOT!" — reveal
+        } else if (s.phase === 'reveal') {
+            s.phaseT -= dt; if (s.phaseT <= 0) { s.phase = 'result'; s.phaseT = s.matchWinner ? 99999 : 850; }
+        } else if (s.phase === 'result') {
+            s.phaseT -= dt;
+            if (s.matchWinner) s.phase = 'matchover';
+            else if (s.phaseT <= 0) rpsNextRound(s);
+        }
+    }
+
+    function rpsChoose(s, mv) {
+        if (s.phase !== 'shake' || !mv) return;
+        if (s.pick !== mv) playSFX && playSFX('pickup');
+        s.pick = mv; s.hintT = 0;
+    }
+
+    // ── Drawing ────────────────────────────────────────────────────────────
+    // Cartoon-glove hand, drawn fingers-up (the way people actually hold an RPS throw).
+    // Two-pass union outline keeps the silhouette seamless: first every piece is painted
+    // as one merged dark blob (fill + fat stroke), then white fills sit inset by the
+    // outline width — so overlapping fingers/palm read as a single clean glove.
+    function rpsGlove(pieces) {
+        ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+        ctx.fillStyle = '#23262d'; ctx.strokeStyle = '#23262d'; ctx.lineWidth = 11;
+        for (const p of pieces) { ctx.beginPath(); p(); ctx.fill(); ctx.stroke(); }
+        ctx.fillStyle = '#fdfdff';
+        for (const p of pieces) { ctx.beginPath(); p(); ctx.fill(); }
+    }
+    function rpsDrawHand(x, y, scale, dir, shape, cuffCol, reveal) {
+        if (!reveal) shape = 'rock';                   // during the shake everyone shows a fist
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(dir * scale, scale);
+
+        // wrist cuff (team colour) behind the glove
+        const cuff = () => ctx.roundRect(-50, 56, 100, 42, 16);
+        ctx.fillStyle = '#23262d'; ctx.strokeStyle = '#23262d'; ctx.lineWidth = 11; ctx.lineJoin = 'round';
+        ctx.beginPath(); cuff(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = cuffCol; ctx.beginPath(); cuff(); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.beginPath(); ctx.roundRect(-44, 62, 88, 9, 4.5); ctx.fill();
+
+        // piece builders (local space: palm centred, fingers point up = -y)
+        const palm     = () => ctx.roundRect(-46, -10, 92, 82, 30);
+        const sFinger  = (bx, len) => () => ctx.roundRect(bx - 12, -10 - len, 24, len + 36, 12);
+        const aFinger  = (bx, len, ang) => () => { ctx.save(); ctx.translate(bx, -4); ctx.rotate(ang); ctx.roundRect(-12, -len, 24, len + 32, 12); ctx.restore(); };
+        const knuckle  = (bx) => () => ctx.roundRect(bx - 13, -22, 26, 32, 13);
+        const thumbSide  = () => { ctx.save(); ctx.translate(-42, 42); ctx.rotate(-0.42); ctx.roundRect(-13, -48, 26, 62, 13); ctx.restore(); };
+        const thumbFront = () => { ctx.save(); ctx.translate(-2, 20); ctx.rotate(0.16); ctx.roundRect(-46, -14, 78, 28, 14); ctx.restore(); };
+
+        let pieces;
+        if (shape === 'paper') {                       // four fingers fanned so the tips splay apart
+            pieces = [aFinger(-31, 58, -0.30), aFinger(-11, 70, -0.10), aFinger(11, 66, 0.10), aFinger(31, 52, 0.30), thumbSide, palm];
+        } else if (shape === 'scissors') {             // index + middle in a wide V
+            pieces = [aFinger(-16, 82, -0.34), aFinger(16, 82, 0.34), palm, thumbFront];
+        } else {                                       // rock — a fist
+            pieces = [knuckle(-30), knuckle(-10), knuckle(11), knuckle(31), palm, thumbFront];
+        }
+        rpsGlove(pieces);
+
+        // detail pass: soft palm highlight + creases that sell each pose
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.beginPath(); ctx.ellipse(-12, 22, 24, 28, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = 'rgba(45,50,60,0.55)'; ctx.lineWidth = 2.6; ctx.lineCap = 'round';
+        if (shape === 'paper') {
+            for (const bx of [-20, 0, 21]) { ctx.beginPath(); ctx.moveTo(bx, -4); ctx.lineTo(bx, -30); ctx.stroke(); }   // finger separations
+            ctx.beginPath(); ctx.moveTo(-30, 6); ctx.lineTo(31, 6); ctx.stroke();                                       // knuckle line
+        } else if (shape === 'scissors') {
+            ctx.beginPath(); ctx.moveTo(2, -6); ctx.lineTo(2, -26); ctx.stroke();                                       // split between the two fingers
+            ctx.fillStyle = 'rgba(45,50,60,0.4)';
+            for (const bx of [22, 38]) { ctx.beginPath(); ctx.arc(bx, -2, 3.4, 0, Math.PI * 2); ctx.fill(); }           // curled-finger knuckles
+            ctx.beginPath(); ctx.moveTo(-44, 12); ctx.lineTo(28, 8); ctx.stroke();                                      // thumb edge
+        } else {
+            ctx.fillStyle = 'rgba(45,50,60,0.4)';
+            for (const bx of [-30, -10, 11, 31]) { ctx.beginPath(); ctx.arc(bx, -4, 3.4, 0, Math.PI * 2); ctx.fill(); } // knuckle dimples
+            ctx.beginPath(); ctx.moveTo(-44, 12); ctx.lineTo(28, 8); ctx.stroke();                                      // thumb wrapping the front
+        }
+        ctx.restore();
+    }
+
+    // A compact duck avatar facing the centre (dir: +1 faces right, -1 faces left).
+    function rpsDrawDuck(x, y, scale, dir, colA, colB, mood) {
+        ctx.save();
+        ctx.translate(x, y); ctx.scale(dir * scale, scale);
+        // body
+        const bg = ctx.createLinearGradient(0, -30, 0, 40); bg.addColorStop(0, colA); bg.addColorStop(1, colB);
+        ctx.fillStyle = bg; ctx.strokeStyle = 'rgba(90,55,0,0.45)'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.ellipse(0, 12, 40, 34, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        // tail
+        ctx.beginPath(); ctx.moveTo(-34, 0); ctx.lineTo(-58, -10); ctx.lineTo(-34, 16); ctx.closePath(); ctx.fill();
+        // head
+        ctx.beginPath(); ctx.arc(24, -28, 24, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        // beak
+        ctx.fillStyle = '#ff9e1e'; ctx.strokeStyle = '#d97706'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(40, -34); ctx.lineTo(66, -28); ctx.lineTo(40, -20); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(40, -24); ctx.lineTo(60, -25); ctx.stroke();
+        // eye by mood
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(28, -32, 8, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#15202b';
+        if (mood === 'happy') { ctx.lineWidth = 3; ctx.strokeStyle = '#15202b'; ctx.beginPath(); ctx.arc(28, -31, 5, Math.PI * 1.05, Math.PI * 1.95); ctx.stroke(); }
+        else { ctx.beginPath(); ctx.arc(mood === 'mad' ? 31 : 29, -31, 4.2, 0, Math.PI * 2); ctx.fill(); }
+        if (mood === 'mad') { ctx.strokeStyle = '#15202b'; ctx.lineWidth = 3.5; ctx.beginPath(); ctx.moveTo(18, -42); ctx.lineTo(33, -36); ctx.stroke(); }
+        // little crest
+        ctx.fillStyle = colA; ctx.strokeStyle = 'rgba(90,55,0,0.45)'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(10, -50); ctx.lineTo(2, -64); ctx.lineTo(20, -52); ctx.closePath(); ctx.fill();
+        ctx.restore();
+    }
+
+    function rpsDrawBackground(s) {
+        const { W, H } = s;
+        const g = ctx.createLinearGradient(0, 0, 0, H);
+        g.addColorStop(0, '#1a1140'); g.addColorStop(0.55, '#241a4d'); g.addColorStop(1, '#120b2e');
+        ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+        // soft centre-stage spotlight that flares on a reveal
+        const fl = 0.5 + s.flash * 0.8;
+        const rg = ctx.createRadialGradient(W / 2, H * 0.46, 40, W / 2, H * 0.46, Math.max(W, H) * 0.62);
+        rg.addColorStop(0, `rgba(255,235,170,${0.14 * fl})`); rg.addColorStop(1, 'rgba(255,235,170,0)');
+        ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+        // versus floor line
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(0, H * 0.7); ctx.lineTo(W, H * 0.7); ctx.stroke();
+    }
+
+    function rpsDrawButtons(s) {
+        const { W, H } = s; const defs = [['rock', '✊', 'R'], ['paper', '✋', 'P'], ['scissors', '✌️', 'S']];
+        const bw = Math.min(150, W * 0.24), gap = Math.min(28, W * 0.03), bh = 64;
+        const totW = bw * 3 + gap * 2, x0 = W / 2 - totW / 2, y = H - bh - 26;
+        s._btns = [];
+        const live = s.phase === 'shake';
+        for (let i = 0; i < 3; i++) {
+            const [mv, emoji, key] = defs[i], bx = x0 + i * (bw + gap);
+            const sel = s.pick === mv && (s.phase === 'shake' || s.phase === 'reveal' || s.phase === 'result');
+            s._btns.push({ mv, x: bx, y, w: bw, h: bh });
+            ctx.save();
+            ctx.fillStyle = sel ? 'rgba(52,211,153,0.28)' : (live ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.04)');
+            ctx.strokeStyle = sel ? '#34d399' : 'rgba(255,255,255,0.28)'; ctx.lineWidth = sel ? 3 : 1.5;
+            ctx.beginPath(); ctx.roundRect(bx, y, bw, bh, 14); ctx.fill(); ctx.stroke();
+            ctx.globalAlpha = live || sel ? 1 : 0.55;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.font = '26px system-ui'; ctx.fillStyle = '#fff';
+            ctx.fillText(emoji, bx + bw / 2 - 18, y + bh / 2);
+            ctx.font = 'bold 15px system-ui'; ctx.fillStyle = sel ? '#34d399' : '#e2e8f0';
+            ctx.fillText(RPS_LABEL[mv], bx + bw / 2 + 16, y + bh / 2 - 8);
+            ctx.font = '11px system-ui'; ctx.fillStyle = 'rgba(255,255,255,0.6)';
+            ctx.fillText('[' + key + ']', bx + bw / 2 + 16, y + bh / 2 + 12);
+            ctx.restore();
+        }
+    }
+
+    function rpsDrawHUD(s) {
+        const { W } = s;
+        ctx.textBaseline = 'middle';
+        // scoreboard
+        ctx.textAlign = 'center'; ctx.font = 'bold 15px system-ui'; ctx.fillStyle = '#cbd5e1';
+        ctx.fillText('FIRST TO ' + RPS_TARGET, W / 2, 26);
+        ctx.font = '900 40px system-ui';
+        ctx.textAlign = 'right'; ctx.fillStyle = '#ffd54a'; ctx.fillText(s.pScore, W / 2 - 34, 56);
+        ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = '900 26px system-ui'; ctx.textAlign = 'center'; ctx.fillText('–', W / 2, 56);
+        ctx.textAlign = 'left'; ctx.fillStyle = '#7dd3fc'; ctx.font = '900 40px system-ui'; ctx.fillText(s.cScore, W / 2 + 34, 56);
+        ctx.font = 'bold 13px system-ui'; ctx.textAlign = 'right'; ctx.fillStyle = '#ffd54a'; ctx.fillText('YOU', W / 2 - 34, 84);
+        ctx.textAlign = 'left'; ctx.fillStyle = '#7dd3fc'; ctx.fillText('CPU', W / 2 + 34, 84);
+        // match point — one win from deciding the match, so flag the pressure while it's still live
+        if (!s.matchWinner) {
+            const mp = s.pScore === RPS_TARGET - 1 || s.cScore === RPS_TARGET - 1;
+            if (mp) {
+                const both = s.pScore === RPS_TARGET - 1 && s.cScore === RPS_TARGET - 1;
+                ctx.textAlign = 'center'; ctx.font = '900 15px system-ui';
+                ctx.fillStyle = `rgba(255,90,90,${0.6 + 0.4 * Math.sin(s.t * 0.012)})`;
+                ctx.shadowColor = '#ff4d4d'; ctx.shadowBlur = 12;
+                ctx.fillText(both ? '⚡ MATCH POINT — SUDDEN DEATH' : '⚡ MATCH POINT', W / 2, 108);
+                ctx.shadowBlur = 0;
+            }
+        }
+        // streak + record
+        ctx.textAlign = 'left'; ctx.font = 'bold 14px system-ui';
+        if (s.streak >= 2) { ctx.fillStyle = '#fb923c'; ctx.fillText('🔥 ' + s.streak + ' WIN STREAK', 20, 28); }
+        ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.font = '12px system-ui';
+        ctx.fillText('Best streak ' + s.bestStreak + '   •   Matches won ' + s.matchWins, 20, s.streak >= 2 ? 50 : 28);
+    }
+
+    function rpsDrawAnnounce(s) {
+        if (!s.announce) return;
+        const { W, H } = s, a = s.announce, p = a.t / a.max;
+        const pop = p < 0.18 ? p / 0.18 : 1, fade = p > 0.78 ? 1 - (p - 0.78) / 0.22 : 1;
+        ctx.save();
+        ctx.globalAlpha = fade; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.translate(W / 2, H * 0.30); ctx.scale(1 + (1 - pop) * 0.7, 1 + (1 - pop) * 0.7);
+        ctx.font = '900 52px system-ui, sans-serif';
+        ctx.lineWidth = 8; ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.strokeText(a.txt, 0, 0);
+        ctx.shadowColor = a.col; ctx.shadowBlur = 24; ctx.fillStyle = a.col; ctx.fillText(a.txt, 0, 0);
+        ctx.restore();
+    }
+
+    function rpsDrawCountdown(s) {
+        if (s.phase !== 'shake') return;
+        const { W, H } = s; const words = ['ROCK', 'PAPER', 'SCISSORS'];
+        const txt = s.beat >= 1 && s.beat <= 3 ? words[s.beat - 1] : '';
+        if (!txt) return;
+        const local = (s.shakeT - s.beat * RPS_BEAT_MS) / RPS_BEAT_MS;   // 0..1 within the current beat
+        const pop = local < 0.4 ? 1 + (0.4 - local) * 1.2 : 1;
+        ctx.save(); ctx.globalAlpha = Math.max(0.3, 1 - local * 0.7);
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.translate(W / 2, H * 0.30); ctx.scale(pop, pop);
+        ctx.font = '900 44px system-ui'; ctx.fillStyle = '#fff'; ctx.shadowColor = '#a855f7'; ctx.shadowBlur = 18;
+        ctx.fillText(txt + '!', 0, 0);
+        ctx.restore();
+    }
+
+    function rpsDrawMatchOver(s) {
+        const { W, H } = s; const won = s.matchWinner === 'player';
+        ctx.save();
+        ctx.fillStyle = 'rgba(8,6,24,0.74)'; ctx.fillRect(0, 0, W, H);
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '900 64px system-ui'; ctx.fillStyle = won ? '#34d399' : '#f87171';
+        ctx.shadowColor = won ? '#34d399' : '#f87171'; ctx.shadowBlur = 30;
+        ctx.fillText(won ? 'YOU WIN!' : 'YOU LOSE', W / 2, H * 0.36);
+        ctx.shadowBlur = 0;
+        ctx.font = 'bold 28px system-ui'; ctx.fillStyle = '#fff';
+        ctx.fillText(s.pScore + ' – ' + s.cScore, W / 2, H * 0.36 + 56);
+        ctx.font = '15px system-ui'; ctx.fillStyle = '#cbd5e1';
+        ctx.fillText('Best streak this match: ' + s.bestStreak, W / 2, H * 0.36 + 92);
+        ctx.fillStyle = `rgba(255,255,255,${0.5 + 0.5 * Math.sin(s.t * 0.006)})`; ctx.font = 'bold 16px system-ui';
+        ctx.fillText('press any key / click to play again', W / 2, H * 0.36 + 134);
+        ctx.restore();
+    }
+
+    function drawRPS(s) {
+        const { W, H } = s;
+        rpsDrawBackground(s);
+        const shX = s.shake ? rpsRand(-s.shake, s.shake) : 0, shY = s.shake ? rpsRand(-s.shake, s.shake) : 0;
+        ctx.save(); ctx.translate(shX, shY);
+
+        // duck avatars
+        const duckScale = Math.min(W, H) / 720 * 1.1, dy = H * 0.66;
+        const pMood = s.phase === 'reveal' || s.phase === 'result' ? (s.result === 'win' ? 'happy' : s.result === 'lose' ? 'mad' : 'idle') : 'idle';
+        const cMood = s.phase === 'reveal' || s.phase === 'result' ? (s.result === 'lose' ? 'happy' : s.result === 'win' ? 'mad' : 'idle') : 'idle';
+        rpsDrawDuck(W * 0.16, dy, duckScale, 1, '#ffe27a', '#f5b400', pMood);
+        rpsDrawDuck(W * 0.84, dy, duckScale, -1, '#bfe3ff', '#5aa0e0', cMood);
+
+        // hands face off centre-stage and POUND together on each shake beat (fists collide at
+        // the centre on the beat, fly apart between beats), then settle apart for the reveal.
+        const handScale = Math.min(W * 0.0014, H * 0.0021);
+        const cy = H * 0.45;
+        const reveal = s.phase === 'reveal' || s.phase === 'result';
+        let gap, bob;
+        if (s.phase === 'shake') {
+            const t01 = (s.shakeT % RPS_BEAT_MS) / RPS_BEAT_MS;
+            const apart = Math.abs(Math.sin(t01 * Math.PI));   // 0 at the beat (collision), 1 between beats
+            const gapMin = handScale * 40, gapMax = W * 0.17;
+            gap = gapMin + (gapMax - gapMin) * apart;
+            bob = (1 - apart) * 14;                            // pound down into the impact
+        } else {
+            gap = W * 0.135; bob = 0;                          // settle apart so both throws read clearly
+        }
+        const pScaleK = handScale * (1 + s.pPunch * 0.18);
+        const cScaleK = handScale * (1 + s.cPunch * 0.18);
+        rpsDrawHand(W / 2 - gap - s.pRecoil * 70, cy + bob + s.pRecoil * 22, pScaleK, 1, s.pick || 'rock', '#f59e0b', reveal);
+        rpsDrawHand(W / 2 + gap + s.cRecoil * 70, cy + bob + s.cRecoil * 22, cScaleK, -1, s.cpu || 'rock', '#3b82f6', reveal);
+
+        // rings + particles
+        for (const r of s.rings) { ctx.save(); ctx.globalAlpha = Math.max(0, r.life); ctx.strokeStyle = r.col; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
+        for (const p of s.particles) { ctx.save(); ctx.globalAlpha = Math.max(0, p.life / p.max); ctx.fillStyle = p.col;
+            if (p.star) { ctx.translate(p.x, p.y); ctx.rotate(p.life * 6); ctx.fillRect(-p.r * 1.5, -p.r * 0.3, p.r * 3, p.r * 0.6); ctx.fillRect(-p.r * 0.3, -p.r * 1.5, p.r * 0.6, p.r * 3); }
+            else { ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill(); } ctx.restore(); }
+
+        if (s.tooSlow && reveal) { ctx.save(); ctx.globalAlpha = 0.9; ctx.textAlign = 'center'; ctx.fillStyle = '#f87171';
+            ctx.font = 'bold 18px system-ui'; ctx.fillText('TOO SLOW — random throw!', W / 2 - gap, cy + 96); ctx.restore(); }   // tuck under the player's hand so it never collides with the centre banner
+
+        ctx.restore(); // end shake
+
+        rpsDrawCountdown(s);
+        rpsDrawAnnounce(s);
+        rpsDrawHUD(s);
+        rpsDrawButtons(s);
+        if (s.hintT > 0 && s.round === 1) { ctx.save(); ctx.globalAlpha = Math.min(1, s.hintT / 800);
+            ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.font = '14px system-ui';
+            ctx.fillText('Throw before "SHOOT!" — press R / P / S or click below', W / 2, H * 0.84); ctx.restore(); }
+        if (s.flash > 0) { ctx.save(); ctx.globalAlpha = Math.min(0.6, s.flash); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); ctx.restore(); }
+        if (s.phase === 'matchover') rpsDrawMatchOver(s);
+    }
+
+    function runRPS(dt) {
+        const s = rpsState; if (!s) return;
+        s.W = canvas.width; s.H = canvas.height;
+        rpsUpdate(s, dt);
+        drawRPS(s);
+    }
+
+    // ── Input + lifecycle ────────────────────────────────────────────────────
+    function rpsKeyDown(e) {
+        const s = rpsState; if (!s) return;
+        const k = (e.key || '').toLowerCase();
+        if (s.phase === 'matchover') { rpsState = initRPS(); e.preventDefault(); return; }
+        if (RPS_KEY[k]) { rpsChoose(s, RPS_KEY[k]); e.preventDefault(); }
+    }
+    function rpsMouseDown(e) {
+        const s = rpsState; if (!s) return;
+        const rect = canvas.getBoundingClientRect();
+        const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+        const my = (e.clientY - rect.top) * (canvas.height / rect.height);
+        if (s.phase === 'matchover') { rpsState = initRPS(); return; }
+        for (const b of (s._btns || [])) if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) { rpsChoose(s, b.mv); return; }
+    }
+    function enterRPSMode() {
+        isRPSMode = true;
+        document.getElementById('topBar').style.display = 'none';
+        document.querySelector('.controls').style.display = 'none';
+        document.getElementById('leftPanel').style.display = 'none';
+        document.getElementById('rpsExitBtn').style.display = 'block';
+        document.getElementById('gamesDropdown').style.display = 'none';
+        if (typeof collapsed !== 'undefined' && !collapsed && window.toggleMusicPlayer) window.toggleMusicPlayer();
+        rpsState = initRPS();
+        window.addEventListener('keydown', rpsKeyDown);
+        canvas.addEventListener('mousedown', rpsMouseDown);
+        canvas.style.cursor = 'pointer';
+    }
+    function exitRPSMode() {
+        isRPSMode = false;
+        document.getElementById('topBar').style.display = '';
+        document.querySelector('.controls').style.display = 'flex';
+        document.getElementById('leftPanel').style.display = 'flex';
+        document.getElementById('rpsExitBtn').style.display = 'none';
+        window.removeEventListener('keydown', rpsKeyDown);
+        canvas.removeEventListener('mousedown', rpsMouseDown);
+        canvas.style.cursor = '';
+        rpsState = null;
+        updateBodyBackground();
+    }
+    const rpsBtn = document.getElementById('rpsBtn');
+    const rpsExitBtn = document.getElementById('rpsExitBtn');
+    rpsBtn.onclick = () => { if (isRPSMode) exitRPSMode(); else enterRPSMode(); };
+    rpsExitBtn.onclick = () => exitRPSMode();
+
     function resetSkateGame() {
         skateDuck.y = 0;
         skateDuck.vy = 0;
@@ -14576,6 +15040,12 @@
 
         if (isDuckMatchMode) {
             runDuckMatch(dt);
+            requestAnimationFrame(animate);
+            return;
+        }
+
+        if (isRPSMode) {
+            runRPS(dt);
             requestAnimationFrame(animate);
             return;
         }
