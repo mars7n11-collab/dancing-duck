@@ -6,6 +6,8 @@
     <title>Dancing Duck 🦆</title>
     <meta name="description" content="An interactive dancing duck simulation with music, physics, weapons, and party items.">
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Matter.js 2D physics engine — powers the Duck Fling (Crush-the-Castle) game -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
     <style>
         body {
             margin: 0;
@@ -110,14 +112,14 @@
 
         .controls {
             position: absolute;
-            bottom: 30px;
+            bottom: 24px;
             left: 50%;
             transform: translateX(-50%);
             background: rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
             padding: 20px 30px;
-            border-radius: 24px;
+            border-radius: 20px;
             border: 1px solid rgba(255, 255, 255, 0.2);
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
             text-align: center;
@@ -184,7 +186,7 @@
         /* Music Player Panel */
         #musicWrapper {
             position: fixed;
-            bottom: 30px;
+            bottom: 24px;
             right: 24px;
             width: 300px;
             display: flex;
@@ -346,6 +348,242 @@
 
         #vizToggleBtn { font-size: 10px; color: #64748b; padding: 2px 8px; }
 
+        /* ── Stage dimmer: a vertical light switch on the left edge.
+              Top = full brightness, bottom = darkened scene. The dark filter itself
+              is #dimOverlay, painted between the canvas (z1) and the UI (z50). ── */
+        #dimOverlay {
+            position: fixed; inset: 0; z-index: 5; pointer-events: none;
+            background: #05060f; opacity: 0; transition: opacity 0.18s ease;
+        }
+        /* Drawer handle — slim tab on the far-left edge; the only thing left when collapsed */
+        #slidersToggle {
+            position: fixed; left: 0; top: 50%; transform: translateY(-50%); z-index: 56;
+            display: flex; align-items: center; justify-content: center;
+            width: 22px; height: 56px; border-radius: 0 12px 12px 0;
+            background: rgba(20,18,40,0.5); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+            border: 1px solid rgba(255,255,255,0.14); border-left: none;
+            color: #e2e8f0; font-size: 15px; line-height: 1; cursor: pointer; user-select: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.28); transition: background 0.15s;
+        }
+        #slidersToggle:hover { background: rgba(44,40,78,0.7); }
+
+        /* Periodic discoverability hint anchored beside the drawer handle */
+        #sliderHint {
+            position: fixed; left: 30px; top: 50%; transform: translateY(-50%) translateX(-8px);
+            z-index: 57; max-width: 210px; padding: 9px 13px; border-radius: 12px;
+            background: rgba(20,18,40,0.92); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.16); color: #e2e8f0;
+            font-size: 12.5px; line-height: 1.35; font-weight: 500;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.4); pointer-events: none;
+            opacity: 0; transition: opacity 0.4s ease, transform 0.4s ease;
+        }
+        #sliderHint.show { opacity: 1; transform: translateY(-50%) translateX(0); }
+        #sliderHint::before {
+            content: ''; position: absolute; left: -6px; top: 50%; transform: translateY(-50%);
+            border: 6px solid transparent; border-right-color: rgba(20,18,40,0.92); border-left: none;
+        }
+
+        #dimmerWrap {
+            position: fixed; left: 30px; top: 50%; transform: translateY(-50%); z-index: 55;
+            display: flex; flex-direction: column; align-items: center; gap: 9px;
+            background: rgba(20,18,40,0.12); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
+            border: 1px solid rgba(255,255,255,0.07); border-radius: 18px; padding: 12px 7px;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.14); user-select: none;
+        }
+        #dimmerWrap .dimIcon { font-size: 15px; line-height: 1; opacity: 0.9; }
+        #dimmerTrack { height: 168px; width: 30px; display: flex; align-items: center; justify-content: center; }
+        #dimmerSlider {
+            -webkit-appearance: none; appearance: none; width: 168px; height: 8px; border-radius: 6px;
+            transform: rotate(-90deg); transform-origin: center; cursor: pointer; outline: none;
+            background: linear-gradient(90deg, #15132b 0%, #3b3766 35%, #fcd34d 100%);
+        }
+        #dimmerSlider::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none; width: 22px; height: 22px; border-radius: 50%;
+            background: radial-gradient(circle at 35% 30%, #fffbe6, #fbbf24); border: 2px solid #fff;
+            box-shadow: 0 0 8px rgba(253,224,107,0.85); cursor: pointer;
+            margin-top: -7px;   /* centre the 22px thumb on the 8px track ((8-22)/2) — WebKit doesn't auto-centre */
+        }
+        #dimmerSlider::-moz-range-thumb {
+            width: 22px; height: 22px; border-radius: 50%;
+            background: radial-gradient(circle at 35% 30%, #fffbe6, #fbbf24); border: 2px solid #fff; cursor: pointer;
+        }
+
+        /* ── Weather: three stacked vertical sliders (rain / sun / snow), each 0→max. ── */
+        #weatherWrap {
+            position: fixed; left: 86px; top: 50%; transform: translateY(-50%); z-index: 55;
+            display: flex; flex-direction: column; align-items: center;
+            background: rgba(20,18,40,0.12); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
+            border: 1px solid rgba(255,255,255,0.07); border-radius: 18px; padding: 12px 10px;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.14); user-select: none;
+        }
+        #weatherWrap .wxRow { display: flex; gap: 10px; }
+        #weatherWrap .wxCol { display: flex; flex-direction: column; align-items: center; gap: 7px; }
+        #weatherWrap .wxTrack { height: 150px; width: 24px; position: relative; }
+        #weatherWrap .wxIcon { font-size: 15px; line-height: 1; opacity: 0.92; }
+        /* #weatherWrap prefix needed to outrank the generic `input[type=range]` rule above */
+        #weatherWrap .wxSlider {
+            -webkit-appearance: none; appearance: none; position: absolute; top: 50%; left: 50%; margin: 0;
+            width: 150px; height: 7px; border-radius: 6px; cursor: pointer; outline: none;
+            transform: translate(-50%, -50%) rotate(-90deg); transform-origin: center;
+        }
+        #weatherWrap .wxSlider[data-wx="rain"] { background: linear-gradient(90deg, #16202e 0%, #1e3a5f 40%, #38bdf8 100%); }
+        #weatherWrap .wxSlider[data-wx="sun"]  { background: linear-gradient(90deg, #2a1e10 0%, #fbbf24 55%, #ef4444 100%); }
+        #weatherWrap .wxSlider[data-wx="snow"] { background: linear-gradient(90deg, #26303a 0%, #bcd9ef 55%, #ffffff 100%); }
+        #weatherWrap .wxSlider::-webkit-slider-runnable-track { background: transparent; height: 7px; border: none; }
+        #weatherWrap .wxSlider::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%;
+            background: radial-gradient(circle at 35% 30%, #ffffff, #cbd5e1); border: 2px solid #fff;
+            box-shadow: 0 0 6px rgba(255,255,255,0.7); cursor: pointer; transition: none;
+            margin-top: -6.5px;   /* centre the 20px thumb on the 7px track ((7-20)/2) */
+        }
+        #weatherWrap .wxSlider::-moz-range-thumb {
+            width: 20px; height: 20px; border-radius: 50%;
+            background: radial-gradient(circle at 35% 30%, #ffffff, #cbd5e1); border: 2px solid #fff; cursor: pointer;
+        }
+
+        /* ── Home dashboard dock: live clock + real weather + reminders.
+              A single glass card pinned top-left, under the top bar. Hidden in games
+              (kept in sync with #topBar's display). Collapsible, draggable, and themeable
+              via the CSS custom properties below (accent / card / font are user-chosen). ── */
+        #widgetDock {
+            /* theme variables — overwritten by the customizer (JS sets inline styles) */
+            --wd-accent:  #8b5cf6;   /* primary accent (gradients, focus, links)         */
+            --wd-accent2: #6366f1;   /* secondary accent (gradient partner)              */
+            --wd-bg:      rgba(20,18,40,0.42);     /* card background                     */
+            --wd-text:    #e2e8f0;   /* main text colour                                 */
+            --wd-field:   rgba(255,255,255,0.07);  /* input / button surfaces            */
+            --wd-line:    rgba(255,255,255,0.12);  /* borders + dividers                  */
+            --wd-font:    inherit;   /* font family                                      */
+            --wd-scheme:  dark;      /* color-scheme for native time picker              */
+            position: absolute; top: 86px; left: 24px; z-index: 49;
+            width: 212px; color: var(--wd-text); font-family: var(--wd-font);
+            user-select: none; pointer-events: auto;
+        }
+        #widgetDock .wdCard {
+            background: var(--wd-bg); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--wd-line); border-radius: 20px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.32); overflow: hidden;
+        }
+        .wdSection { padding: 12px 15px; }
+        .wdDivider { height: 1px; background: var(--wd-line); margin: 0 13px; }
+
+        /* clock (also the drag handle) */
+        #wdClock { position: relative; cursor: grab; }
+        #widgetDock.dragging #wdClock { cursor: grabbing; }
+        #wdTime { font-size: 30px; font-weight: 700; letter-spacing: 0.5px; line-height: 1.05; }
+        #wdTime .ampm { font-size: 13px; font-weight: 600; opacity: 0.65; margin-left: 4px; }
+        #wdDate { font-size: 12px; opacity: 0.68; margin-top: 3px; }
+        .wdBtns { position: absolute; top: -2px; right: 0; display: flex; gap: 5px; }
+        .wdBtns button {
+            width: 22px; height: 22px; padding: 0; display: flex; align-items: center; justify-content: center;
+            background: var(--wd-field); border: 1px solid var(--wd-line);
+            border-radius: 7px; color: var(--wd-text); font-size: 11px; cursor: pointer; line-height: 1;
+            transition: background 0.15s, transform 0.2s;
+        }
+        .wdBtns button:hover { background: var(--wd-accent); border-color: var(--wd-accent); color:#fff; }
+        #widgetDock.collapsed #wdCollapse { transform: rotate(180deg); }
+        #widgetDock.collapsed .wdCollapsible { display: none; }
+
+        /* weather */
+        #wdWeather { display: flex; align-items: center; gap: 11px; cursor: pointer; min-height: 34px; }
+        #wdWeather:hover #wdWxTemp { color: var(--wd-accent); }
+        #wdWxIcon { font-size: 27px; line-height: 1; }
+        #wdWxTemp { font-size: 18px; font-weight: 700; transition: color 0.15s; }
+        #wdWxDesc { font-size: 11px; opacity: 0.75; }
+        #wdWxCity { font-size: 11px; opacity: 0.55; margin-top: 1px; }
+        #wdWxMsg { font-size: 11.5px; opacity: 0.7; line-height: 1.35; }
+        #wdWxMsg .wdLink { color: var(--wd-accent); cursor: pointer; text-decoration: underline; filter: brightness(1.25); }
+
+        /* reminders */
+        .wdHead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
+        .wdTitle { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; opacity: 0.55; }
+        #wdRemForm { display: flex; gap: 6px; margin-bottom: 9px; align-items: center; }
+        #wdRemText {
+            flex: 1; min-width: 0; background: var(--wd-field); border: 1px solid var(--wd-line);
+            border-radius: 9px; padding: 6px 9px; color: var(--wd-text); font-size: 12px; outline: none;
+            font-family: inherit;
+        }
+        #wdRemText::placeholder { color: var(--wd-text); opacity: 0.4; }
+        #wdRemText:focus { border-color: var(--wd-accent); }
+        #wdRemTime {
+            width: 26px; height: 30px; flex: none; background: var(--wd-field);
+            border: 1px solid var(--wd-line); border-radius: 9px; color: var(--wd-text);
+            font-size: 13px; cursor: pointer; padding: 0; opacity: 0.85;
+        }
+        #wdRemTime.set { background: var(--wd-accent); border-color: var(--wd-accent); color:#fff; opacity: 1; }
+        #wdRemTime:hover { opacity: 1; }
+        #wdRemTimeInput { display: none; width: 100%; margin-bottom: 9px; }
+        #wdRemTimeInput.show { display: block; }
+        #wdRemTimeInput input {
+            width: 100%; box-sizing: border-box; background: var(--wd-field);
+            border: 1px solid var(--wd-line); border-radius: 9px; padding: 5px 8px;
+            color: var(--wd-text); font-size: 12px; outline: none; color-scheme: var(--wd-scheme); font-family: inherit;
+        }
+        #wdRemAdd {
+            width: 30px; height: 30px; flex: none; background: linear-gradient(135deg, var(--wd-accent2), var(--wd-accent));
+            border: none; border-radius: 9px; color: #fff; font-size: 17px; font-weight: 700;
+            cursor: pointer; line-height: 1; padding: 0;
+        }
+        #wdRemAdd:hover { filter: brightness(1.12); }
+        #wdRemList { display: flex; flex-direction: column; gap: 5px; max-height: 168px; overflow-y: auto; }
+        #wdRemList::-webkit-scrollbar { width: 5px; }
+        #wdRemList::-webkit-scrollbar-thumb { background: var(--wd-line); border-radius: 4px; }
+        #wdRemEmpty { font-size: 11.5px; opacity: 0.45; font-style: italic; padding: 2px 0; }
+        .wdRem { display: flex; align-items: flex-start; gap: 7px; font-size: 12px; line-height: 1.3; }
+        .wdRem .wdCheck {
+            flex: none; width: 15px; height: 15px; margin-top: 1px; border-radius: 5px;
+            border: 1.5px solid var(--wd-text); cursor: pointer; display: flex;
+            align-items: center; justify-content: center; font-size: 10px; color: #fff;
+        }
+        .wdRem .wdCheck { border-color: color-mix(in srgb, var(--wd-text) 45%, transparent); }
+        .wdRem.done .wdCheck { background: var(--wd-accent); border-color: var(--wd-accent); }
+        .wdRem .wdBody { flex: 1; min-width: 0; word-break: break-word; }
+        .wdRem.done .wdBody { opacity: 0.45; text-decoration: line-through; }
+        .wdRem .wdWhen { font-size: 10px; opacity: 0.6; margin-top: 1px; }
+        .wdRem.due:not(.done) .wdWhen { color: #f87171; opacity: 1; font-weight: 700; }
+        .wdRem.due:not(.done) { animation: wdPulse 1.6s ease-in-out infinite; }
+        @keyframes wdPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
+        .wdRem .wdDel {
+            flex: none; opacity: 0; color: #f87171; cursor: pointer; font-size: 13px;
+            line-height: 1; padding: 0 2px; transition: opacity 0.12s;
+        }
+        .wdRem:hover .wdDel { opacity: 0.8; }
+        .wdRem .wdDel:hover { opacity: 1; }
+
+        /* ── widget customizer popover (opened by the 🎨 button) ── */
+        #wdCustomizer {
+            display: none; position: absolute; top: 0; left: calc(100% + 10px); width: 198px;
+            background: var(--wd-bg); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+            border: 1px solid var(--wd-line); border-radius: 16px; padding: 14px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.4); z-index: 2;
+        }
+        #widgetDock.customizing #wdCustomizer { display: block; }
+        #wdCustomizer .wcTitle { font-size: 12px; font-weight: 700; margin-bottom: 12px; display:flex; justify-content:space-between; align-items:center; }
+        #wdCustomizer .wcLabel { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; opacity: 0.55; margin: 11px 0 6px; }
+        #wdCustomizer .wcLabel:first-of-type { margin-top: 0; }
+        .wcSwatches { display: flex; flex-wrap: wrap; gap: 7px; }
+        .wcSwatch {
+            width: 24px; height: 24px; border-radius: 50%; cursor: pointer;
+            border: 2px solid transparent; box-shadow: 0 0 0 1px rgba(255,255,255,0.15) inset;
+            transition: transform 0.12s;
+        }
+        .wcSwatch:hover { transform: scale(1.12); }
+        .wcSwatch.sel { border-color: #fff; box-shadow: 0 0 0 2px var(--wd-accent); }
+        .wcChips { display: flex; flex-wrap: wrap; gap: 6px; }
+        .wcChip {
+            font-size: 11px; padding: 5px 10px; border-radius: 9px; cursor: pointer;
+            background: var(--wd-field); border: 1px solid var(--wd-line); color: var(--wd-text);
+            transition: background 0.12s;
+        }
+        .wcChip:hover { background: color-mix(in srgb, var(--wd-accent) 30%, transparent); }
+        .wcChip.sel { background: var(--wd-accent); border-color: var(--wd-accent); color: #fff; }
+        #wcReset {
+            margin-top: 13px; width: 100%; font-size: 11px; padding: 6px; border-radius: 9px;
+            background: var(--wd-field); border: 1px solid var(--wd-line); color: var(--wd-text);
+            cursor: pointer; opacity: 0.8;
+        }
+        #wcReset:hover { opacity: 1; }
+
     </style>
 </head>
 <body>
@@ -395,6 +633,7 @@
                 <div id="partyDropdown" class="dropdown-menu">
                     <button id="ballBtn" class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors border-b border-white/5">🎈 Party Balls</button>
                     <button id="hatBtn" class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors border-b border-white/5">🎩 Light Up Hat</button>
+                    <button id="shadesBtn" class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors border-b border-white/5">🕶️ LED Party Shades</button>
                     <button id="flashlightBtn" class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors border-b border-white/5">🔦 Flashlight</button>
                     <button class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors" onclick="spawnSlime()">🟢 Slime</button>
                 </div>
@@ -449,6 +688,7 @@
                     <button id="sdbBtn" class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors border-b border-white/5">🦆 Super Duck Bros</button>
                     <button id="duckMatchBtn" class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors border-b border-white/5">🥚 Duck Match</button>
                     <button id="rpsBtn" class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors border-b border-white/5">✊ Rock Paper Scissors</button>
+                    <button id="flingBtn" class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors border-b border-white/5">🏰 Duck Fling</button>
                     <button id="ultimateDuckBtn" class="w-full text-left px-4 py-2.5 text-sm font-bold hover:bg-white/10 transition-colors" style="background:linear-gradient(90deg,#f59e0b,#ec4899,#8b5cf6);-webkit-background-clip:text;background-clip:text;color:transparent;">⚡ ULTIMATE DUCK</button>
                 </div>
             </div>
@@ -461,6 +701,50 @@
         </div>
     </div>
     
+    <!-- Home dashboard: live clock + real weather + reminders (top-left glass card) -->
+    <div id="widgetDock">
+        <div class="wdCard">
+            <div class="wdSection" id="wdClock">
+                <div class="wdBtns">
+                    <button id="wdTheme" title="Customize widget">🎨</button>
+                    <button id="wdCollapse" title="Collapse">▲</button>
+                </div>
+                <div id="wdTime">--:--</div>
+                <div id="wdDate">—</div>
+            </div>
+            <div class="wdCollapsible">
+                <div class="wdDivider"></div>
+                <div class="wdSection">
+                    <div id="wdWeather" title="Tap to switch °F / °C">
+                        <div id="wdWxMsg">📍 <span class="wdLink" id="wdWxEnable">Show local weather</span></div>
+                    </div>
+                </div>
+                <div class="wdDivider"></div>
+                <div class="wdSection">
+                    <div class="wdHead"><span class="wdTitle">📝 Reminders</span></div>
+                    <form id="wdRemForm" autocomplete="off">
+                        <input id="wdRemText" type="text" placeholder="Add a reminder…" maxlength="80">
+                        <button id="wdRemTime" type="button" title="Set a time">🕑</button>
+                        <button id="wdRemAdd" type="submit" title="Add">+</button>
+                    </form>
+                    <div id="wdRemTimeInput"><input type="time" id="wdRemTimeField" aria-label="Reminder time"></div>
+                    <div id="wdRemList"></div>
+                </div>
+            </div>
+        </div>
+        <!-- Theme customizer popover: accent colour, card style, and font -->
+        <div id="wdCustomizer">
+            <div class="wcTitle"><span>🎨 Customize</span></div>
+            <div class="wcLabel">Accent</div>
+            <div class="wcSwatches" id="wcAccents"></div>
+            <div class="wcLabel">Card</div>
+            <div class="wcChips" id="wcCards"></div>
+            <div class="wcLabel">Font</div>
+            <div class="wcChips" id="wcFonts"></div>
+            <button id="wcReset">↺ Reset to default</button>
+        </div>
+    </div>
+
     <!-- Ping Pong floating exit button -->
     <button id="pingPongExitBtn" style="display:none;position:absolute;top:14px;right:16px;z-index:60;background:rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.25);color:white;font-size:13px;font-weight:600;padding:6px 14px;border-radius:10px;cursor:pointer;">🏓 Exit Ping Pong</button>
 
@@ -476,6 +760,9 @@
     <!-- Rock Paper Scissors floating exit button -->
     <button id="rpsExitBtn" style="display:none;position:absolute;top:14px;right:16px;z-index:60;background:rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.25);color:white;font-size:13px;font-weight:600;padding:6px 14px;border-radius:10px;cursor:pointer;">✊ Exit Game</button>
 
+    <!-- Duck Fling floating exit button -->
+    <button id="flingExitBtn" style="display:none;position:absolute;top:14px;right:16px;z-index:60;background:rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.25);color:white;font-size:13px;font-weight:600;padding:6px 14px;border-radius:10px;cursor:pointer;">🏰 Exit Game</button>
+
     <!-- Skate Mode floating exit button -->
     <button id="skateExitBtn" style="display:none;position:absolute;top:14px;right:16px;z-index:60;background:rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.25);color:white;font-size:13px;font-weight:600;padding:6px 14px;border-radius:10px;cursor:pointer;">🛹 Exit Game</button>
 
@@ -488,8 +775,33 @@
     <!-- Drive mode floating exit button -->
     <button id="driveExitBtn" style="display:none;position:absolute;top:14px;right:16px;z-index:60;background:rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.25);color:white;font-size:13px;font-weight:600;padding:6px 14px;border-radius:10px;cursor:pointer;">🛑 Exit Drive</button>
 
+    <!-- Stage dimmer dark filter (covers the scene, sits under the UI) -->
+    <div id="dimOverlay"></div>
+
+    <!-- Drawer handle to show/hide the left-edge sliders -->
+    <button id="slidersToggle" title="Show sliders">🎚️</button>
+
+    <!-- Auto-hint explaining the hidden sliders (shown periodically when collapsed) -->
+    <div id="sliderHint">🎚️ Tap for stage lighting &amp; weather — dim the lights, or add rain · sun · snow</div>
+
+    <!-- Stage dimmer: vertical light switch on the left edge -->
+    <div id="dimmerWrap" title="Stage lighting — slide down to dim">
+        <span class="dimIcon">☀️</span>
+        <div id="dimmerTrack"><input id="dimmerSlider" type="range" min="0" max="100" value="100" aria-label="Stage dimmer"></div>
+        <span class="dimIcon">🌙</span>
+    </div>
+
+    <!-- Weather: three stacked vertical sliders (rain / sun / snow) -->
+    <div id="weatherWrap" title="Weather — rain · sun · snow">
+        <div class="wxRow">
+            <div class="wxCol"><div class="wxTrack"><input class="wxSlider" data-wx="rain" type="range" min="0" max="100" value="0" aria-label="Rain"></div><span class="wxIcon">🌧️</span></div>
+            <div class="wxCol"><div class="wxTrack"><input class="wxSlider" data-wx="sun"  type="range" min="0" max="100" value="0" aria-label="Sun"></div><span class="wxIcon">☀️</span></div>
+            <div class="wxCol"><div class="wxTrack"><input class="wxSlider" data-wx="snow" type="range" min="0" max="100" value="0" aria-label="Snow"></div><span class="wxIcon">❄️</span></div>
+        </div>
+    </div>
+
     <!-- SFX mute button (always visible, bottom-left) -->
-    <button id="sfxMuteBtn" title="Toggle sound effects" style="position:fixed;bottom:18px;left:18px;z-index:999;background:rgba(255,255,255,0.15);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:2px solid rgba(255,255,255,0.3);color:white;font-size:14px;font-weight:600;padding:8px 16px;border-radius:20px;cursor:pointer;line-height:1;user-select:none;box-shadow:0 4px 12px rgba(0,0,0,0.2);transition:all 0.2s;">🔊 SFX</button>
+    <button id="sfxMuteBtn" title="Toggle sound effects" style="position:fixed;bottom:24px;left:24px;z-index:999;background:rgba(255,255,255,0.15);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:2px solid rgba(255,255,255,0.3);color:white;font-size:14px;font-weight:600;padding:8px 16px;border-radius:20px;cursor:pointer;line-height:1;user-select:none;box-shadow:0 4px 12px rgba(0,0,0,0.2);transition:all 0.2s;">🔊 SFX</button>
 
 
     <!-- Gemini Key Modal -->
@@ -581,7 +893,7 @@
 </div>
 
 <!-- Music Player wrapper — fixed column so tab always sits flush on top of the panel -->
-<div id="musicWrapper" style="position:fixed;bottom:30px;right:24px;display:flex;flex-direction:column;align-items:stretch;z-index:9999;">
+<div id="musicWrapper" style="position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;align-items:stretch;z-index:9999;">
     <button id="musicToggleTab" onclick="window.toggleMusicPlayer()" style="background:rgba(15,23,42,0.95);border:1px solid rgba(255,255,255,0.2);border-bottom:none;color:#a5b4fc;cursor:pointer;padding:6px 14px;border-radius:10px 10px 0 0;font-size:12px;font-weight:700;letter-spacing:0.5px;align-self:flex-start;">🎵 Music Player ▼</button>
     <div id="musicPlayer">
         <div id="musicHeader">
@@ -687,6 +999,17 @@
     let rpsState = null;
     let isDuckMatchMode = false;
     let duckMatchState = null;
+    let isFlingMode = false;
+    let flingState = null;
+
+    // ── Weather sliders (rain / sun / snow), each 0–1; drawn as an overlay in dance mode ──
+    const weather = { rain: 0, sun: 0, snow: 0 };
+    let wxRain = [], wxSnow = [], wxEmbers = [], wxSplash = [];
+    let wxLightFlash = 0, wxLightTimer = 0, wxBolt = null;
+
+    // Left-edge slider drawer (dimmer + weather). Collapsed by default to keep the screen clear.
+    let slidersCollapsed = (() => { try { const v = localStorage.getItem('duckSlidersHidden'); return v == null ? true : v === '1'; } catch (e) { return true; } })();
+    const sliderRefreshers = [];   // each panel registers a visibility-refresh fn here
 
     // Timing
     let duckTime = 0;
@@ -725,6 +1048,7 @@
             fanOffsetY: 0,
             hatActive: false,
             flashlightActive: false,
+            shadesActive: false,
             superHeroActive: false,
             superHeroTimer: 0,
             superHeroTargetY: -110,
@@ -923,6 +1247,7 @@
         flameWeaponBtn.style.background = '';
         fanWeaponBtn.textContent = '💨 Giant Fan';
         document.getElementById('hatBtn').textContent = '🎩 Light Up Hat';
+        document.getElementById('shadesBtn').textContent = '🕶️ LED Party Shades';
         document.getElementById('flashlightBtn').textContent = '🔦 Flashlight';
         intensity = 0.1; slider.value = 10;
         currentBgIndex = 0; bgBtn.innerText = '🌍 Scene: ' + backgrounds[0];
@@ -1854,6 +2179,486 @@
         for (const d of ducks) d.hatActive = !anyOn;
         document.getElementById('hatBtn').textContent = anyOn ? '🎩 Light Up Hat' : '🎩 Hat: ON ✓';
     });
+
+    document.getElementById('shadesBtn').addEventListener('click', () => {
+        const anyOn = ducks.some(d => d.shadesActive);
+        for (const d of ducks) d.shadesActive = !anyOn;
+        document.getElementById('shadesBtn').textContent = anyOn ? '🕶️ LED Party Shades' : '🕶️ Shades: ON ✓';
+        playSFX && playSFX('pickup');
+    });
+
+    // ── Stage dimmer: vertical light switch dims the scene via #dimOverlay.
+    //    Slider 100 (top) = full brightness; 0 (bottom) = darkest. Auto-hides and lifts
+    //    the dim while a game is open (mirrors the leftPanel, which games hide). ──
+    (function () {
+        const DIM_MAX = 0.82;                         // opacity at the very bottom of the slider
+        const slider  = document.getElementById('dimmerSlider');
+        const wrap    = document.getElementById('dimmerWrap');
+        const overlay = document.getElementById('dimOverlay');
+        const leftPanel = document.getElementById('leftPanel');
+        let dimVal = 100;
+        try { const v = localStorage.getItem('duckDimmer'); if (v != null) dimVal = Math.max(0, Math.min(100, +v)); } catch (e) {}
+        slider.value = dimVal;
+
+        function apply() {
+            const inScene = leftPanel.style.display !== 'none';   // games hide the left panel
+            wrap.style.display = (inScene && !slidersCollapsed) ? 'flex' : 'none';
+            // dim level stays applied even when the control is tucked away (lighting ≠ control)
+            overlay.style.opacity = inScene ? ((1 - dimVal / 100) * DIM_MAX).toFixed(3) : '0';
+        }
+        slider.addEventListener('input', () => {
+            dimVal = +slider.value;
+            try { localStorage.setItem('duckDimmer', dimVal); } catch (e) {}
+            apply();
+        });
+        sliderRefreshers.push(apply);
+        // React when a game opens/closes the scene (it toggles leftPanel's display)
+        new MutationObserver(apply).observe(leftPanel, { attributes: true, attributeFilter: ['style'] });
+        apply();
+    })();
+
+    // ── Weather sliders: each drives weather[rain|sun|snow] (0–1). Persisted; hidden in games. ──
+    (function () {
+        const wrap = document.getElementById('weatherWrap');
+        const leftPanel = document.getElementById('leftPanel');
+        wrap.querySelectorAll('.wxSlider').forEach(sl => {
+            const key = sl.dataset.wx;
+            try { const v = localStorage.getItem('duckWx_' + key); if (v != null) { sl.value = +v; weather[key] = (+v) / 100; } } catch (e) {}
+            sl.addEventListener('input', () => {
+                weather[key] = (+sl.value) / 100;
+                try { localStorage.setItem('duckWx_' + key, sl.value); } catch (e) {}
+            });
+        });
+        const apply = () => { wrap.style.display = (leftPanel.style.display !== 'none' && !slidersCollapsed) ? 'flex' : 'none'; };
+        sliderRefreshers.push(apply);
+        new MutationObserver(apply).observe(leftPanel, { attributes: true, attributeFilter: ['style'] });
+        apply();
+    })();
+
+    // ── Drawer handle: collapse/expand the left-edge sliders (dimmer + weather). The handle
+    //    itself hides while a game is open; clicking it toggles + persists the collapsed state. ──
+    (function () {
+        const toggle = document.getElementById('slidersToggle');
+        const leftPanel = document.getElementById('leftPanel');
+        function refreshToggle() {
+            const inScene = leftPanel.style.display !== 'none';
+            toggle.style.display = inScene ? 'flex' : 'none';
+            toggle.textContent = slidersCollapsed ? '🎚️' : '‹';
+            toggle.title = slidersCollapsed ? 'Show sliders' : 'Hide sliders';
+        }
+        sliderRefreshers.push(refreshToggle);
+        toggle.addEventListener('click', () => {
+            slidersCollapsed = !slidersCollapsed;
+            try { localStorage.setItem('duckSlidersHidden', slidersCollapsed ? '1' : '0'); } catch (e) {}
+            sliderRefreshers.forEach(fn => fn());
+        });
+        new MutationObserver(refreshToggle).observe(leftPanel, { attributes: true, attributeFilter: ['style'] });
+        refreshToggle();
+    })();
+
+    // ── Slider discoverability hint: flashes beside the handle for a few seconds, first
+    //    shortly after load and then every 3 minutes — but only while the sliders are tucked
+    //    away (collapsed) and we're in the dance scene (not a game). ──
+    (function () {
+        const hint = document.getElementById('sliderHint');
+        const leftPanel = document.getElementById('leftPanel');
+        let hideTimer = null;
+        function flash() {
+            if (slidersCollapsed === false || leftPanel.style.display === 'none') return;
+            hint.classList.add('show');
+            clearTimeout(hideTimer);
+            hideTimer = setTimeout(() => hint.classList.remove('show'), 5000);   // linger a few seconds
+        }
+        setTimeout(flash, 6000);            // teach early instead of waiting a full cycle
+        setInterval(flash, 180000);         // then nudge every 3 minutes
+    })();
+
+    // ── Home dashboard dock: live clock, real local weather, and reminders. ──────────
+    //    Self-contained. Weather uses the browser's geolocation + Open-Meteo (no API key),
+    //    with the city resolved by BigDataCloud reverse-geocoding. Reminders persist in
+    //    localStorage; timed ones chime + (if permitted) fire a desktop notification when due.
+    (function () {
+        const dock = document.getElementById('widgetDock');
+        if (!dock) return;
+        const topBar = document.getElementById('topBar');
+        const elTime = document.getElementById('wdTime');
+        const elDate = document.getElementById('wdDate');
+
+        // ── collapse / expand (persisted) ──
+        const collapseBtn = document.getElementById('wdCollapse');
+        let collapsed = false;
+        try { collapsed = localStorage.getItem('duckDockCollapsed') === '1'; } catch (e) {}
+        function applyCollapse() {
+            dock.classList.toggle('collapsed', collapsed);
+            collapseBtn.title = collapsed ? 'Expand' : 'Collapse';
+        }
+        collapseBtn.addEventListener('click', () => {
+            collapsed = !collapsed;
+            try { localStorage.setItem('duckDockCollapsed', collapsed ? '1' : '0'); } catch (e) {}
+            applyCollapse();
+        });
+        applyCollapse();
+
+        // ── theme customizer: accent colour, card style, font (all persisted) ──
+        const ACCENTS = [
+            { id: 'violet', c: '#8b5cf6', c2: '#6366f1' },
+            { id: 'ocean',  c: '#06b6d4', c2: '#3b82f6' },
+            { id: 'mint',   c: '#10b981', c2: '#22c55e' },
+            { id: 'sunset', c: '#f59e0b', c2: '#f97316' },
+            { id: 'rose',   c: '#f43f5e', c2: '#ec4899' },
+            { id: 'slate',  c: '#94a3b8', c2: '#64748b' }
+        ];
+        const CARDS = {
+            midnight: { name: 'Midnight', bg: 'rgba(20,18,40,0.42)',  text: '#e2e8f0', field: 'rgba(255,255,255,0.07)', line: 'rgba(255,255,255,0.12)', scheme: 'dark'  },
+            carbon:   { name: 'Carbon',   bg: 'rgba(12,14,22,0.9)',   text: '#e2e8f0', field: 'rgba(255,255,255,0.06)', line: 'rgba(255,255,255,0.1)',  scheme: 'dark'  },
+            frost:    { name: 'Frost',    bg: 'rgba(248,250,255,0.86)', text: '#1e293b', field: 'rgba(15,23,42,0.06)',  line: 'rgba(15,23,42,0.14)',  scheme: 'light' },
+            bubble:   { name: 'Bubblegum', bg: 'rgba(60,20,55,0.55)', text: '#ffe4f3', field: 'rgba(255,255,255,0.09)', line: 'rgba(255,200,235,0.22)', scheme: 'dark' }
+        };
+        const FONTS = {
+            system:  { name: 'Default', stack: 'inherit' },
+            rounded: { name: 'Rounded', stack: "'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', sans-serif" },
+            playful: { name: 'Playful', stack: "'Comic Sans MS', 'Chalkboard SE', 'Comic Neue', cursive" },
+            mono:    { name: 'Mono',    stack: "'Consolas', 'SF Mono', ui-monospace, 'Courier New', monospace" },
+            serif:   { name: 'Serif',   stack: "Georgia, 'Times New Roman', serif" }
+        };
+        const THEME_DEFAULT = { accent: 'violet', card: 'midnight', font: 'system' };
+        let theme = Object.assign({}, THEME_DEFAULT);
+        try { theme = Object.assign(theme, JSON.parse(localStorage.getItem('duckDockTheme') || '{}')); } catch (e) {}
+
+        function applyTheme() {
+            const a = ACCENTS.find(x => x.id === theme.accent) || ACCENTS[0];
+            const c = CARDS[theme.card] || CARDS.midnight;
+            const f = FONTS[theme.font] || FONTS.system;
+            dock.style.setProperty('--wd-accent', a.c);
+            dock.style.setProperty('--wd-accent2', a.c2);
+            dock.style.setProperty('--wd-bg', c.bg);
+            dock.style.setProperty('--wd-text', c.text);
+            dock.style.setProperty('--wd-field', c.field);
+            dock.style.setProperty('--wd-line', c.line);
+            dock.style.setProperty('--wd-scheme', c.scheme);
+            dock.style.setProperty('--wd-font', f.stack);
+            // reflect selection state in the pickers
+            dock.querySelectorAll('#wcAccents .wcSwatch').forEach(el => el.classList.toggle('sel', el.dataset.id === theme.accent));
+            dock.querySelectorAll('#wcCards .wcChip').forEach(el => el.classList.toggle('sel', el.dataset.id === theme.card));
+            dock.querySelectorAll('#wcFonts .wcChip').forEach(el => el.classList.toggle('sel', el.dataset.id === theme.font));
+        }
+        function saveTheme() { try { localStorage.setItem('duckDockTheme', JSON.stringify(theme)); } catch (e) {} }
+
+        // build the pickers
+        const wcAccents = document.getElementById('wcAccents');
+        ACCENTS.forEach(a => {
+            const s = document.createElement('div');
+            s.className = 'wcSwatch'; s.dataset.id = a.id; s.title = a.id;
+            s.style.background = 'linear-gradient(135deg,' + a.c2 + ',' + a.c + ')';
+            s.onclick = () => { theme.accent = a.id; saveTheme(); applyTheme(); };
+            wcAccents.appendChild(s);
+        });
+        const wcCards = document.getElementById('wcCards');
+        Object.keys(CARDS).forEach(id => {
+            const chip = document.createElement('div');
+            chip.className = 'wcChip'; chip.dataset.id = id; chip.textContent = CARDS[id].name;
+            chip.onclick = () => { theme.card = id; saveTheme(); applyTheme(); };
+            wcCards.appendChild(chip);
+        });
+        const wcFonts = document.getElementById('wcFonts');
+        Object.keys(FONTS).forEach(id => {
+            const chip = document.createElement('div');
+            chip.className = 'wcChip'; chip.dataset.id = id; chip.textContent = FONTS[id].name;
+            chip.style.fontFamily = FONTS[id].stack;
+            chip.onclick = () => { theme.font = id; saveTheme(); applyTheme(); };
+            wcFonts.appendChild(chip);
+        });
+        document.getElementById('wcReset').onclick = () => {
+            theme = Object.assign({}, THEME_DEFAULT); saveTheme(); applyTheme();
+            // also snap back to the default top-left home position
+            try { localStorage.removeItem('duckDockPos'); } catch (e) {}
+            dock.style.left = '24px'; dock.style.top = '86px'; dock.style.right = '';
+        };
+
+        const themeBtn = document.getElementById('wdTheme');
+        themeBtn.addEventListener('click', (e) => { e.stopPropagation(); dock.classList.toggle('customizing'); });
+        // click-away closes the customizer (but not clicks inside the dock)
+        document.addEventListener('click', (e) => {
+            if (dock.classList.contains('customizing') && !dock.contains(e.target)) dock.classList.remove('customizing');
+        });
+        applyTheme();
+
+        // ── drag-to-reposition (grab the clock header; persists x/y) ──
+        const clockEl = document.getElementById('wdClock');
+        (function () {
+            let saved = null;
+            try { saved = JSON.parse(localStorage.getItem('duckDockPos') || 'null'); } catch (e) {}
+            function clampAndPlace(x, y) {
+                const w = dock.offsetWidth || 212, h = dock.offsetHeight || 80;
+                x = Math.max(6, Math.min(window.innerWidth  - w - 6, x));
+                y = Math.max(6, Math.min(window.innerHeight - h - 6, y));
+                dock.style.left = x + 'px'; dock.style.top = y + 'px'; dock.style.right = 'auto';
+                return { x, y };
+            }
+            if (saved && typeof saved.x === 'number') clampAndPlace(saved.x, saved.y);
+
+            let dragging = false, sx = 0, sy = 0, ox = 0, oy = 0, moved = false;
+            clockEl.addEventListener('mousedown', (e) => {
+                if (e.target.closest('.wdBtns')) return;   // let the buttons do their thing
+                dragging = true; moved = false;
+                const r = dock.getBoundingClientRect();
+                ox = r.left; oy = r.top; sx = e.clientX; sy = e.clientY;
+                dock.classList.add('dragging');
+                e.preventDefault();
+            });
+            window.addEventListener('mousemove', (e) => {
+                if (!dragging) return;
+                const dx = e.clientX - sx, dy = e.clientY - sy;
+                if (Math.abs(dx) + Math.abs(dy) > 3) moved = true;
+                clampAndPlace(ox + dx, oy + dy);
+            });
+            window.addEventListener('mouseup', () => {
+                if (!dragging) return;
+                dragging = false; dock.classList.remove('dragging');
+                if (moved) {
+                    const r = dock.getBoundingClientRect();
+                    try { localStorage.setItem('duckDockPos', JSON.stringify({ x: r.left, y: r.top })); } catch (e) {}
+                }
+            });
+            // keep the dock on-screen if the window is resized smaller
+            window.addEventListener('resize', () => {
+                if (!dock.style.left) return;
+                clampAndPlace(parseFloat(dock.style.left), parseFloat(dock.style.top));
+            });
+        })();
+
+        // ── clock + game-visibility sync (one timer drives both) ──
+        function tickClock() {
+            const now = new Date();
+            let h = now.getHours();
+            const m = now.getMinutes();
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            h = h % 12; if (h === 0) h = 12;
+            elTime.innerHTML = h + ':' + (m < 10 ? '0' + m : m) + '<span class="ampm">' + ampm + '</span>';
+            elDate.textContent = now.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+            // The dock belongs to the dance scene only — mirror the top bar (games hide it).
+            dock.style.display = (topBar.style.display === 'none') ? 'none' : '';
+            checkRemindersDue();
+        }
+        // NB: tickClock() is started at the very end of this IIFE — it calls checkRemindersDue(),
+        // which reads `reminders`, so that state must be initialized first.
+
+        // ── weather ──
+        const elWeather = document.getElementById('wdWeather');
+        let tempUnit = 'F';
+        try { tempUnit = localStorage.getItem('duckWxUnit') === 'C' ? 'C' : 'F'; } catch (e) {}
+        let lastWxC = null;   // most recent temperature, stored in °C so we can re-render on unit flip
+
+        // WMO weather code → [emoji, label]; second emoji used at night where it differs.
+        const WMO = {
+            0:['☀️','Clear','🌙'], 1:['🌤️','Mostly clear','🌙'], 2:['⛅','Partly cloudy','☁️'], 3:['☁️','Overcast'],
+            45:['🌫️','Fog'], 48:['🌫️','Rime fog'],
+            51:['🌦️','Light drizzle'], 53:['🌦️','Drizzle'], 55:['🌧️','Heavy drizzle'],
+            56:['🌧️','Freezing drizzle'], 57:['🌧️','Freezing drizzle'],
+            61:['🌦️','Light rain'], 63:['🌧️','Rain'], 65:['🌧️','Heavy rain'],
+            66:['🌧️','Freezing rain'], 67:['🌧️','Freezing rain'],
+            71:['🌨️','Light snow'], 73:['🌨️','Snow'], 75:['❄️','Heavy snow'], 77:['❄️','Snow grains'],
+            80:['🌦️','Showers'], 81:['🌧️','Showers'], 82:['⛈️','Violent showers'],
+            85:['🌨️','Snow showers'], 86:['❄️','Snow showers'],
+            95:['⛈️','Thunderstorm'], 96:['⛈️','Thunderstorm'], 99:['⛈️','Hailstorm']
+        };
+        function fmtTemp(c) {
+            if (c == null) return '--°';
+            const v = tempUnit === 'F' ? (c * 9 / 5 + 32) : c;
+            return Math.round(v) + '°' + tempUnit;
+        }
+        function renderWeather(data) {
+            if (!data) return;
+            lastWxC = data.tempC;
+            const wm = WMO[data.code] || ['🌡️','Weather'];
+            const icon = (data.isDay === 0 && wm[2]) ? wm[2] : wm[0];
+            elWeather.innerHTML =
+                '<span id="wdWxIcon">' + icon + '</span>' +
+                '<div><div id="wdWxTemp">' + fmtTemp(data.tempC) + '</div>' +
+                '<div id="wdWxDesc">' + wm[1] + '</div>' +
+                (data.city ? '<div id="wdWxCity">' + data.city + '</div>' : '') + '</div>';
+        }
+        function showWxMsg(html) { elWeather.innerHTML = '<div id="wdWxMsg">' + html + '</div>'; }
+
+        async function fetchWeather(lat, lon, cachedCity) {
+            try {
+                const url = 'https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lon +
+                            '&current=temperature_2m,weather_code,is_day';
+                const r = await fetch(url);
+                const j = await r.json();
+                if (!j.current) throw new Error('no data');
+                let city = cachedCity || '';
+                if (!city) {
+                    try {
+                        const g = await fetch('https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=' +
+                                              lat + '&longitude=' + lon + '&localityLanguage=en');
+                        const gj = await g.json();
+                        city = gj.city || gj.locality || gj.principalSubdivision || '';
+                    } catch (e) {}
+                }
+                const data = { tempC: j.current.temperature_2m, code: j.current.weather_code,
+                               isDay: j.current.is_day, city, lat, lon, t: Date.now() };
+                renderWeather(data);
+                try { localStorage.setItem('duckWxCache', JSON.stringify(data)); } catch (e) {}
+            } catch (e) {
+                if (lastWxC == null) showWxMsg('⚠️ Weather unavailable · <span class="wdLink" id="wdWxRetry">retry</span>');
+                const rt = document.getElementById('wdWxRetry');
+                if (rt) rt.onclick = requestWeather;
+            }
+        }
+        function requestWeather() {
+            if (!navigator.geolocation) { showWxMsg('⚠️ Location not supported'); return; }
+            showWxMsg('📍 Locating…');
+            navigator.geolocation.getCurrentPosition(
+                pos => fetchWeather(pos.coords.latitude.toFixed(3), pos.coords.longitude.toFixed(3)),
+                err => {
+                    showWxMsg('📍 <span class="wdLink" id="wdWxEnable">Show local weather</span>');
+                    bindEnable();
+                },
+                { timeout: 12000, maximumAge: 600000 }
+            );
+        }
+        function bindEnable() {
+            const en = document.getElementById('wdWxEnable');
+            if (en) en.onclick = requestWeather;
+        }
+        // Click the weather row to toggle °F / °C.
+        elWeather.addEventListener('click', (e) => {
+            if (e.target && e.target.classList.contains('wdLink')) return;   // links handle themselves
+            if (lastWxC == null) return;
+            tempUnit = tempUnit === 'F' ? 'C' : 'F';
+            try { localStorage.setItem('duckWxUnit', tempUnit); } catch (e2) {}
+            const t = document.getElementById('wdWxTemp');
+            if (t) t.textContent = fmtTemp(lastWxC);
+        });
+        // Boot weather: paint cache instantly, then refresh (and on a 15-min cadence).
+        (function bootWeather() {
+            let cache = null;
+            try { cache = JSON.parse(localStorage.getItem('duckWxCache') || 'null'); } catch (e) {}
+            if (cache && cache.tempC != null) {
+                renderWeather(cache);
+                fetchWeather(cache.lat, cache.lon, cache.city);
+                setInterval(() => fetchWeather(cache.lat, cache.lon, cache.city), 900000);
+            } else {
+                bindEnable();
+                requestWeather();   // first run: ask for location
+                setInterval(() => { if (lastWxC != null) requestWeather(); }, 900000);
+            }
+        })();
+
+        // ── reminders ──
+        const remForm = document.getElementById('wdRemForm');
+        const remText = document.getElementById('wdRemText');
+        const remList = document.getElementById('wdRemList');
+        const remTimeBtn = document.getElementById('wdRemTime');
+        const remTimeWrap = document.getElementById('wdRemTimeInput');
+        const remTimeField = document.getElementById('wdRemTimeField');
+        let reminders = [];
+        try { reminders = JSON.parse(localStorage.getItem('duckReminders') || '[]') || []; } catch (e) {}
+        let remSeq = reminders.reduce((mx, r) => Math.max(mx, r.id || 0), 0);
+
+        function saveReminders() {
+            try { localStorage.setItem('duckReminders', JSON.stringify(reminders)); } catch (e) {}
+        }
+        function whenLabel(due) {
+            if (!due) return '';
+            const d = new Date(due), now = new Date();
+            const t = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+            const sameDay = d.toDateString() === now.toDateString();
+            return (sameDay ? '' : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ') + t;
+        }
+        function renderReminders() {
+            // Sort: undone first (timed by due, then untimed), done last.
+            const sorted = reminders.slice().sort((a, b) => {
+                if (a.done !== b.done) return a.done ? 1 : -1;
+                if (a.due && b.due) return a.due - b.due;
+                if (a.due) return -1;
+                if (b.due) return 1;
+                return a.id - b.id;
+            });
+            remList.innerHTML = '';
+            if (!sorted.length) {
+                remList.innerHTML = '<div id="wdRemEmpty">Nothing yet — add one above.</div>';
+                return;
+            }
+            const now = Date.now();
+            for (const r of sorted) {
+                const due = r.due && !r.done && r.due <= now;
+                const row = document.createElement('div');
+                row.className = 'wdRem' + (r.done ? ' done' : '') + (due ? ' due' : '');
+                row.innerHTML =
+                    '<div class="wdCheck">' + (r.done ? '✓' : '') + '</div>' +
+                    '<div class="wdBody">' + escapeHtml(r.text) +
+                        (r.due ? '<div class="wdWhen">' + (due ? '⏰ ' : '') + whenLabel(r.due) + '</div>' : '') +
+                    '</div>' +
+                    '<div class="wdDel" title="Delete">✕</div>';
+                row.querySelector('.wdCheck').onclick = () => { r.done = !r.done; if (r.done) r.notified = true; saveReminders(); renderReminders(); };
+                row.querySelector('.wdDel').onclick = () => { reminders = reminders.filter(x => x.id !== r.id); saveReminders(); renderReminders(); };
+                remList.appendChild(row);
+            }
+        }
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+        }
+        function parseDueFromTime(hhmm) {
+            if (!hhmm) return null;
+            const [hh, mm] = hhmm.split(':').map(Number);
+            const d = new Date();
+            d.setHours(hh, mm, 0, 0);
+            if (d.getTime() <= Date.now()) d.setDate(d.getDate() + 1);   // already passed today → tomorrow
+            return d.getTime();
+        }
+        remTimeBtn.addEventListener('click', () => {
+            const open = remTimeWrap.classList.toggle('show');
+            remTimeBtn.classList.toggle('set', open && !!remTimeField.value);
+            if (open) remTimeField.focus();
+        });
+        remTimeField.addEventListener('change', () => {
+            remTimeBtn.classList.toggle('set', !!remTimeField.value);
+        });
+        remForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const text = remText.value.trim();
+            if (!text) return;
+            const due = parseDueFromTime(remTimeField.value);
+            if (due && 'Notification' in window && Notification.permission === 'default') {
+                try { Notification.requestPermission(); } catch (e2) {}
+            }
+            reminders.push({ id: ++remSeq, text, done: false, due, notified: false });
+            saveReminders();
+            renderReminders();
+            remText.value = ''; remTimeField.value = '';
+            remTimeWrap.classList.remove('show'); remTimeBtn.classList.remove('set');
+            remText.focus();
+        });
+
+        let remDueDirty = false;
+        function checkRemindersDue() {
+            const now = Date.now();
+            let fired = false, becameDue = false;
+            for (const r of reminders) {
+                if (r.due && !r.done && r.due <= now) {
+                    becameDue = true;
+                    if (!r.notified) {
+                        r.notified = true; fired = true;
+                        try { playSFX('score'); } catch (e) {}
+                        if ('Notification' in window && Notification.permission === 'granted') {
+                            try { new Notification('🦆 Reminder', { body: r.text }); } catch (e) {}
+                        }
+                    }
+                }
+            }
+            if (fired) saveReminders();
+            // Re-render when anything newly crossed its due time (adds the ⏰ + pulse).
+            if (fired || (becameDue && !remDueDirty)) { remDueDirty = becameDue; renderReminders(); }
+            if (!becameDue) remDueDirty = false;
+        }
+        renderReminders();
+
+        // Everything reminders depend on now exists — safe to start the clock/visibility loop.
+        tickClock();
+        setInterval(tickClock, 1000);
+    })();
 
     document.getElementById('flashlightBtn').addEventListener('click', () => {
         const anyOn = ducks.some(d => d.flashlightActive);
@@ -3173,6 +3978,49 @@
         ctx.lineWidth = 3;
         ctx.stroke();
         ctx.shadowBlur = 0;
+
+        ctx.restore();
+    }
+
+    // LED Party Shades — a sleek wraparound visor worn over the eyes. The lens is a
+    // strip of LED columns that scroll through the spectrum and flare brighter with the
+    // music: `energy` is the global dance intensity (0–1), so it pulses on the beat.
+    function drawPartyShades(energy) {
+        const cx = 5, cy = -22;                       // centred over the two eyes (x=-10 & x=20)
+        const halfW = 38, h = 13;                     // visor footprint
+        const flare = 0.5 + Math.min(1, energy) * 0.5;
+        const now = performance.now();
+        const glowHue = (now * 0.12) % 360;
+        ctx.save();
+
+        // temple arm sweeping back toward the ear (duck faces right, so the arm runs left)
+        ctx.strokeStyle = '#15181f'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(cx - halfW + 4, cy); ctx.lineTo(cx - halfW - 15, cy - 5); ctx.stroke();
+
+        // dark frame — one continuous wraparound bar
+        ctx.fillStyle = '#15181f';
+        ctx.beginPath(); ctx.roundRect(cx - halfW, cy - h, halfW * 2, h * 2, h); ctx.fill();
+
+        // LED screen inset
+        const ix = cx - halfW + 4, iy = cy - h + 4, iw = halfW * 2 - 8, ih = h * 2 - 8;
+        ctx.save();
+        ctx.beginPath(); ctx.roundRect(ix, iy, iw, ih, h - 4); ctx.clip();
+        ctx.fillStyle = '#04060a'; ctx.fillRect(ix, iy, iw, ih);   // dark base behind the LEDs
+        const cols = 13, cw = iw / cols, scroll = now * 0.12;
+        for (let i = 0; i < cols; i++) {
+            const hue = (scroll + i * 28) % 360;
+            const lit = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(now * 0.01 + i * 0.9));   // per-column shimmer
+            ctx.fillStyle = `hsla(${hue},100%,${38 + lit * flare * 46}%,0.92)`;
+            ctx.fillRect(ix + i * cw + 0.6, iy, cw - 1.2, ih);
+        }
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';                  // glassy top highlight
+        ctx.fillRect(ix, iy, iw, ih * 0.34);
+        ctx.restore();
+
+        // outer neon glow, brightening on the beat
+        ctx.shadowBlur = 12 + flare * 16; ctx.shadowColor = `hsl(${glowHue},100%,60%)`;
+        ctx.lineWidth = 2; ctx.strokeStyle = `hsla(${glowHue},100%,72%,${0.4 + flare * 0.4})`;
+        ctx.beginPath(); ctx.roundRect(cx - halfW, cy - h, halfW * 2, h * 2, h); ctx.stroke();
 
         ctx.restore();
     }
@@ -4620,6 +5468,9 @@
             ctx.beginPath(); ctx.arc(16, eyeY - 7, 3, 0, Math.PI*2); ctx.fill();
             ctx.restore();
         }
+
+        // LED Party Shades — drawn over every eye state so the visor always sits on top
+        if (duck.shadesActive) drawPartyShades(intensity);
 
         // Fighter charging / charged — angry DBZ brows (and blank glowing rage eyes at full power)
         if (duck.fighter && (duck.fighter.charging || duck.fighter.poweredUp)) {
@@ -12423,6 +13274,443 @@
     rpsBtn.onclick = () => { if (isRPSMode) exitRPSMode(); else enterRPSMode(); };
     rpsExitBtn.onclick = () => exitRPSMode();
 
+    // ═══════════════════════════════════════════════════════════════════════
+    //  🏰 DUCK FLING — an Angry-Birds / Crush-the-Castle physics game.
+    //  Pull back the slingshot and fling round ducks into towers of wood, stone,
+    //  and ice to crush the grumpy targets hiding inside. Powered by Matter.js
+    //  for the simulation; everything is drawn by hand from the body positions.
+    // ═══════════════════════════════════════════════════════════════════════
+    const FLING_MAT = {
+        wood:  { color: '#c8893f', edge: '#7c4a16', hp: 22, tough: 3, density: 0.0016 },
+        stone: { color: '#9aa3ad', edge: '#565e68', hp: 50, tough: 9, density: 0.0040 },
+        ice:   { color: '#ade8ff', edge: '#5aa6c8', hp: 10, tough: 1, density: 0.0011 },
+    };
+    const FLING_POWER = 0.235;          // drag-vector → launch-velocity multiplier
+    const FLING_PREVIEW_G = 0.86;       // gravity used for the dotted aim arc (tuned to match the sim)
+    const FLING_MAX_STRETCH = 135;      // max slingshot pull (×scale)
+    const FLING_STEP = 1000 / 60;       // fixed physics timestep
+    const FLING_LEVELS = 3;
+    const flingGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : +v; } catch (e) { return d; } };
+
+    function flingBuildLevel(s, idx) {
+        const { Composite, Bodies } = Matter;
+        const gy = s.groundY, sc = s.sc, W = s.W;
+        const addBlock = (x, y, w, h, mat) => {
+            const M = FLING_MAT[mat];
+            const b = Bodies.rectangle(x, y, w, h, { friction: 0.7, frictionStatic: 0.95, restitution: 0.04, density: M.density });
+            b.meta = { kind: 'block', mat, w, h, hp: M.hp, maxHp: M.hp, tough: M.tough, color: M.color, edge: M.edge, dead: false, hit: 0 };
+            Composite.add(s.world, b); s.blocks.push(b); return b;
+        };
+        const addTarget = (x, y) => {
+            const r = 23 * sc;
+            const b = Bodies.circle(x, y, r, { friction: 0.5, restitution: 0.18, density: 0.0015 });
+            b.meta = { kind: 'target', r, hp: 6, maxHp: 6, tough: 0, dead: false, hit: 0, blink: Math.random() * 3, squash: 0 };
+            Composite.add(s.world, b); s.targets.push(b); return b;
+        };
+        // shorthand block/beam dims
+        const pw = 24 * sc, ph = 128 * sc, beamW = 156 * sc, beamH = 24 * sc, box = 46 * sc;
+
+        if (idx === 0) {                                   // two posts + lintel, target perched + one on the ground
+            const bx = W * 0.66;
+            addBlock(bx - 56 * sc, gy - ph / 2, pw, ph, 'wood');
+            addBlock(bx + 56 * sc, gy - ph / 2, pw, ph, 'wood');
+            addBlock(bx, gy - ph - beamH / 2, beamW, beamH, 'wood');
+            addTarget(bx, gy - ph - beamH - 23 * sc);
+            addTarget(W * 0.85, gy - 23 * sc);
+            s.ammoMax = 3; s.levelName = 'Level 1 · Gatehouse';
+        } else if (idx === 1) {                            // a boxed fort with two targets inside
+            const bx = W * 0.7;
+            addBlock(bx - 72 * sc, gy - box / 2, box, box, 'stone');
+            addBlock(bx - 72 * sc, gy - box * 1.5, box, box, 'stone');
+            addBlock(bx + 72 * sc, gy - box / 2, box, box, 'stone');
+            addBlock(bx + 72 * sc, gy - box * 1.5, box, box, 'stone');
+            addBlock(bx, gy - box * 2 - beamH / 2, 190 * sc, beamH, 'wood');
+            addTarget(bx - 28 * sc, gy - 23 * sc);
+            addTarget(bx + 28 * sc, gy - 23 * sc);
+            addBlock(bx, gy - box * 2 - beamH - 20 * sc, 40 * sc, 40 * sc, 'ice');
+            s.ammoMax = 4; s.levelName = 'Level 2 · The Keep';
+        } else {                                           // a guarded tower: stone wall in front, prize up high
+            const bx = W * 0.74;
+            addBlock(bx - 130 * sc, gy - 170 * sc / 2, 30 * sc, 170 * sc, 'stone');   // shield wall
+            addBlock(bx + 40 * sc, gy - ph / 2, pw, ph, 'wood');
+            addBlock(bx + 130 * sc, gy - ph / 2, pw, ph, 'wood');
+            addBlock(bx + 85 * sc, gy - ph - beamH / 2, 150 * sc, beamH, 'wood');
+            addTarget(bx + 85 * sc, gy - ph - beamH - 23 * sc);
+            addTarget(bx - 60 * sc, gy - 23 * sc);
+            addTarget(bx + 85 * sc, gy - 23 * sc);
+            s.ammoMax = 5; s.levelName = 'Level 3 · Last Bastion';
+        }
+        s.totalTargets = s.targets.length;
+    }
+
+    function initFling(levelIdx, carryScore) {
+        const { Engine, Composite, Bodies, Events, Vector } = Matter;
+        const W = canvas.width, H = canvas.height;
+        const engine = Engine.create();
+        engine.gravity.y = 1;
+        engine.positionIterations = 10; engine.velocityIterations = 10;
+        const s = {
+            W, H, sc: Math.max(0.62, Math.min(1.25, H / 720)),
+            groundY: H - 54, slingX: W * 0.155, engine, world: engine.world,
+            blocks: [], targets: [], ducks: [],
+            loaded: null, flying: null, flyT: 0, settleT: 0,
+            ammo: 0, ammoMax: 3, level: levelIdx, levelName: '', score: carryScore || 0,
+            best: flingGet('duckFlingBest', 0), killed: 0, totalTargets: 0,
+            aiming: false, dragX: 0, dragY: 0,
+            debris: [], rings: [], floaters: [], state: 'aim',
+            overlayT: 0, shake: 0, t: 0, acc: 0, armT: 650,
+        };
+        s.duckR = 22 * s.sc;
+        s.slingY = s.groundY - 96 * s.sc;
+
+        // ground + off-screen side walls (keep the world tidy)
+        const ground = Bodies.rectangle(W / 2, s.groundY + 400, W * 3, 800, { isStatic: true, friction: 0.95 });
+        ground.meta = { kind: 'ground' };
+        const wallL = Bodies.rectangle(-60, H / 2, 120, H * 3, { isStatic: true });
+        const wallR = Bodies.rectangle(W + 60, H / 2, 120, H * 3, { isStatic: true });
+        Composite.add(s.world, [ground, wallL, wallR]);
+
+        flingBuildLevel(s, levelIdx);
+        s.ammo = s.ammoMax;
+
+        // impact damage: hard collisions chip blocks and pop targets (after a short arm delay)
+        Events.on(engine, 'collisionStart', (ev) => {
+            if (s.armT > 0) return;
+            for (const pair of ev.pairs) {
+                const a = pair.bodyA, b = pair.bodyB;
+                const rel = Vector.magnitude(Vector.sub(a.velocity, b.velocity));
+                if (rel < 4.5) continue;
+                const apply = (body, other) => {
+                    const m = body.meta; if (!m || m.dead || (m.kind !== 'block' && m.kind !== 'target')) return;
+                    const mult = (other.meta && other.meta.kind === 'duck') ? 1.5 : 1;
+                    const dmg = rel * mult - m.tough;
+                    if (dmg <= 0) return;
+                    m.hp -= dmg; m.hit = 1; if (m.kind === 'target') m.squash = 1;
+                    if (m.hp <= 0) m.dead = true;
+                };
+                apply(a, b); apply(b, a);
+            }
+        });
+        return s;
+    }
+
+    function flingLoadNext(s) {
+        if (s.ammo <= 0 || s.loaded || s.flying) return;
+        const b = Matter.Bodies.circle(s.slingX, s.slingY, s.duckR, { density: 0.0026, friction: 0.6, restitution: 0.36, isStatic: true });
+        b.meta = { kind: 'duck' };
+        Matter.Composite.add(s.world, b); s.loaded = b; s.ducks.push(b);
+    }
+
+    function flingLaunch(s, dx, dy) {
+        const b = s.loaded; if (!b) return;
+        Matter.Body.setStatic(b, false);
+        Matter.Body.setVelocity(b, { x: dx * FLING_POWER, y: dy * FLING_POWER });
+        Matter.Body.setAngularVelocity(b, (Math.random() - 0.5) * 0.3);
+        s.flying = b; s.loaded = null; s.aiming = false; s.ammo--;
+        s.state = 'fly'; s.flyT = 0; s.settleT = 0;
+        playSFX && playSFX('pop', { pitch: 0.7 });
+    }
+
+    function flingBurst(s, x, y, col, n) {
+        for (let i = 0; i < n; i++) {
+            const a = Math.random() * Math.PI * 2, sp = 1 + Math.random() * 5;
+            s.debris.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 2, life: 1, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 0.4, size: 3 + Math.random() * 5, col });
+        }
+    }
+
+    function flingSweepDead(s) {
+        for (let i = s.blocks.length - 1; i >= 0; i--) {
+            const b = s.blocks[i]; if (!b.meta.dead) continue;
+            flingBurst(s, b.position.x, b.position.y, b.meta.color, 12);
+            s.score += 50; s.floaters.push({ x: b.position.x, y: b.position.y, txt: '+50', life: 1, col: '#fde68a' });
+            Matter.Composite.remove(s.world, b); s.blocks.splice(i, 1);
+            playSFX && playSFX('pop', { pitch: 1.3 });
+        }
+        for (let i = s.targets.length - 1; i >= 0; i--) {
+            const t = s.targets[i]; if (!t.meta.dead) continue;
+            flingBurst(s, t.position.x, t.position.y, '#7bbf4a', 18);
+            s.rings.push({ x: t.position.x, y: t.position.y, r: 6, max: 70, life: 1 });
+            s.score += 500; s.killed++; s.shake = Math.max(s.shake, 10);
+            s.floaters.push({ x: t.position.x, y: t.position.y, txt: '+500', life: 1, col: '#86efac' });
+            Matter.Composite.remove(s.world, t); s.targets.splice(i, 1);
+            playSFX && playSFX('casinoJackpot');
+        }
+    }
+
+    function flingUpdate(s, dt) {
+        s.t += dt; const sec = dt / 1000;
+        if (s.armT > 0) s.armT -= dt;
+        // fixed-step the physics
+        s.acc += dt; let steps = 0;
+        while (s.acc >= FLING_STEP && steps < 5) { Matter.Engine.update(s.engine, FLING_STEP); s.acc -= FLING_STEP; steps++; }
+        flingSweepDead(s);
+
+        // decay per-body hit flashes / squash
+        for (const b of s.blocks) if (b.meta.hit > 0) b.meta.hit = Math.max(0, b.meta.hit - sec * 3);
+        for (const t of s.targets) { if (t.meta.hit > 0) t.meta.hit = Math.max(0, t.meta.hit - sec * 3); if (t.meta.squash > 0) t.meta.squash = Math.max(0, t.meta.squash - sec * 4); t.meta.blink += sec; }
+
+        // fx
+        for (let i = s.debris.length - 1; i >= 0; i--) { const p = s.debris[i]; p.vy += 0.35; p.x += p.vx; p.y += p.vy; p.rot += p.vr; p.life -= sec * 1.1; if (p.life <= 0) s.debris.splice(i, 1); }
+        for (let i = s.rings.length - 1; i >= 0; i--) { const r = s.rings[i]; r.r += (r.max - r.r) * Math.min(1, sec * 7); r.life -= sec * 1.8; if (r.life <= 0) s.rings.splice(i, 1); }
+        for (let i = s.floaters.length - 1; i >= 0; i--) { const f = s.floaters[i]; f.y -= 30 * sec; f.life -= sec * 0.9; if (f.life <= 0) s.floaters.splice(i, 1); }
+        s.shake = Math.max(0, s.shake - dt * 0.04);
+
+        if (s.state === 'win' || s.state === 'lose') { s.overlayT += dt; return; }
+
+        // flight bookkeeping → settle, then reload or resolve the round
+        if (s.flying) {
+            s.flyT += dt;
+            const sp = Matter.Vector.magnitude(s.flying.velocity);
+            const off = s.flying.position.y > s.H + 90 || s.flying.position.x < -90 || s.flying.position.x > s.W + 140;
+            if (sp < 0.7) s.settleT += dt; else s.settleT = 0;
+            if (off || s.settleT > 650 || s.flyT > 7000) {
+                if (off) { Matter.Composite.remove(s.world, s.flying); const di = s.ducks.indexOf(s.flying); if (di >= 0) s.ducks.splice(di, 1); }
+                s.flying = null; s.settleT = 0;
+            }
+        }
+        // win as soon as the last target is gone
+        if (s.killed >= s.totalTargets) {
+            s.state = 'win'; s.overlayT = 0;
+            s.score += s.ammo * 250 + (s.loaded ? 250 : 0);   // unspent-ammo bonus
+            if (s.score > s.best) { s.best = s.score; try { localStorage.setItem('duckFlingBest', s.best); } catch (e) {} }
+            s.shake = Math.max(s.shake, 16);
+            return;
+        }
+        // out of ammo and everything has settled → loss
+        if (s.ammo <= 0 && !s.loaded && !s.flying) {
+            s.settleAll = (s.settleAll || 0) + dt;
+            if (s.settleAll > 900) { s.state = 'lose'; s.overlayT = 0; }
+        } else {
+            s.settleAll = 0;
+            if (!s.loaded && !s.flying && !s.aiming) flingLoadNext(s);
+        }
+    }
+
+    // ── drawing ──────────────────────────────────────────────────────────────
+    function flingDrawDuckBody(r, hue) {
+        ctx.fillStyle = `hsl(${hue},90%,62%)`; ctx.strokeStyle = 'rgba(120,75,0,0.5)'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = `hsl(${hue},90%,72%)`; ctx.beginPath(); ctx.arc(-r * 0.25, -r * 0.25, r * 0.45, 0, Math.PI * 2); ctx.fill();   // belly highlight
+        ctx.fillStyle = '#ff9e1e'; ctx.strokeStyle = '#d97706'; ctx.lineWidth = 1.5;   // beak (points +x)
+        ctx.beginPath(); ctx.moveTo(r * 0.55, -r * 0.15); ctx.lineTo(r * 1.25, 0); ctx.lineTo(r * 0.55, r * 0.18); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(r * 0.35, -r * 0.35, r * 0.3, 0, Math.PI * 2); ctx.fill();   // eye
+        ctx.fillStyle = '#15202b'; ctx.beginPath(); ctx.arc(r * 0.45, -r * 0.35, r * 0.14, 0, Math.PI * 2); ctx.fill();
+    }
+
+    function flingDraw(s) {
+        const { W, H } = s;
+        // sky
+        const sky = ctx.createLinearGradient(0, 0, 0, H);
+        sky.addColorStop(0, '#7ec8f0'); sky.addColorStop(0.6, '#bfe6f7'); sky.addColorStop(1, '#e8f6ff');
+        ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+        // distant hills
+        ctx.fillStyle = '#bfe3b0';
+        ctx.beginPath(); ctx.moveTo(0, s.groundY); for (let x = 0; x <= W; x += 60) ctx.lineTo(x, s.groundY - 40 - 30 * Math.sin(x * 0.012 + 1)); ctx.lineTo(W, s.groundY); ctx.closePath(); ctx.fill();
+        // clouds
+        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        for (let i = 0; i < 4; i++) { const cx = ((i * 230 + s.t * 0.006) % (W + 200)) - 100, cy = 60 + (i % 2) * 50; ctx.beginPath(); ctx.ellipse(cx, cy, 46, 22, 0, 0, Math.PI * 2); ctx.ellipse(cx + 40, cy + 6, 34, 18, 0, 0, Math.PI * 2); ctx.fill(); }
+
+        const shX = s.shake ? (Math.random() - 0.5) * s.shake : 0, shY = s.shake ? (Math.random() - 0.5) * s.shake : 0;
+        ctx.save(); ctx.translate(shX, shY);
+
+        // ground
+        ctx.fillStyle = '#86b94e'; ctx.fillRect(0, s.groundY, W, H - s.groundY);
+        ctx.fillStyle = '#6f9e3e'; ctx.fillRect(0, s.groundY, W, 8);
+        ctx.fillStyle = '#5c7d36'; ctx.fillRect(0, s.groundY + 8, W, 4);
+
+        // slingshot back prong + back band
+        const sc = s.sc, fx = s.slingX, ftY = s.slingY - 4;
+        const duckPos = s.aiming && s.loaded ? { x: s.dragX, y: s.dragY } : { x: s.slingX, y: s.slingY };
+        ctx.strokeStyle = '#6b3f17'; ctx.lineCap = 'round';
+        if (s.loaded) { ctx.lineWidth = 7 * sc; ctx.beginPath(); ctx.moveTo(fx + 14 * sc, ftY); ctx.lineTo(duckPos.x, duckPos.y); ctx.stroke(); }   // back band
+
+        // blocks
+        for (const b of s.blocks) {
+            const m = b.meta; ctx.save(); ctx.translate(b.position.x, b.position.y); ctx.rotate(b.angle);
+            const w = m.w, h = m.h, rr = Math.min(7 * sc, w / 2, h / 2);
+            ctx.fillStyle = m.color; ctx.strokeStyle = m.edge; ctx.lineWidth = 2.5;
+            ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, rr); ctx.fill(); ctx.stroke();
+            // grain / sheen
+            ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(-w / 2 + 4, -h / 2 + 5); ctx.lineTo(w / 2 - 4, -h / 2 + 5); ctx.stroke();
+            // damage darkening + cracks
+            const dmg = 1 - m.hp / m.maxHp;
+            if (dmg > 0.05) {
+                ctx.fillStyle = `rgba(0,0,0,${dmg * 0.32})`; ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, rr); ctx.fill();
+                ctx.strokeStyle = 'rgba(20,12,4,0.55)'; ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.moveTo(-w * 0.2, -h / 2); ctx.lineTo(w * 0.05, 0); ctx.lineTo(-w * 0.15, h / 2); ctx.stroke();
+                if (dmg > 0.5) { ctx.beginPath(); ctx.moveTo(w * 0.2, -h / 2); ctx.lineTo(w * 0.0, h * 0.1); ctx.lineTo(w * 0.25, h / 2); ctx.stroke(); }
+            }
+            if (m.hit > 0) { ctx.fillStyle = `rgba(255,255,255,${m.hit * 0.5})`; ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, rr); ctx.fill(); }
+            ctx.restore();
+        }
+
+        // targets — grumpy round critters
+        for (const t of s.targets) {
+            const m = t.meta; ctx.save(); ctx.translate(t.position.x, t.position.y); ctx.rotate(t.angle);
+            const sq = 1 - m.squash * 0.25; ctx.scale(1 / sq, sq);
+            const r = m.r;
+            ctx.fillStyle = m.hit > 0 ? '#ff7a59' : '#7bbf4a'; ctx.strokeStyle = '#3f6b22'; ctx.lineWidth = 2.5;
+            ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.beginPath(); ctx.arc(-r * 0.3, -r * 0.3, r * 0.45, 0, Math.PI * 2); ctx.fill();
+            const blink = (m.blink % 3) < 0.12;
+            ctx.fillStyle = '#fff'; for (const ex of [-r * 0.38, r * 0.38]) { ctx.beginPath(); ctx.ellipse(ex, -r * 0.1, r * 0.22, blink ? r * 0.05 : r * 0.26, 0, 0, Math.PI * 2); ctx.fill(); }
+            if (!blink) { ctx.fillStyle = '#15202b'; for (const ex of [-r * 0.34, r * 0.42]) { ctx.beginPath(); ctx.arc(ex, -r * 0.05, r * 0.12, 0, Math.PI * 2); ctx.fill(); } }
+            ctx.strokeStyle = '#2a3b14'; ctx.lineWidth = 3 * sc; ctx.lineCap = 'round';   // angry brows
+            ctx.beginPath(); ctx.moveTo(-r * 0.62, -r * 0.5); ctx.lineTo(-r * 0.12, -r * 0.28); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(r * 0.62, -r * 0.5); ctx.lineTo(r * 0.12, -r * 0.28); ctx.stroke();
+            ctx.restore();
+        }
+
+        // ducks (loaded / flying / landed)
+        for (const d of s.ducks) { ctx.save(); ctx.translate(d.position.x, d.position.y); ctx.rotate(d.angle); flingDrawDuckBody(s.duckR, 48); ctx.restore(); }
+
+        // front slingshot prong + front band + aim arc
+        ctx.strokeStyle = '#7c4a1a'; ctx.lineWidth = 12 * sc; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(fx, s.groundY); ctx.lineTo(fx, s.slingY + 6 * sc); ctx.stroke();           // post
+        ctx.lineWidth = 9 * sc;
+        ctx.beginPath(); ctx.moveTo(fx, s.slingY + 6 * sc); ctx.lineTo(fx - 16 * sc, ftY); ctx.stroke();        // left prong
+        ctx.beginPath(); ctx.moveTo(fx, s.slingY + 6 * sc); ctx.lineTo(fx + 16 * sc, ftY); ctx.stroke();        // right prong
+        if (s.loaded) { ctx.strokeStyle = '#5a340f'; ctx.lineWidth = 7 * sc; ctx.beginPath(); ctx.moveTo(fx - 14 * sc, ftY); ctx.lineTo(duckPos.x, duckPos.y); ctx.stroke(); }
+
+        if (s.aiming && s.loaded) {                          // dotted trajectory preview
+            const dx = (s.slingX - s.dragX) * FLING_POWER, dy = (s.slingY - s.dragY) * FLING_POWER;
+            let px = s.slingX, py = s.slingY, vx = dx, vy = dy;
+            ctx.fillStyle = 'rgba(255,255,255,0.85)';
+            for (let i = 0; i < 30; i++) { px += vx; py += vy; vy += FLING_PREVIEW_G; if (i % 2 === 0) { ctx.beginPath(); ctx.arc(px, py, Math.max(1.5, 4 - i * 0.08), 0, Math.PI * 2); ctx.fill(); } if (py > s.groundY) break; }
+        }
+
+        // debris + rings + score floaters
+        for (const p of s.debris) { ctx.save(); ctx.globalAlpha = Math.max(0, p.life); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.fillStyle = p.col; ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size); ctx.restore(); }
+        for (const r of s.rings) { ctx.save(); ctx.globalAlpha = Math.max(0, r.life); ctx.strokeStyle = '#bbf7d0'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
+        for (const f of s.floaters) { ctx.save(); ctx.globalAlpha = Math.max(0, f.life); ctx.fillStyle = f.col; ctx.font = `bold ${18 * sc}px system-ui`; ctx.textAlign = 'center'; ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.strokeText(f.txt, f.x, f.y); ctx.fillText(f.txt, f.x, f.y); ctx.restore(); }
+
+        ctx.restore();   // end shake
+
+        flingDrawHUD(s);
+        if (s.state === 'win' || s.state === 'lose') flingDrawOverlay(s);
+    }
+
+    function flingDrawHUD(s) {
+        const { W } = s;
+        ctx.textBaseline = 'middle';
+        // shots remaining as mini ducks
+        const shots = s.ammo + (s.loaded ? 1 : 0);
+        ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(0,0,0,0.45)';
+        ctx.font = 'bold 14px system-ui'; ctx.fillText('SHOTS', 20, 26);
+        for (let i = 0; i < shots; i++) { ctx.save(); ctx.translate(34 + i * 26, 50); ctx.scale(0.55, 0.55); flingDrawDuckBody(22, 48); ctx.restore(); }
+        // targets left
+        ctx.textAlign = 'center'; ctx.fillStyle = '#1f2937'; ctx.font = 'bold 15px system-ui';
+        ctx.fillText(s.levelName, W / 2, 24);
+        ctx.font = '900 22px system-ui'; ctx.fillStyle = '#15803d';
+        ctx.fillText('🎯 ' + (s.totalTargets - s.killed) + ' left', W / 2, 50);
+        // score
+        ctx.textAlign = 'right'; ctx.fillStyle = '#1f2937'; ctx.font = '900 24px system-ui';
+        ctx.fillText(s.score.toLocaleString(), W - 20, 30);
+        ctx.font = '12px system-ui'; ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillText('BEST ' + s.best.toLocaleString(), W - 20, 52);
+    }
+
+    function flingDrawOverlay(s) {
+        const { W, H } = s; const won = s.state === 'win';
+        ctx.save(); ctx.fillStyle = 'rgba(8,12,20,0.6)'; ctx.fillRect(0, 0, W, H);
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '900 60px system-ui'; ctx.fillStyle = won ? '#fde047' : '#f87171';
+        ctx.shadowColor = won ? '#f59e0b' : '#ef4444'; ctx.shadowBlur = 28;
+        ctx.fillText(won ? 'CASTLE CRUSHED!' : 'OUT OF DUCKS', W / 2, H * 0.36);
+        ctx.shadowBlur = 0; ctx.font = 'bold 26px system-ui'; ctx.fillStyle = '#fff';
+        ctx.fillText('Score ' + s.score.toLocaleString(), W / 2, H * 0.36 + 52);
+        ctx.font = '15px system-ui'; ctx.fillStyle = '#cbd5e1';
+        const last = s.level >= FLING_LEVELS - 1;
+        const msg = won ? (last ? 'click / Space — play again from Level 1' : 'click / Space — next level') : 'click / Space — retry level   ·   R to restart';
+        ctx.fillStyle = `rgba(255,255,255,${0.6 + 0.4 * Math.sin(s.t * 0.006)})`; ctx.font = 'bold 16px system-ui';
+        ctx.fillText(msg, W / 2, H * 0.36 + 96);
+        ctx.restore();
+    }
+
+    function runFling(dt) {
+        const s = flingState; if (!s) return;
+        flingUpdate(s, dt);
+        flingDraw(s);
+    }
+
+    // ── input + lifecycle ─────────────────────────────────────────────────────
+    function flingPointer(e) {
+        const rect = canvas.getBoundingClientRect();
+        return { x: (e.clientX - rect.left) * (canvas.width / rect.width), y: (e.clientY - rect.top) * (canvas.height / rect.height) };
+    }
+    function flingAdvance(s) {
+        if (s.state === 'win') { const next = s.level >= FLING_LEVELS - 1 ? 0 : s.level + 1; flingState = initFling(next, s.level >= FLING_LEVELS - 1 ? 0 : s.score); }
+        else if (s.state === 'lose') { flingState = initFling(s.level, 0); }
+    }
+    function flingDown(e) {
+        const s = flingState; if (!s) return;
+        if (e.target && e.target.closest && e.target.closest('#flingExitBtn')) return;
+        if (s.state === 'win' || s.state === 'lose') { flingAdvance(s); return; }
+        const p = flingPointer(e);
+        if (s.loaded && Math.hypot(p.x - s.loaded.position.x, p.y - s.loaded.position.y) < s.duckR * 2.6) {
+            s.aiming = true; s.dragX = p.x; s.dragY = p.y;
+        }
+    }
+    function flingMove(e) {
+        const s = flingState; if (!s || !s.aiming) return;
+        const p = flingPointer(e);
+        let dx = p.x - s.slingX, dy = p.y - s.slingY;
+        const dist = Math.hypot(dx, dy), max = FLING_MAX_STRETCH * s.sc;
+        if (dist > max) { dx = dx / dist * max; dy = dy / dist * max; }
+        s.dragX = s.slingX + dx; s.dragY = s.slingY + dy;
+        if (s.loaded) Matter.Body.setPosition(s.loaded, { x: s.dragX, y: s.dragY });
+    }
+    function flingUp(e) {
+        const s = flingState; if (!s || !s.aiming) return;
+        s.aiming = false;
+        const dx = s.slingX - s.dragX, dy = s.slingY - s.dragY;
+        if (Math.hypot(dx, dy) < 10) { if (s.loaded) Matter.Body.setPosition(s.loaded, { x: s.slingX, y: s.slingY }); return; }
+        flingLaunch(s, dx, dy);
+    }
+    function flingKey(e) {
+        const s = flingState; if (!s) return;
+        const k = (e.key || '').toLowerCase();
+        if (k === ' ' || k === 'spacebar' || k === 'enter') { if (s.state === 'win' || s.state === 'lose') { flingAdvance(s); e.preventDefault(); } }
+        else if (k === 'r') { flingState = initFling(s.level, 0); e.preventDefault(); }
+    }
+    function enterFlingMode() {
+        if (typeof Matter === 'undefined') { alert('Duck Fling needs the Matter.js physics library, which failed to load (check your internet connection).'); return; }
+        isFlingMode = true;
+        document.getElementById('topBar').style.display = 'none';
+        document.querySelector('.controls').style.display = 'none';
+        document.getElementById('leftPanel').style.display = 'none';
+        document.getElementById('flingExitBtn').style.display = 'block';
+        document.getElementById('gamesDropdown').style.display = 'none';
+        document.getElementById('musicWrapper').style.display = 'none';   // bottom-right is gameplay space here
+        flingState = initFling(0, 0);
+        window.addEventListener('mousedown', flingDown);
+        window.addEventListener('mousemove', flingMove);
+        window.addEventListener('mouseup', flingUp);
+        window.addEventListener('keydown', flingKey);
+        canvas.style.cursor = 'crosshair';
+    }
+    function exitFlingMode() {
+        isFlingMode = false;
+        document.getElementById('topBar').style.display = '';
+        document.querySelector('.controls').style.display = 'flex';
+        document.getElementById('leftPanel').style.display = 'flex';
+        document.getElementById('flingExitBtn').style.display = 'none';
+        document.getElementById('musicWrapper').style.display = '';
+        window.removeEventListener('mousedown', flingDown);
+        window.removeEventListener('mousemove', flingMove);
+        window.removeEventListener('mouseup', flingUp);
+        window.removeEventListener('keydown', flingKey);
+        canvas.style.cursor = '';
+        if (flingState && flingState.engine) { Matter.World.clear(flingState.world); Matter.Engine.clear(flingState.engine); }
+        flingState = null;
+        updateBodyBackground();
+    }
+    const flingBtn = document.getElementById('flingBtn');
+    const flingExitBtn = document.getElementById('flingExitBtn');
+    flingBtn.onclick = () => { if (isFlingMode) exitFlingMode(); else enterFlingMode(); };
+    flingExitBtn.onclick = () => exitFlingMode();
+
     function resetSkateGame() {
         skateDuck.y = 0;
         skateDuck.vy = 0;
@@ -14991,9 +16279,156 @@
     }
 
     // --- Main Loop ---
+    // ── Weather overlay: rain (drizzle→hurricane), sun (sunny→inferno), snow (snow→blizzard).
+    //    Each axis reads its 0–1 value from `weather` and scales particle counts, wind, and
+    //    tint. Blendable — e.g. light rain + light snow = sleet. ──
+    function drawWeather(dt, now) {
+        const sec = dt / 1000;
+        const { rain, sun, snow } = weather;
+        const groundY = height * 0.9;
+
+        // ── SUN / INFERNO ──
+        if (sun > 0) {
+            const su = sun;
+            ctx.save();
+            // warm wash that reddens as it climbs toward inferno
+            ctx.fillStyle = `rgba(255,${Math.round(205 - su * 125)},${Math.round(140 - su * 120)},${(0.06 + su * 0.26).toFixed(3)})`;
+            ctx.fillRect(0, 0, width, height);
+            const sx = width * 0.84, sy = height * 0.17, baseR = 34 + su * 46;
+            const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, baseR * 3 + su * 260);
+            g.addColorStop(0, `rgba(255,${230 - su * 90},${170 - su * 120},${0.45 + su * 0.4})`);
+            g.addColorStop(1, 'rgba(255,180,90,0)');
+            ctx.fillStyle = g; ctx.fillRect(0, 0, width, height);
+            // rotating rays
+            ctx.save();
+            ctx.translate(sx, sy); ctx.rotate(now * 0.0002);
+            ctx.fillStyle = `rgba(255,${220 - su * 110},${130 - su * 110},${0.18 + su * 0.3})`;
+            const rays = 14, rayLen = baseR * 1.8 + su * 150;
+            for (let i = 0; i < rays; i++) {
+                ctx.rotate((Math.PI * 2) / rays);
+                ctx.beginPath(); ctx.moveTo(baseR * 0.9, -7); ctx.lineTo(baseR * 0.9 + rayLen, 0); ctx.lineTo(baseR * 0.9, 7); ctx.closePath(); ctx.fill();
+            }
+            ctx.restore();
+            // disc
+            ctx.beginPath(); ctx.arc(sx, sy, baseR, 0, Math.PI * 2);
+            ctx.fillStyle = `hsl(${46 - su * 40}, 100%, ${64 - su * 6}%)`;
+            ctx.shadowColor = `hsl(${46 - su * 40},100%,60%)`; ctx.shadowBlur = 30 + su * 40;
+            ctx.fill(); ctx.shadowBlur = 0;
+            // inferno extras
+            if (su > 0.55) {
+                const inf = (su - 0.55) / 0.45;
+                const vg = ctx.createRadialGradient(width / 2, height / 2, height * 0.25, width / 2, height / 2, height * 0.75);
+                vg.addColorStop(0, 'rgba(255,60,0,0)');
+                vg.addColorStop(1, `rgba(180,20,0,${((0.25 + inf * 0.4) * (0.8 + 0.2 * Math.sin(now * 0.006))).toFixed(3)})`);
+                ctx.fillStyle = vg; ctx.fillRect(0, 0, width, height);
+                if (wxEmbers.length < 70 && Math.random() < inf * 0.9) {
+                    wxEmbers.push({ x: Math.random() * width, y: height + 10, vy: -(40 + Math.random() * 120), vx: (Math.random() - 0.5) * 30, life: 1, r: 1.5 + Math.random() * 2.5 });
+                }
+                ctx.globalAlpha = 0.06 + inf * 0.10; ctx.strokeStyle = '#ffd9a0'; ctx.lineWidth = 2;
+                for (let b = 0; b < 5; b++) {
+                    const by = height - 20 - b * 26;
+                    ctx.beginPath();
+                    for (let x = 0; x <= width; x += 18) {
+                        const yy = by + Math.sin(x * 0.04 + now * 0.004 + b) * 4;
+                        x === 0 ? ctx.moveTo(x, yy) : ctx.lineTo(x, yy);
+                    }
+                    ctx.stroke();
+                }
+                ctx.globalAlpha = 1;
+            }
+            ctx.restore();
+        }
+        // embers finish their rise even after the sun is dialed down
+        for (let i = wxEmbers.length - 1; i >= 0; i--) {
+            const e = wxEmbers[i];
+            e.x += e.vx * sec; e.y += e.vy * sec; e.vy *= 0.99; e.life -= sec * 0.5;
+            if (e.life <= 0 || e.y < -10) { wxEmbers.splice(i, 1); continue; }
+            ctx.save(); ctx.globalAlpha = Math.max(0, e.life);
+            ctx.fillStyle = `hsl(${20 + Math.random() * 20}, 100%, 60%)`;
+            ctx.shadowColor = '#ff6a00'; ctx.shadowBlur = 8;
+            ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        }
+
+        // ── SNOW / BLIZZARD ──
+        if (snow > 0) {
+            const target = Math.round(snow * 260);
+            while (wxSnow.length < target) wxSnow.push({ x: Math.random() * width, y: Math.random() * -height, r: 1.5 + Math.random() * 3, ph: Math.random() * 6.28, sw: 0.5 + Math.random() });
+            if (wxSnow.length > target) wxSnow.length = target;
+            const wind = snow > 0.6 ? (snow - 0.6) / 0.4 * 240 : 0;
+            const fall = 50 + snow * 170;
+            ctx.save(); ctx.fillStyle = '#ffffff';
+            for (const f of wxSnow) {
+                f.ph += f.sw * sec * 2;
+                f.y += (fall * f.sw) * sec;
+                f.x += (Math.sin(f.ph) * 18 - wind) * sec;
+                if (f.y > height + 5 || f.x < -10) { f.y = -5; f.x = Math.random() * (width + 200); }
+                ctx.globalAlpha = 0.6 + snow * 0.35;
+                ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.restore();
+            if (snow > 0.6) { ctx.save(); ctx.fillStyle = `rgba(235,245,255,${(((snow - 0.6) / 0.4) * 0.32).toFixed(3)})`; ctx.fillRect(0, 0, width, height); ctx.restore(); }
+        } else if (wxSnow.length) wxSnow.length = 0;
+
+        // ── RAIN / HURRICANE ──
+        if (rain > 0) {
+            const target = Math.round(rain * 320);
+            while (wxRain.length < target) wxRain.push({ x: Math.random() * (width * 1.35), y: Math.random() * -height, sp: 0.8 + Math.random() * 0.5 });
+            if (wxRain.length > target) wxRain.length = target;
+            const gust = 1 + 0.25 * Math.sin(now * 0.0011) + rain * 0.4;
+            const vy = 640 + rain * 900;
+            const vx = -(60 + rain * 520) * gust;
+            ctx.save();
+            ctx.fillStyle = `rgba(30,42,66,${(rain * 0.28).toFixed(3)})`; ctx.fillRect(0, 0, width, height);
+            ctx.strokeStyle = `rgba(175,205,235,${(0.22 + rain * 0.4).toFixed(3)})`; ctx.lineWidth = 1.1; ctx.lineCap = 'round';
+            const k = 0.020;
+            for (const d of wxRain) {
+                const dvy = vy * d.sp, dvx = vx * d.sp;
+                d.x += dvx * sec; d.y += dvy * sec;
+                if (d.y > height || d.x < -60) {
+                    if (d.y > height && wxSplash.length < 60 && Math.random() < 0.4) wxSplash.push({ x: d.x, y: groundY, r: 1, life: 1 });
+                    d.y = -20 - Math.random() * 40; d.x = Math.random() * (width * 1.35);
+                }
+                ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - dvx * k, d.y - dvy * k); ctx.stroke();
+            }
+            ctx.restore();
+            for (let i = wxSplash.length - 1; i >= 0; i--) {
+                const s = wxSplash[i];
+                s.r += 40 * sec; s.life -= sec * 2.2; if (s.life <= 0) { wxSplash.splice(i, 1); continue; }
+                ctx.save(); ctx.globalAlpha = Math.max(0, s.life) * 0.5; ctx.strokeStyle = 'rgba(200,220,240,1)'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.arc(s.x, s.y, s.r, Math.PI, Math.PI * 2); ctx.stroke(); ctx.restore();
+            }
+            // lightning kicks in for storm/hurricane strength
+            if (rain > 0.7) {
+                wxLightTimer -= dt;
+                if (wxLightTimer <= 0) {
+                    wxLightTimer = 2600 - (rain - 0.7) / 0.3 * 1600 + Math.random() * 1500;
+                    wxLightFlash = 200;
+                    let bx = Math.random() * width, by = 0; wxBolt = [{ x: bx, y: by }];
+                    while (by < height * 0.7) { by += 30 + Math.random() * 40; bx += (Math.random() - 0.5) * 70; wxBolt.push({ x: bx, y: by }); }
+                }
+            }
+        } else if (wxRain.length) { wxRain.length = 0; wxSplash.length = 0; }
+
+        // lightning flash + bolt (decays on its own so it always finishes)
+        if (wxLightFlash > 0) {
+            wxLightFlash -= dt;
+            const a = Math.max(0, wxLightFlash / 200);
+            ctx.save();
+            ctx.fillStyle = `rgba(220,230,255,${(a * 0.5).toFixed(3)})`; ctx.fillRect(0, 0, width, height);
+            if (wxBolt && wxLightFlash > 110) {
+                ctx.strokeStyle = `rgba(255,255,255,${a})`; ctx.lineWidth = 2.5; ctx.shadowColor = '#cdd8ff'; ctx.shadowBlur = 16; ctx.lineJoin = 'round';
+                ctx.beginPath(); ctx.moveTo(wxBolt[0].x, wxBolt[0].y);
+                for (const p of wxBolt) ctx.lineTo(p.x, p.y);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+    }
+
     function animate() {
         const now = performance.now();
-        const dt = Math.min(now - lastFrameTime, 50); 
+        const dt = Math.min(now - lastFrameTime, 50);
         lastFrameTime = now;
 
         if (isSkateMode) {
@@ -15046,6 +16481,12 @@
 
         if (isRPSMode) {
             runRPS(dt);
+            requestAnimationFrame(animate);
+            return;
+        }
+
+        if (isFlingMode) {
+            runFling(dt);
             requestAnimationFrame(animate);
             return;
         }
@@ -16398,6 +17839,9 @@
             }
         }
         // ────────────────────────────────────────────────────────────────────
+
+        // Weather overlay (rain / sun / snow sliders) — drawn last so it layers over the scene
+        drawWeather(dt, now);
 
         requestAnimationFrame(animate);
     }
