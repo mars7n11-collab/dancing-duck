@@ -550,6 +550,13 @@
         .wdRem:hover .wdDel { opacity: 0.8; }
         .wdRem .wdDel:hover { opacity: 1; }
 
+        /* daily quote */
+        #wdQuoteShuffle { cursor: pointer; font-size: 12px; opacity: 0.55; transition: opacity 0.12s, transform 0.3s; }
+        #wdQuoteShuffle:hover { opacity: 1; }
+        #wdQuoteShuffle:active { transform: rotate(180deg); }
+        #wdQuote { font-size: 12.5px; line-height: 1.45; font-style: italic; opacity: 0.92; }
+        #wdQuoteBy { font-size: 11px; margin-top: 5px; text-align: right; font-weight: 700; color: var(--wd-accent); filter: brightness(1.2); }
+
         /* ── widget customizer popover (opened by the 🎨 button) ── */
         #wdCustomizer {
             display: none; position: absolute; top: 0; left: calc(100% + 10px); width: 198px;
@@ -718,6 +725,12 @@
                     <div id="wdWeather" title="Tap to switch °F / °C">
                         <div id="wdWxMsg">📍 <span class="wdLink" id="wdWxEnable">Show local weather</span></div>
                     </div>
+                </div>
+                <div class="wdDivider"></div>
+                <div class="wdSection" id="wdQuoteSection">
+                    <div class="wdHead"><span class="wdTitle">✨ Daily Quote</span><span id="wdQuoteShuffle" title="Another quote">🔀</span></div>
+                    <div id="wdQuote">—</div>
+                    <div id="wdQuoteBy"></div>
                 </div>
                 <div class="wdDivider"></div>
                 <div class="wdSection">
@@ -2439,9 +2452,10 @@
             // The dock belongs to the dance scene only — mirror the top bar (games hide it).
             dock.style.display = (topBar.style.display === 'none') ? 'none' : '';
             checkRemindersDue();
+            refreshDailyQuote();   // rolls the quote over at midnight
         }
-        // NB: tickClock() is started at the very end of this IIFE — it calls checkRemindersDue(),
-        // which reads `reminders`, so that state must be initialized first.
+        // NB: tickClock() is started at the very end of this IIFE — it calls checkRemindersDue()
+        // and refreshDailyQuote(), which read `reminders` / quote state, so those must init first.
 
         // ── weather ──
         const elWeather = document.getElementById('wdWeather');
@@ -2545,6 +2559,79 @@
                 setInterval(() => { if (lastWxC != null) requestWeather(); }, 900000);
             }
         })();
+
+        // ── daily inspirational quote ──────────────────────────────────────────────
+        // A curated, offline list picked deterministically by the calendar day, so it's
+        // stable all day and rolls over at midnight. 🔀 shuffles to a random one for the
+        // session. (Built-in rather than a quote API — those are frequently down/CORS-blocked.)
+        const QUOTES = [
+            ['The best way to predict the future is to create it.', 'Peter Drucker'],
+            ['It always seems impossible until it’s done.', 'Nelson Mandela'],
+            ['The only way to do great work is to love what you do.', 'Steve Jobs'],
+            ['Whether you think you can or you can’t, you’re right.', 'Henry Ford'],
+            ['Success is not final, failure is not fatal: it is the courage to continue that counts.', 'Winston Churchill'],
+            ['What you get by achieving your goals is not as important as what you become by it.', 'Zig Ziglar'],
+            ['Do what you can, with what you have, where you are.', 'Theodore Roosevelt'],
+            ['The journey of a thousand miles begins with a single step.', 'Lao Tzu'],
+            ['Fall seven times, stand up eight.', 'Japanese Proverb'],
+            ['Everything you’ve ever wanted is on the other side of fear.', 'George Addair'],
+            ['Believe you can and you’re halfway there.', 'Theodore Roosevelt'],
+            ['Act as if what you do makes a difference. It does.', 'William James'],
+            ['Quality is not an act, it is a habit.', 'Aristotle'],
+            ['Well done is better than well said.', 'Benjamin Franklin'],
+            ['The secret of getting ahead is getting started.', 'Mark Twain'],
+            ['Dream big and dare to fail.', 'Norman Vaughan'],
+            ['What we think, we become.', 'Buddha'],
+            ['The harder you work for something, the greater you’ll feel when you achieve it.', 'Unknown'],
+            ['Don’t watch the clock; do what it does. Keep going.', 'Sam Levenson'],
+            ['Little by little, one travels far.', 'J.R.R. Tolkien'],
+            ['Energy and persistence conquer all things.', 'Benjamin Franklin'],
+            ['Start where you are. Use what you have. Do what you can.', 'Arthur Ashe'],
+            ['The future belongs to those who believe in the beauty of their dreams.', 'Eleanor Roosevelt'],
+            ['It does not matter how slowly you go as long as you do not stop.', 'Confucius'],
+            ['You miss 100% of the shots you don’t take.', 'Wayne Gretzky'],
+            ['Strive not to be a success, but rather to be of value.', 'Albert Einstein'],
+            ['The mind is everything. What you think you become.', 'Buddha'],
+            ['Hardships often prepare ordinary people for an extraordinary destiny.', 'C.S. Lewis'],
+            ['A year from now you may wish you had started today.', 'Karen Lamb'],
+            ['The only limit to our realization of tomorrow is our doubts of today.', 'Franklin D. Roosevelt'],
+            ['Courage is resistance to fear, mastery of fear — not absence of fear.', 'Mark Twain'],
+            ['Happiness is not something ready made. It comes from your own actions.', 'Dalai Lama'],
+            ['If you’re going through hell, keep going.', 'Winston Churchill'],
+            ['Great things never came from comfort zones.', 'Unknown'],
+            ['Today is your opportunity to build the tomorrow you want.', 'Ken Poirot'],
+            ['Make each day your masterpiece.', 'John Wooden'],
+            ['Be so good they can’t ignore you.', 'Steve Martin'],
+            ['Stay hungry. Stay foolish.', 'Stewart Brand'],
+            ['Done is better than perfect.', 'Sheryl Sandberg'],
+            ['Whatever you are, be a good one.', 'Abraham Lincoln']
+        ];
+        const elQuote = document.getElementById('wdQuote');
+        const elQuoteBy = document.getElementById('wdQuoteBy');
+        let shownQuote = -1, quoteShuffled = false;
+        function todayQuoteIdx() {
+            const now = new Date();
+            const days = Math.floor((now.getTime() - now.getTimezoneOffset() * 60000) / 86400000);
+            return ((days % QUOTES.length) + QUOTES.length) % QUOTES.length;
+        }
+        function renderQuote(i) {
+            shownQuote = i;
+            elQuote.textContent = '“' + QUOTES[i][0] + '”';
+            elQuoteBy.textContent = '— ' + QUOTES[i][1];
+        }
+        // Called every clock tick — swaps to the new day's quote at midnight (unless shuffled).
+        function refreshDailyQuote() {
+            if (quoteShuffled) return;
+            const i = todayQuoteIdx();
+            if (i !== shownQuote) renderQuote(i);
+        }
+        document.getElementById('wdQuoteShuffle').addEventListener('click', () => {
+            quoteShuffled = true;
+            let i = shownQuote;
+            if (QUOTES.length > 1) { while (i === shownQuote) i = Math.floor(Math.random() * QUOTES.length); }
+            renderQuote(i);
+        });
+        renderQuote(todayQuoteIdx());
 
         // ── reminders ──
         const remForm = document.getElementById('wdRemForm');
