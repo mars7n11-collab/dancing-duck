@@ -110,6 +110,104 @@
             min-width: 160px;
         }
 
+        /* ── Flock / family-tree panel ─────────────────────────────────── */
+        #flockPanel {
+            display: none;
+            position: fixed;
+            top: 78px;
+            right: 18px;
+            width: 320px;
+            max-height: 72vh;
+            background: rgba(15, 23, 42, 0.96);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            backdrop-filter: blur(14px);
+            border-radius: 18px;
+            box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+            z-index: 300;
+            color: #f1eefc;
+            font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        #flockPanel.open { display: flex; }
+        .flockHead {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 13px 16px; border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .flockTitle { font-size: 15px; font-weight: 700; letter-spacing: 0.2px; }
+        #flockClose {
+            width: 24px; height: 24px; border: none; border-radius: 8px; cursor: pointer;
+            background: rgba(255,255,255,0.08); color: #cbd5e1; font-size: 13px; line-height: 1;
+        }
+        #flockClose:hover { background: rgba(255,255,255,0.16); color: #fff; }
+        #flockStats {
+            display: flex; gap: 6px; padding: 11px 16px; flex-wrap: wrap;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+        }
+        .flockStat {
+            background: rgba(255,255,255,0.06); border-radius: 9px; padding: 5px 9px;
+            font-size: 11px; line-height: 1.1;
+        }
+        .flockStat b { font-size: 14px; display: block; font-weight: 700; }
+        #flockBody { overflow-y: auto; padding: 6px 0 12px; }
+        .flockGen { padding: 10px 16px 2px; font-size: 11px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.6px; color: #a5b4fc; opacity: 0.9; }
+        .flockRow {
+            display: flex; align-items: center; gap: 10px; padding: 7px 16px;
+        }
+        .flockRow:hover { background: rgba(255,255,255,0.05); }
+        .flockSwatch {
+            width: 26px; height: 26px; border-radius: 50%; flex: 0 0 auto;
+            border: 2px solid rgba(255,255,255,0.25); box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+        }
+        .flockInfo { min-width: 0; flex: 1; }
+        .flockName { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 5px; }
+        .flockNameText { cursor: text; border-bottom: 1px dashed transparent; }
+        .flockNameText:hover { border-bottom-color: rgba(255,255,255,0.45); }
+        .flockNameInput {
+            font-size: 13px; font-weight: 600; font-family: inherit; color: #fff;
+            background: rgba(255,255,255,0.1); border: 1px solid var(--wd-accent, #8b5cf6);
+            border-radius: 6px; padding: 1px 6px; width: 130px; outline: none;
+        }
+        .flockRare {
+            font-size: 9px; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase;
+            color: #fde047; border: 1px solid rgba(253,224,71,0.5); border-radius: 5px; padding: 1px 4px;
+        }
+        .flockMeta { font-size: 11px; color: #94a3b8; margin-top: 1px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .flockStatus {
+            font-size: 9px; font-weight: 700; letter-spacing: 0.2px; color: #7dd3fc;
+            background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.35);
+            border-radius: 5px; padding: 1px 5px; white-space: nowrap;
+        }
+        .flockRow.isAway { opacity: 0.62; }
+        .flockSend {
+            flex: 0 0 auto; max-width: 104px; font-size: 11px; color: #e2e8f0; cursor: pointer;
+            background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.18);
+            border-radius: 8px; padding: 4px 6px; outline: none;
+        }
+        .flockSend:hover { background: rgba(255,255,255,0.14); }
+        .flockSend option { background: #1e293b; color: #e2e8f0; }
+        .flockEmpty { padding: 22px 16px; text-align: center; color: #94a3b8; font-size: 12px; }
+        /* Lineage tooltip (hover a row) */
+        #flockTip {
+            display: none; position: fixed; z-index: 320; min-width: 170px; max-width: 250px;
+            background: rgba(10, 14, 26, 0.97); border: 1px solid rgba(255,255,255,0.16);
+            border-radius: 12px; padding: 9px 11px; box-shadow: 0 12px 30px rgba(0,0,0,0.55);
+            color: #e2e8f0; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+            pointer-events: none; backdrop-filter: blur(10px);
+        }
+        .flockTipTitle { font-size: 11px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase;
+            color: #a5b4fc; margin-bottom: 6px; }
+        .flockTipRow { font-size: 12px; line-height: 1.55; white-space: nowrap; color: #cbd5e1; }
+        .flockTipRow.self { font-weight: 700; color: #fff; }
+        .flockTipArrow { color: #64748b; }
+        .flockTipFounder { color: #fcd34d; }
+        .flockTipRare {
+            font-size: 8.5px; font-weight: 800; letter-spacing: 0.3px; text-transform: uppercase;
+            color: #fde047; border: 1px solid rgba(253,224,71,0.5); border-radius: 4px; padding: 0 3px; margin-left: 3px;
+        }
+
         .controls {
             position: absolute;
             bottom: 24px;
@@ -473,6 +571,10 @@
         #wdTime { font-size: 30px; font-weight: 700; letter-spacing: 0.5px; line-height: 1.05; }
         #wdTime .ampm { font-size: 13px; font-weight: 600; opacity: 0.65; margin-left: 4px; }
         #wdDate { font-size: 12px; opacity: 0.68; margin-top: 3px; }
+        /* duck-themed analog clock (shown when the Analog clock style is chosen) */
+        #wdAnalog { display: none; justify-content: center; align-items: center; margin: 2px 0 5px; }
+        #wdAnalog svg { display: block; width: 104px; height: 104px; overflow: visible; }
+        #wdAnalog .wdHand { stroke-linecap: round; transition: none; }
         .wdBtns { position: absolute; top: -2px; right: 0; display: flex; gap: 5px; }
         .wdBtns button {
             width: 22px; height: 22px; padding: 0; display: flex; align-items: center; justify-content: center;
@@ -668,6 +770,7 @@
                 </div>
             </div>
 
+            <button id="flockBtn" class="bg-button flex items-center gap-1" title="View the flock & family tree">🦆 Flock</button>
             <button id="undoBtn" class="bg-button" style="display:none;opacity:0.4;cursor:not-allowed;" disabled title="Undo last spawn">↩ Undo</button>
             <button id="clearBtn" class="bg-button" style="display: none;">❌ Reset All</button>
         </div>
@@ -707,7 +810,17 @@
             <button id="bgBtn" class="bg-button">🌍 Scene: Club</button>
         </div>
     </div>
-    
+
+    <!-- Flock / family-tree panel: lists every living duck grouped by generation -->
+    <div id="flockPanel">
+        <div class="flockHead">
+            <span class="flockTitle">🦆 The Flock</span>
+            <button id="flockClose" title="Close">✕</button>
+        </div>
+        <div id="flockStats"></div>
+        <div id="flockBody"></div>
+    </div>
+
     <!-- Home dashboard: live clock + real weather + reminders (top-left glass card) -->
     <div id="widgetDock">
         <div class="wdCard">
@@ -717,6 +830,7 @@
                     <button id="wdCollapse" title="Collapse">▲</button>
                 </div>
                 <div id="wdTime">--:--</div>
+                <div id="wdAnalog"></div>
                 <div id="wdDate">—</div>
             </div>
             <div class="wdCollapsible">
@@ -748,6 +862,8 @@
         <!-- Theme customizer popover: accent colour, card style, and font -->
         <div id="wdCustomizer">
             <div class="wcTitle"><span>🎨 Customize</span></div>
+            <div class="wcLabel">Clock</div>
+            <div class="wcChips" id="wcClocks"></div>
             <div class="wcLabel">Accent</div>
             <div class="wcSwatches" id="wcAccents"></div>
             <div class="wcLabel">Card</div>
@@ -1036,9 +1152,52 @@
         green:  { base: "#22c55e", orange: "#15803d", gum: "#86efac", gumOrange: "#4ade80", crazyEyes: true, bigFeather: true }
     };
 
+    let duckIdSeq = 0;   // stable per-duck id, used for lineage / relatedness checks
+
+    // ── Duck names (lineage flavour) ──────────────────────────────────────
+    // Every duck is born with a name pulled from this pun-y pool. Names are
+    // handed out without repeats until the pool runs dry, then a number is
+    // appended ("Waddles 2"). usedDuckNames persists for the session so a name
+    // freed by a removed duck still isn't reused — keeps lineage labels stable.
+    const DUCK_NAME_POOL = [
+        'Waddles', 'Quackson', 'Sir Quacks', 'Featherton', 'Mallory', 'Drake',
+        'Beaky', 'Puddles', 'Nugget', 'Biscuit', 'Pip', 'Quacktavius', 'Plume',
+        'Splash', 'Bubbles', 'Noodle', 'Dumpling', 'Maize', 'Custard', 'Buttercup',
+        'Squawk', 'Marigold', 'Webster', 'Paddle', 'Pebble', 'Gizmo', 'Tater',
+        'Mango', 'Pickles', 'Waffles', 'Cricket', 'Hazel', 'Pumpkin', 'Sprout'
+    ];
+    let usedDuckNames = new Set();
+    function genDuckName() {
+        const free = DUCK_NAME_POOL.filter(n => !usedDuckNames.has(n));
+        let name;
+        if (free.length) {
+            name = free[Math.floor(Math.random() * free.length)];
+        } else {
+            // Pool exhausted — recycle with a suffix until that combo is also free.
+            let n = 2;
+            do { name = DUCK_NAME_POOL[Math.floor(Math.random() * DUCK_NAME_POOL.length)] + ' ' + n++; }
+            while (usedDuckNames.has(name));
+        }
+        usedDuckNames.add(name);
+        return name;
+    }
+
     function createDuck(colorProfile, startX, startY) {
+        // Breeding role is fixed by kind: the males (yellow, blue, green) can each pair with the
+        // single purple female. Hatched offspring start non-breeding (reset in the hatch code —
+        // babies spawn from the yellow profile, which would otherwise read as 'male') and are
+        // assigned a sex once they grow up. Relatives can never pair (see areRelated()).
+        let breed = null;
+        if (colorProfile === DUCK_COLORS.purple) breed = 'female';
+        else if (colorProfile === DUCK_COLORS.yellow || colorProfile === DUCK_COLORS.blue || colorProfile === DUCK_COLORS.green) breed = 'male';
         return {
+            id: ++duckIdSeq,
+            parents: [],
+            gen: 1,                 // founders are generation 1; offspring = max(parents)+1
+            birth: Date.now(),      // wall-clock birth time; drives the "age" shown in the Flock panel
+            name: genDuckName(),
             color: colorProfile,
+            breed: breed,
             physics: { x: startX, y: startY, vx: 0, vy: 0, isDragging: false, dragOffsetX: 0, dragOffsetY: 0 },
             mutations: { fat: 1.0, muscle: 1.0, energy: 0.0, gum: 0.0, shroom: 0.0, currentFat: 1.0, currentMuscle: 1.0, currentEnergy: 0.0, currentGum: 0.0, currentShroom: 0.0 },
             shroomCount: 0,
@@ -1076,6 +1235,97 @@
     }
 
     let ducks = [createDuck(DUCK_COLORS.yellow, 0, 0)];
+
+    // ── "Away" system ─────────────────────────────────────────────────────
+    // Ducks can be sent off the home screen (to school, bed, etc.) to reduce
+    // clutter. Away ducks are pulled OUT of `ducks` and parked in `awayDucks`,
+    // so every loop that iterates `ducks` (draw, physics, breeding, weapons)
+    // automatically ignores them — no per-loop guards needed. They keep all
+    // their data and can be brought home from the Flock panel at any time.
+    let awayDucks = [];
+    const AWAY_PLACES = {
+        school: { icon: '🏫', label: 'School',   away: 'At school' },
+        sleep:  { icon: '😴', label: 'Bed',      away: 'Sleeping'  },
+        park:   { icon: '🛝', label: 'Playground', away: 'At the playground' },
+        pond:   { icon: '🦆', label: 'Pond',     away: 'At the pond' }
+    };
+    function sendDuckAway(duck, placeKey) {
+        if (!AWAY_PLACES[placeKey]) return;
+        const i = ducks.indexOf(duck);
+        if (i !== -1) ducks.splice(i, 1);          // pull off the home screen
+        duck.away = placeKey;
+        // Drop any in-progress dance/love state so it parks cleanly.
+        duck.inLove = false; duck.loveTarget = null; duck._eggSpawned = false; duck.breadTimer = 0; duck.loveTimer = 0;
+        if (awayDucks.indexOf(duck) === -1) awayDucks.push(duck);
+        if (draggedDuck === duck) draggedDuck = null;
+        if (typeof updateFriendBtn === 'function') updateFriendBtn();
+        saveFlock();
+    }
+    function bringDuckHome(duck) {
+        const i = awayDucks.indexOf(duck);
+        if (i !== -1) awayDucks.splice(i, 1);
+        duck.away = null;
+        // Re-enter from above near the middle so it drops back into the scene.
+        duck.physics.x = (Math.random() - 0.5) * 320;
+        duck.physics.y = -220; duck.physics.vx = 0; duck.physics.vy = 0;
+        duck.physics.isDragging = false;
+        if (ducks.indexOf(duck) === -1) ducks.push(duck);
+        if (typeof updateFriendBtn === 'function') updateFriendBtn();
+        saveFlock();
+    }
+
+    // ── Flock persistence ─────────────────────────────────────────────────
+    // The whole family (home + away) is saved to localStorage so a bred lineage
+    // survives a reload. We persist only identity/lineage — not transient physics
+    // or game state — and reconstruct fresh duck objects on load. Saving is event
+    // driven (breed, mature, send/home, add friend, reset) rather than on a timer,
+    // so we never accidentally capture a mid-game scratch state.
+    const FLOCK_KEY = 'duckFlock';
+    function colorKeyOf(color) { for (const k in DUCK_COLORS) if (color === DUCK_COLORS[k]) return k; return null; }
+    function saveFlock() {
+        try {
+            const flock = ducks.concat(awayDucks).map(d => {
+                const ck = colorKeyOf(d.color);   // originals keep a key + shared palette; bred ducks store their colour
+                return {
+                    id: d.id, name: d.name, gen: d.gen || 1, breed: d.breed || null,
+                    birth: d.birth || null,
+                    parents: d.parents || [], parentNames: d.parentNames || [], away: d.away || null,
+                    isBaby: !!d._isBaby, growTimer: d._growTimer || 0, adultScale: d._adultScale || null,
+                    colorKey: ck, color: ck ? null : d.color
+                };
+            });
+            localStorage.setItem(FLOCK_KEY, JSON.stringify({ v: 1, seq: duckIdSeq, names: Array.from(usedDuckNames), flock }));
+        } catch (e) {}
+    }
+    function loadFlock() {
+        let raw;
+        try { raw = JSON.parse(localStorage.getItem(FLOCK_KEY) || 'null'); } catch (e) { return; }
+        if (!raw || !Array.isArray(raw.flock) || !raw.flock.length) return;
+        const home = [], away = [];
+        for (const e of raw.flock) {
+            const profile = (e.colorKey && DUCK_COLORS[e.colorKey]) ? DUCK_COLORS[e.colorKey] : DUCK_COLORS.yellow;
+            const d = createDuck(profile, 0, 0);   // builds a full duck; we then overwrite the saved identity below
+            d.id = e.id; d.name = e.name; d.gen = e.gen || 1; d.breed = e.breed || null;
+            d.birth = e.birth || Date.now();   // keep ages continuous across reloads
+            d.parents = e.parents || []; d.parentNames = e.parentNames || [];
+            if (e.colorKey && DUCK_COLORS[e.colorKey]) d.color = DUCK_COLORS[e.colorKey];
+            else if (e.color) d.color = e.color;
+            d._isBaby = !!e.isBaby; d._growTimer = e.growTimer || 0;
+            if (e.adultScale) d._adultScale = e.adultScale;
+            d.away = e.away || null;
+            (d.away ? away : home).push(d);
+        }
+        // Never leave the stage empty: if everyone was sent away, recall one duck.
+        if (!home.length && away.length) { const d = away.shift(); d.away = null; home.push(d); }
+        if (!home.length) return;   // nothing usable — keep the default founder
+        // Spread the home ducks across the stage so they don't stack on entry.
+        home.forEach((d, i) => { d.physics.x = home.length > 1 ? (-220 + (i / (home.length - 1)) * 440) : 0; d.physics.y = 0; });
+        ducks = home; awayDucks = away;
+        // Restore the id counter and used-name set so future ducks stay unique.
+        duckIdSeq = Math.max(raw.seq || 0, ...ducks.concat(awayDucks).map(d => d.id || 0));
+        usedDuckNames = new Set(raw.names && raw.names.length ? raw.names : ducks.concat(awayDucks).map(d => d.name));
+    }
+    loadFlock();
     let draggedDuck = null;
     let dragTargetLimb = null;
 
@@ -1247,8 +1497,10 @@
         balls = []; ballConfetti = []; foods = []; slimes = []; targets = []; duckEggs = [];
         const yellowDuck = ducks.find(d => d.color === DUCK_COLORS.yellow) || ducks[0];
         ducks = [createDuck(DUCK_COLORS.yellow, 0, 0)];
+        awayDucks = [];
         draggedDuck = null; dragTargetLimb = null;
         updateFriendBtn();
+        saveFlock();
         currentTool = 'hand'; isShooting = false; frozenTimeRemaining = 0; freezeCharge = 0;
         taserActive = false; taserArmed = false; taserShooting = false; taserOnDuck = false; taserTimer = 0;
         flameActive = false; flameArmed = false; flameShooting = false; flameTimer = 0; flameDuckX = 0;
@@ -2165,11 +2417,13 @@
             // Remove last friend instead
             if (ducks.length > 1) ducks.pop();
             updateFriendBtn();
+            saveFlock();
             return;
         }
         ducks.push(createDuck(DUCK_COLORS[colorKey], 160, -200));
-        pushUndo('🦆 Friend', () => { if (ducks.length > 1) { ducks.pop(); updateFriendBtn(); } });
+        pushUndo('🦆 Friend', () => { if (ducks.length > 1) { ducks.pop(); updateFriendBtn(); saveFlock(); } });
         updateFriendBtn();
+        saveFlock();
     }
 
     // Toggle dropdown; clicking main button area also removes last friend if friends exist
@@ -2187,6 +2441,241 @@
 
     // Close dropdown when clicking elsewhere (reuse window click listener already set up)
     window.addEventListener('click', () => { friendDropdown.style.display = 'none'; });
+
+    // ── Flock / family-tree panel ─────────────────────────────────────────
+    // Lists every living duck grouped by generation, showing lineage (who their
+    // parents were), sex, and any rare mutation. Re-rendered whenever it's open.
+    const flockPanel = document.getElementById('flockPanel');
+    const flockBtn   = document.getElementById('flockBtn');
+
+    function flockRoster() { return ducks.concat(awayDucks); }   // home + away, one combined list
+    function flockFindDuck(id) { return flockRoster().find(d => d.id === id) || null; }
+    // Human-friendly age from a birth timestamp ("42s old" → "7m old" → "3h old" → "2d old").
+    function formatAge(birth) {
+        if (!birth) return 'newborn';
+        const s = Math.max(0, Math.floor((Date.now() - birth) / 1000));
+        if (s < 60) return s + 's old';
+        const m = Math.floor(s / 60); if (m < 60) return m + 'm old';
+        const h = Math.floor(m / 60); if (h < 24) return h + 'h old';
+        return Math.floor(h / 24) + 'd old';
+    }
+    function flockEldestId() {   // oldest (smallest birth) duck — gets a 👑 in the panel
+        let id = null, min = Infinity;
+        for (const d of flockRoster()) { if (d.birth && d.birth < min) { min = d.birth; id = d.id; } }
+        return id;
+    }
+    // Live-update just the age labels (no full re-render → never disturbs an open dropdown/edit).
+    function updateFlockAges() {
+        const eid = flockEldestId(), many = flockRoster().length > 1;
+        document.querySelectorAll('#flockBody .flockAge').forEach(span => {
+            const d = flockFindDuck(+span.dataset.id);
+            if (d) span.textContent = (many && d.id === eid ? '👑 ' : '') + formatAge(d.birth);
+        });
+    }
+    function flockParentLabel(d) {
+        // Prefer names stored at birth (survive a parent being removed); fall back to a live lookup.
+        let names = (d.parentNames && d.parentNames.length) ? d.parentNames.slice() : null;
+        if (!names && d.parents && d.parents.length) {
+            names = d.parents.map(pid => { const p = flockRoster().find(x => x.id === pid); return p ? p.name : '?'; });
+        }
+        return names ? 'child of ' + names.join(' & ') : '✦ founder';
+    }
+    // A compact fingerprint of the roster — used to skip re-rendering (and so avoid clobbering an
+    // open dropdown) when nothing the panel shows has actually changed.
+    function flockSig() {
+        return flockRoster().map(d => d.id + ':' + (d.gen||1) + ':' + (d.away||'home') + ':' + (d._isBaby?'b':'a') + ':' + ((d.color&&d.color.rare)||'') + ':' + d.name).join('|');
+    }
+    let flockLastSig = null;
+    function renderFlock(force) {
+        const sig = flockSig();
+        if (!force && sig === flockLastSig) return;   // nothing changed → leave the DOM (and any open <select>) alone
+        flockLastSig = sig;
+        if (typeof hideFlockTip === 'function') hideFlockTip();   // rows are about to be recreated
+        const body = document.getElementById('flockBody');
+        const stats = document.getElementById('flockStats');
+        const roster = flockRoster();
+        if (!roster.length) { body.innerHTML = '<div class="flockEmpty">No ducks in the flock.</div>'; stats.innerHTML = ''; return; }
+        const maxGen  = roster.reduce((mx, d) => Math.max(mx, d.gen || 1), 1);
+        const rares   = roster.filter(d => d.color && d.color.rare).length;
+        const awayN   = awayDucks.length;
+        stats.innerHTML =
+            '<div class="flockStat"><b>' + ducks.length + '</b>at home</div>' +
+            (awayN ? '<div class="flockStat"><b>' + awayN + '</b>away</div>' : '') +
+            '<div class="flockStat"><b>' + maxGen + '</b>generation' + (maxGen > 1 ? 's' : '') + '</div>' +
+            '<div class="flockStat"><b>' + rares + '</b>rare</div>';
+        // Build the "send to" dropdown options once.
+        const optsFor = (cur) => {
+            let o = '<option value="home"' + (!cur ? ' selected' : '') + '>🏠 Home</option>';
+            for (const k in AWAY_PLACES) o += '<option value="' + k + '"' + (cur === k ? ' selected' : '') + '>' + AWAY_PLACES[k].icon + ' ' + AWAY_PLACES[k].label + '</option>';
+            return o;
+        };
+        // Group by generation, ascending.
+        const eid = flockEldestId(), many = roster.length > 1;
+        const byGen = {};
+        for (const d of roster) { const g = d.gen || 1; (byGen[g] = byGen[g] || []).push(d); }
+        let html = '';
+        Object.keys(byGen).map(Number).sort((a, b) => a - b).forEach(g => {
+            html += '<div class="flockGen">Generation ' + g + '</div>';
+            for (const d of byGen[g]) {
+                const c = d.color || {};
+                const sex = d._isBaby ? '🐣 baby' : (d.breed === 'male' ? '♂ male' : d.breed === 'female' ? '♀ female' : '—');
+                const rareBadge = c.rare ? '<span class="flockRare">' + c.rare + '</span>' : '';
+                const place = d.away ? AWAY_PLACES[d.away] : null;
+                const status = place ? '<span class="flockStatus">' + place.icon + ' ' + place.away + '</span>' : '';
+                const ageTxt = (many && d.id === eid ? '👑 ' : '') + formatAge(d.birth);
+                html +=
+                    '<div class="flockRow' + (d.away ? ' isAway' : '') + '" data-id="' + d.id + '">' +
+                      '<div class="flockSwatch" style="background:' + (c.base || '#fde68a') + '"></div>' +
+                      '<div class="flockInfo">' +
+                        '<div class="flockName"><span class="flockNameText" data-id="' + d.id + '" title="Click to rename">' + escapeFlock(d.name || 'Duck') + '</span>' + rareBadge + status + '</div>' +
+                        '<div class="flockMeta">' + sex + ' · <span class="flockAge" data-id="' + d.id + '">' + ageTxt + '</span> · ' + escapeFlock(flockParentLabel(d)) + '</div>' +
+                      '</div>' +
+                      '<select class="flockSend" data-id="' + d.id + '" title="Send ' + escapeFlock(d.name || 'duck') + ' somewhere">' + optsFor(d.away) + '</select>' +
+                    '</div>';
+            }
+        });
+        body.innerHTML = html;
+    }
+    function escapeFlock(s) { return String(s).replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch])); }
+
+    // Sending a duck away / home via the per-row dropdown (event-delegated, survives re-renders).
+    document.getElementById('flockBody').addEventListener('change', (e) => {
+        const sel = e.target.closest('.flockSend');
+        if (!sel) return;
+        const d = flockFindDuck(+sel.dataset.id);
+        if (!d) return;
+        if (sel.value === 'home') bringDuckHome(d); else sendDuckAway(d, sel.value);
+        renderFlock(true);   // force: the roster changed
+    });
+
+    // Click a duck's name to rename it (event-delegated). While an edit box is open,
+    // flockEditing pauses the auto-refresh so a hatch/grow tick can't yank the input away.
+    let flockEditing = false;
+    function commitRename(d, raw, input) {
+        const name = (raw || '').trim().slice(0, 24);
+        flockEditing = false;
+        if (name && name !== d.name) {
+            usedDuckNames.delete(d.name);   // free the old name, claim the new one
+            d.name = name;
+            usedDuckNames.add(name);
+            // keep stored lineage labels pointing at this duck consistent isn't needed —
+            // parentNames are snapshots taken at birth and intentionally stay as they were.
+            saveFlock();
+        }
+        renderFlock(true);
+    }
+    document.getElementById('flockBody').addEventListener('click', (e) => {
+        const span = e.target.closest('.flockNameText');
+        if (!span || flockEditing) return;
+        const d = flockFindDuck(+span.dataset.id);
+        if (!d) return;
+        flockEditing = true;
+        const input = document.createElement('input');
+        input.type = 'text'; input.className = 'flockNameInput'; input.value = d.name || '';
+        input.maxLength = 24;
+        span.replaceWith(input);
+        input.focus(); input.select();
+        let done = false;
+        const finish = (save) => {
+            if (done) return; done = true;
+            if (save) commitRename(d, input.value, input);
+            else { flockEditing = false; renderFlock(true); }
+        };
+        input.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter') { ev.preventDefault(); finish(true); }
+            else if (ev.key === 'Escape') { ev.preventDefault(); finish(false); }
+        });
+        input.addEventListener('blur', () => finish(true));
+    });
+
+    // ── Lineage tooltip ───────────────────────────────────────────────────
+    // Hovering a duck row shows its ancestor tree. We walk up via parent ids
+    // (recursing into ancestors still in the flock) and fall back to the name
+    // snapshots taken at birth for ancestors that have since been removed.
+    const flockTip = document.createElement('div');
+    flockTip.id = 'flockTip';
+    document.body.appendChild(flockTip);
+    function buildAncestry(duck) {
+        const rows = [], seen = new Set();
+        (function walk(node, depth) {
+            if (depth > 4) return;                       // cap depth so the tooltip stays compact
+            const d = node.duck;
+            const label = d ? d.name : node.name;
+            const hasParents = d && ((d.parents && d.parents.length) || (d.parentNames && d.parentNames.length));
+            rows.push({ depth, label, self: depth === 0, founder: depth > 0 && !hasParents,
+                        rare: d && d.color && d.color.rare ? d.color.rare : null });
+            if (d && !seen.has(d.id)) {
+                seen.add(d.id);
+                let parents = [];
+                if (d.parents && d.parents.length) {
+                    parents = d.parents.map((pid, i) => {
+                        const p = flockRoster().find(x => x.id === pid);
+                        return p ? { duck: p } : { name: (d.parentNames && d.parentNames[i]) || '?' };
+                    });
+                } else if (d.parentNames && d.parentNames.length) {
+                    parents = d.parentNames.map(n => ({ name: n }));
+                }
+                parents.forEach(p => walk(p, depth + 1));
+            }
+        })({ duck }, 0);
+        return rows;
+    }
+    function ancestryHtml(duck) {
+        const rows = buildAncestry(duck);
+        let h = '<div class="flockTipTitle">🌳 Lineage</div>';
+        if (rows.length <= 1) return h + '<div class="flockTipRow">✦ Founder — an original duck, no known ancestors.</div>';
+        for (const r of rows) {
+            const rare = r.rare ? ' <span class="flockTipRare">' + r.rare + '</span>' : '';
+            const founder = r.founder ? ' <span class="flockTipFounder">✦</span>' : '';
+            h += '<div class="flockTipRow' + (r.self ? ' self' : '') + '" style="padding-left:' + (r.depth * 15) + 'px">' +
+                 (r.self ? '' : '<span class="flockTipArrow">↳</span> ') + escapeFlock(r.label) + founder + rare + '</div>';
+        }
+        return h;
+    }
+    function showFlockTip(row) {
+        const d = flockFindDuck(+row.dataset.id);
+        if (!d) return;
+        flockTip.innerHTML = ancestryHtml(d);
+        flockTip._curId = d.id;
+        const pr = flockPanel.getBoundingClientRect(), rr = row.getBoundingClientRect();
+        flockTip.style.display = 'block';
+        flockTip.style.left = 'auto';
+        flockTip.style.right = (window.innerWidth - pr.left + 8) + 'px';   // sit just left of the panel
+        const top = Math.max(8, Math.min(rr.top, window.innerHeight - flockTip.offsetHeight - 8));
+        flockTip.style.top = top + 'px';
+    }
+    function hideFlockTip() { flockTip.style.display = 'none'; flockTip._curId = null; }
+    const flockBodyEl = document.getElementById('flockBody');
+    flockBodyEl.addEventListener('mouseover', (e) => {
+        if (flockEditing) return;
+        const row = e.target.closest('.flockRow');
+        if (!row) return;
+        if (flockTip._curId !== +row.dataset.id) showFlockTip(row);   // only rebuild when the row changes
+    });
+    flockBodyEl.addEventListener('mouseout', (e) => {
+        const row = e.target.closest('.flockRow');
+        if (row && !row.contains(e.relatedTarget)) hideFlockTip();
+    });
+    flockBodyEl.addEventListener('scroll', hideFlockTip);
+
+    let flockTimer = null;
+    function openFlock() {
+        flockPanel.classList.add('open');
+        renderFlock(true);
+        if (!flockTimer) flockTimer = setInterval(() => {
+            if (flockPanel.classList.contains('open') && !flockEditing) { renderFlock(false); updateFlockAges(); }
+        }, 1000);
+    }
+    function closeFlock() {
+        flockPanel.classList.remove('open');
+        hideFlockTip();
+        if (flockTimer) { clearInterval(flockTimer); flockTimer = null; }
+    }
+    flockBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        flockPanel.classList.contains('open') ? closeFlock() : openFlock();
+    });
+    document.getElementById('flockClose').addEventListener('click', closeFlock);
     document.getElementById('hatBtn').addEventListener('click', () => {
         const anyOn = ducks.some(d => d.hatActive);
         for (const d of ducks) d.hatActive = !anyOn;
@@ -2334,7 +2823,8 @@
             mono:    { name: 'Mono',    stack: "'Consolas', 'SF Mono', ui-monospace, 'Courier New', monospace" },
             serif:   { name: 'Serif',   stack: "Georgia, 'Times New Roman', serif" }
         };
-        const THEME_DEFAULT = { accent: 'violet', card: 'midnight', font: 'system' };
+        const CLOCKS = { digital: 'Digital', analog: 'Analog' };
+        const THEME_DEFAULT = { accent: 'violet', card: 'midnight', font: 'system', clock: 'digital' };
         let theme = Object.assign({}, THEME_DEFAULT);
         try { theme = Object.assign(theme, JSON.parse(localStorage.getItem('duckDockTheme') || '{}')); } catch (e) {}
 
@@ -2350,7 +2840,13 @@
             dock.style.setProperty('--wd-line', c.line);
             dock.style.setProperty('--wd-scheme', c.scheme);
             dock.style.setProperty('--wd-font', f.stack);
+            // swap clock face (digital ↔ analog)
+            const analog = theme.clock === 'analog';
+            document.getElementById('wdTime').style.display = analog ? 'none' : '';
+            document.getElementById('wdAnalog').style.display = analog ? 'flex' : 'none';
+            if (analog) updateAnalogClock();
             // reflect selection state in the pickers
+            dock.querySelectorAll('#wcClocks .wcChip').forEach(el => el.classList.toggle('sel', el.dataset.id === theme.clock));
             dock.querySelectorAll('#wcAccents .wcSwatch').forEach(el => el.classList.toggle('sel', el.dataset.id === theme.accent));
             dock.querySelectorAll('#wcCards .wcChip').forEach(el => el.classList.toggle('sel', el.dataset.id === theme.card));
             dock.querySelectorAll('#wcFonts .wcChip').forEach(el => el.classList.toggle('sel', el.dataset.id === theme.font));
@@ -2358,6 +2854,13 @@
         function saveTheme() { try { localStorage.setItem('duckDockTheme', JSON.stringify(theme)); } catch (e) {} }
 
         // build the pickers
+        const wcClocks = document.getElementById('wcClocks');
+        Object.keys(CLOCKS).forEach(id => {
+            const chip = document.createElement('div');
+            chip.className = 'wcChip'; chip.dataset.id = id; chip.textContent = CLOCKS[id];
+            chip.onclick = () => { theme.clock = id; saveTheme(); applyTheme(); };
+            wcClocks.appendChild(chip);
+        });
         const wcAccents = document.getElementById('wcAccents');
         ACCENTS.forEach(a => {
             const s = document.createElement('div');
@@ -2394,6 +2897,49 @@
         document.addEventListener('click', (e) => {
             if (dock.classList.contains('customizing') && !dock.contains(e.target)) dock.classList.remove('customizing');
         });
+
+        // ── duck-themed analog clock face (built once; hands re-rotated each tick) ──
+        let handHour, handMin, handSec;
+        function buildAnalog() {
+            let ticks = '';
+            for (let i = 0; i < 12; i++) {
+                const a = i * 30 * Math.PI / 180, long = (i % 3 === 0);
+                const r1 = long ? 38 : 41, r2 = 45;
+                ticks += '<line x1="' + (50 + Math.sin(a) * r1).toFixed(1) + '" y1="' + (50 - Math.cos(a) * r1).toFixed(1) +
+                         '" x2="' + (50 + Math.sin(a) * r2).toFixed(1) + '" y2="' + (50 - Math.cos(a) * r2).toFixed(1) +
+                         '" stroke="rgba(90,60,10,0.5)" stroke-width="' + (long ? 2 : 1.2) + '" stroke-linecap="round"/>';
+            }
+            document.getElementById('wdAnalog').innerHTML =
+                '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">' +
+                  '<defs><radialGradient id="wdDuckFaceGrad" cx="40%" cy="33%" r="75%">' +
+                    '<stop offset="0%" stop-color="#fff7d6"/><stop offset="55%" stop-color="#fcd34d"/><stop offset="100%" stop-color="#f59e0b"/>' +
+                  '</radialGradient></defs>' +
+                  '<path d="M50 8 Q45 -2 53 1 Q49 5 57 5 Q51 9 50 10 Z" style="fill:var(--wd-accent)" opacity="0.9"/>' +  // head feather
+                  '<circle cx="50" cy="50" r="46" fill="url(#wdDuckFaceGrad)" stroke="rgba(70,45,5,0.45)" stroke-width="2"/>' +
+                  ticks +
+                  '<circle cx="39" cy="30" r="6.5" fill="#fff" stroke="rgba(70,45,5,0.5)" stroke-width="0.8"/>' +      // eyes
+                  '<circle cx="61" cy="30" r="6.5" fill="#fff" stroke="rgba(70,45,5,0.5)" stroke-width="0.8"/>' +
+                  '<circle cx="40.5" cy="31" r="2.8" fill="#1f1300"/><circle cx="62.5" cy="31" r="2.8" fill="#1f1300"/>' +
+                  '<circle cx="41.4" cy="30" r="0.9" fill="#fff"/><circle cx="63.4" cy="30" r="0.9" fill="#fff"/>' +
+                  '<path d="M42 40 Q50 37 58 40 Q50 49 42 40 Z" fill="#f97316" stroke="rgba(120,50,0,0.5)" stroke-width="0.8"/>' +  // beak
+                  '<line id="wdHandHour" class="wdHand" x1="50" y1="55" x2="50" y2="32" stroke="#5b3a0a" stroke-width="4.2"/>' +
+                  '<line id="wdHandMin" class="wdHand" x1="50" y1="56" x2="50" y2="20" stroke="#7a5212" stroke-width="3"/>' +
+                  '<line id="wdHandSec" class="wdHand" x1="50" y1="60" x2="50" y2="16" style="stroke:var(--wd-accent)" stroke-width="1.5"/>' +
+                  '<circle cx="50" cy="50" r="3.4" style="fill:var(--wd-accent)" stroke="#fff" stroke-width="1"/>' +
+                '</svg>';
+            handHour = document.getElementById('wdHandHour');
+            handMin  = document.getElementById('wdHandMin');
+            handSec  = document.getElementById('wdHandSec');
+        }
+        function updateAnalogClock() {
+            if (!handHour) return;
+            const n = new Date(), s = n.getSeconds(), m = n.getMinutes(), h = n.getHours();
+            handHour.setAttribute('transform', 'rotate(' + ((h % 12) * 30 + m * 0.5) + ' 50 50)');
+            handMin.setAttribute('transform',  'rotate(' + (m * 6 + s * 0.1) + ' 50 50)');
+            handSec.setAttribute('transform',  'rotate(' + (s * 6) + ' 50 50)');
+        }
+        buildAnalog();
+
         applyTheme();
 
         // ── drag-to-reposition (grab the clock header; persists x/y) ──
@@ -2449,8 +2995,12 @@
             h = h % 12; if (h === 0) h = 12;
             elTime.innerHTML = h + ':' + (m < 10 ? '0' + m : m) + '<span class="ampm">' + ampm + '</span>';
             elDate.textContent = now.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+            if (theme.clock === 'analog') updateAnalogClock();
             // The dock belongs to the dance scene only — mirror the top bar (games hide it).
             dock.style.display = (topBar.style.display === 'none') ? 'none' : '';
+            // Keep the Flock button (and panel) tied to the duck-management controls — games hide them.
+            const _fb = document.getElementById('friendBtn'), _flb = document.getElementById('flockBtn');
+            if (_fb && _flb) { _flb.style.display = _fb.style.display; if (_fb.style.display === 'none') document.getElementById('flockPanel').classList.remove('open'); }
             checkRemindersDue();
             refreshDailyQuote();   // rolls the quote over at midnight
         }
@@ -2804,6 +3354,40 @@
         ctx.fill(); ctx.restore();
     }
 
+    // Floating lineage label drawn above a duck's head: name, generation, sex glyph,
+    // plus a ★ + colour for rare mutations. Only shown once the flock has grown (>1 duck)
+    // so the default single-duck scene stays uncluttered. (sx, sy) is the duck's body centre.
+    function drawDuckNameTag(d, sx, sy) {
+        const scale = (d.color && d.color.sizeScale) || 1;
+        const tagY = sy - 90 - 70 * scale;                 // sit comfortably above the head
+        const rare = d.color && d.color.rare;
+        const sexGlyph = d._isBaby ? ' 🐣' : (d.breed === 'male' ? ' ♂' : d.breed === 'female' ? ' ♀' : '');
+        const text = (rare ? '★ ' : '') + (d.name || 'Duck') + '  ·  G' + (d.gen || 1) + sexGlyph;
+        ctx.save();
+        ctx.font = '600 12px ' + "system-ui, -apple-system, 'Segoe UI', sans-serif";
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const w = ctx.measureText(text).width + 16, h = 19;
+        // pill background
+        ctx.beginPath();
+        const bx = sx - w / 2, by = tagY - h / 2, r = h / 2;
+        ctx.moveTo(bx + r, by);
+        ctx.arcTo(bx + w, by, bx + w, by + h, r);
+        ctx.arcTo(bx + w, by + h, bx, by + h, r);
+        ctx.arcTo(bx, by + h, bx, by, r);
+        ctx.arcTo(bx, by, bx + w, by, r);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(17, 12, 30, 0.72)';
+        ctx.fill();
+        ctx.strokeStyle = rare ? 'rgba(253, 224, 71, 0.8)' : 'rgba(255,255,255,0.18)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        // text
+        ctx.fillStyle = rare ? '#fde047' : '#f1eefc';
+        ctx.fillText(text, sx, tagY + 0.5);
+        ctx.restore();
+    }
+
     function triggerLove(duck1, duck2) {
         duck1.inLove = true; duck2.inLove = true;
         duck1.loveTimer = 20000; duck2.loveTimer = 20000;
@@ -2813,8 +3397,60 @@
         duck1.loveTarget = duck2; duck2.loveTarget = duck1;
     }
 
-    function spawnEgg(x, y) {
-        duckEggs.push({ x, y, hatch: 0, maxHatch: 14000, timer: 0, shakeX: 0, wobble: 0, wobbleV: 0, crackData: null, hatched: false, hatchAnim: 0 });
+    // Average two #rrggbb colours channel-by-channel — used to blend parent colours into a baby.
+    function mixHex(a, b) {
+        const p = h => { h = String(h).replace('#', ''); return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)]; };
+        const x = p(a), y = p(b), c = i => Math.round((x[i] + y[i]) / 2).toString(16).padStart(2, '0');
+        return '#' + c(0) + c(1) + c(2);
+    }
+    // Rare birth mutations: every clutch has a small chance to roll one of these instead of a plain
+    // blend. Each just rewrites colours and/or the grown-up size, so they render with the existing
+    // duck art — no special draw code. `label` is shown (with a ★) on the duck's name tag.
+    const DUCK_MUTATIONS = [
+        { rare: 'Cosmic', adultScale: 0.98, base: '#a855f7', orange: '#c084fc', gum: '#e9d5ff', gumOrange: '#d8b4fe' },
+        { rare: 'Albino', adultScale: 0.92, base: '#fdfdfd', orange: '#fbcfe8', gum: '#ffffff', gumOrange: '#fce7f3' },
+        { rare: 'Shadow', adultScale: 0.92, base: '#475569', orange: '#94a3b8', gum: '#64748b', gumOrange: '#cbd5e1' },
+        { rare: 'Golden', adultScale: 0.95, base: '#fbbf24', orange: '#f59e0b', gum: '#fde68a', gumOrange: '#fcd34d' },
+        { rare: 'Giant',  adultScale: 1.30 },   // keeps the blended colours, just grows huge
+        { rare: 'Tiny',   adultScale: 0.62 }    // keeps the blended colours, stays pocket-sized
+    ];
+    const MUTATION_CHANCE = 0.12;   // ~1 in 8 clutches is special
+
+    // Build a hatchling's colour profile by blending its two parents and inheriting their special
+    // traits (the wild duck's crazy eyes / big feather pass on ~60% of the time when present).
+    // ~12% of the time a rare mutation overrides the blend (see DUCK_MUTATIONS). The returned object
+    // may carry `rare` (label) and `adultScale` (grown size); hatchlings always start at 0.55.
+    function makeChildColor(p1, p2) {
+        const c1 = p1.color || {}, c2 = p2.color || {};
+        const col = {
+            base:      mixHex(c1.base, c2.base),
+            orange:    mixHex(c1.orange, c2.orange),
+            gum:       mixHex(c1.gum || c1.base, c2.gum || c2.base),
+            gumOrange: mixHex(c1.gumOrange || c1.orange, c2.gumOrange || c2.orange),
+            sizeScale: 0.55                                     // hatchlings stay small
+        };
+        if ((c1.crazyEyes  || c2.crazyEyes)  && Math.random() < 0.6) col.crazyEyes  = true;
+        if ((c1.bigFeather || c2.bigFeather) && Math.random() < 0.6) col.bigFeather = true;
+        if (Math.random() < MUTATION_CHANCE) {
+            const m = DUCK_MUTATIONS[Math.floor(Math.random() * DUCK_MUTATIONS.length)];
+            col.rare = m.rare; col.adultScale = m.adultScale;
+            if (m.base)      col.base = m.base;
+            if (m.orange)    col.orange = m.orange;
+            if (m.gum)       col.gum = m.gum;
+            if (m.gumOrange) col.gumOrange = m.gumOrange;
+        }
+        return col;
+    }
+    // Two ducks are "related" (and so can't breed) if one is the other's parent, or they share a
+    // parent (siblings). Originals have no parents, so they're unrelated to everyone but their kids.
+    function areRelated(a, b) {
+        const ap = a.parents || [], bp = b.parents || [];
+        if (ap.indexOf(b.id) !== -1 || bp.indexOf(a.id) !== -1) return true;   // parent ↔ child
+        for (const p of ap) if (p != null && bp.indexOf(p) !== -1) return true; // shared parent → siblings
+        return false;
+    }
+    function spawnEgg(x, y, childColor, parentIds, childGen, parentNames) {
+        duckEggs.push({ x, y, hatch: 0, maxHatch: 14000, timer: 0, shakeX: 0, wobble: 0, wobbleV: 0, crackData: null, hatched: false, hatchAnim: 0, childColor: childColor || null, parentIds: parentIds || [], childGen: childGen || 2, parentNames: parentNames || [] });
     }
 
     function updateAndDrawEggs(dt, now) {
@@ -2836,9 +3472,15 @@
                     egg.hatched = true; egg.hatchAnim = 0;
                     // Spawn baby duck
                     const baby = createDuck(DUCK_COLORS.yellow, egg.x, egg.y - 30);
-                    baby.color = { base:'#fde68a', orange:'#f59e0b', gum:'#fef3c7', gumOrange:'#fde68a', sizeScale: 0.55 };
+                    baby.color = egg.childColor || { base:'#fde68a', orange:'#f59e0b', gum:'#fef3c7', gumOrange:'#fde68a', sizeScale: 0.55 };
                     baby._isBaby = true; baby._growTimer = 0;
+                    baby._adultScale = (baby.color && baby.color.adultScale) || 0.92;   // rare mutations grow to a different size
+                    baby.parents = egg.parentIds || [];
+                    baby.parentNames = egg.parentNames || [];
+                    baby.gen = egg.childGen || 2;
+                    baby.breed = null;   // can't breed until grown; relatives never can (areRelated)
                     ducks.push(baby);
+                    saveFlock();         // a new family member — persist the lineage
                 }
             }
 
@@ -3067,7 +3709,9 @@
         // Keep only the original yellow duck regardless of array order
         const yellowDuck = ducks.find(d => d.color === DUCK_COLORS.yellow) || ducks[0];
         ducks = [yellowDuck];
+        awayDucks = [];
         updateFriendBtn();
+        saveFlock();
         friendBtn.style.background = '';
         draggedDuck = null;
         dragTargetLimb = null;
@@ -3683,13 +4327,21 @@
                     if (closestDuck.shroomCount >= 5 && overdosePhase === null) triggerOverdose(closestDuck, 'shroom');
                     else if (closestDuck.shroomCount === FAKEOUT_THRESHOLDS.shroom && fakeoutPhase === null && overdosePhase === null) triggerFakeout(closestDuck, 'shroom');
                 } else if (f.type === 'bread') {
-                    closestDuck.breadTimer = BREAD_WINDOW;
-                    closestDuck.loveHearts = closestDuck.loveHearts || [];
-                    // Spawn floating hearts above duck
-                    for (let i = 0; i < 6; i++) closestDuck.loveHearts.push({ x: (Math.random()-0.5)*40, y: -80 - Math.random()*30, vy: -1.2 - Math.random()*0.8, life: 1.0, size: 10 + Math.random()*8 });
-                    // Check if any other duck also has bread — if so, start love sequence
-                    const partner = ducks.find(od => od !== closestDuck && (od.breadTimer || 0) > 0);
-                    if (partner && !closestDuck.inLove && !partner.inLove) triggerLove(closestDuck, partner);
+                    // Only ducks with a breeding role respond to bread (the males + the purple
+                    // female); offspring ignore it. Breeding needs a male↔female pair, no inbreeding.
+                    if (closestDuck.breed) {
+                        closestDuck.breadTimer = BREAD_WINDOW;
+                        closestDuck.loveHearts = closestDuck.loveHearts || [];
+                        // Spawn floating hearts above duck
+                        for (let i = 0; i < 6; i++) closestDuck.loveHearts.push({ x: (Math.random()-0.5)*40, y: -80 - Math.random()*30, vy: -1.2 - Math.random()*0.8, life: 1.0, size: 10 + Math.random()*8 });
+                        // Pair with a bread-ready duck of the opposite sex that isn't a relative.
+                        const partner = ducks.find(od => od !== closestDuck && (od.breadTimer || 0) > 0 && od.breed && od.breed !== closestDuck.breed && !areRelated(closestDuck, od));
+                        if (partner && !closestDuck.inLove && !partner.inLove) triggerLove(closestDuck, partner);
+                    } else {
+                        // Babies aren't old enough to breed — a little "no thanks" wiggle.
+                        closestDuck.squash.x = 1.25; closestDuck.squash.y = 0.78;
+                        closestDuck.physics.vx += (Math.random() < 0.5 ? -1 : 1) * 3;
+                    }
                 } else if (f.type === 'gem') {
                     closestDuck.superHeroActive = true;
                     closestDuck.superHeroTimer = 0;
@@ -16935,6 +17587,20 @@
         // ── Love / Breeding system update ─────────────────────────────────
         const gcx = width / 2, gcy = height / 2 + 50;
         for (const d of ducks) {
+            // Babies grow up over ~30s, then mature into breeding adults with a random sex.
+            if (d._isBaby) {
+                d._growTimer = (d._growTimer || 0) + dt;
+                const gp = Math.min(1, d._growTimer / 30000);
+                const adult = d._adultScale || 0.92;
+                d.color.sizeScale = 0.55 + (adult - 0.55) * gp;   // safe: a baby's colour is its own object
+                if (gp >= 1) {
+                    d._isBaby = false;
+                    d.breed = Math.random() < 0.5 ? 'male' : 'female';   // now eligible (but never with kin)
+                    const msx = gcx + d.physics.x, msy = gcy + d.physics.y;
+                    for (let i = 0; i < 14; i++) rayParticles.push({ x: msx, y: msy, vx:(Math.random()-.5)*10, vy:(Math.random()-.5)*10, life:1.0 });
+                    saveFlock();   // grown into a breeding adult — persist the new sex/size
+                }
+            }
             // Tick breadTimer
             if ((d.breadTimer || 0) > 0) d.breadTimer -= dt;
             // Tick loveTimer
@@ -16951,10 +17617,12 @@
                     d.physics.vx += Math.sign(dx) * 0.8;
                     d.physics.vx *= 0.90;
                 } else if (!d._eggSpawned) {
-                    // Close enough (within duck-collision range) — spawn egg
+                    // Close enough (within duck-collision range) — spawn an egg that inherits a
+                    // blend of both parents' colours and traits.
                     d._eggSpawned = true;
                     const ex = (d.physics.x + d.loveTarget.physics.x) / 2;
-                    spawnEgg(ex, 0);
+                    const childGen = Math.max(d.gen || 1, d.loveTarget.gen || 1) + 1;
+                    spawnEgg(ex, 0, makeChildColor(d, d.loveTarget), [d.id, d.loveTarget.id], childGen, [d.name, d.loveTarget.name]);
                 }
             }
             // Spawn + tick floating hearts
@@ -17213,6 +17881,12 @@
             if ((d.bubbleTime || 0) > 0) {
                 drawBubble(width/2 + d.physics.x + shakeX + offsetX,
                            height/2 + 50 + d.physics.y + shakeY, d.bubbleTime);
+            }
+
+            // Lineage name tag — only once the flock has grown past the lone founder.
+            if (ducks.length > 1) {
+                drawDuckNameTag(d, width/2 + d.physics.x + shakeX + offsetX,
+                                   height/2 + 50 + d.physics.y + shakeY);
             }
 
             // Evil auto-attack logic
