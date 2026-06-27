@@ -181,6 +181,42 @@
             border-radius: 5px; padding: 1px 5px; white-space: nowrap;
         }
         .flockRow.isAway { opacity: 0.62; }
+        .flockRelease {
+            flex: 0 0 auto; font-size: 11px; font-weight: 600; cursor: pointer;
+            background: rgba(134,239,172,0.08); border: 1px solid rgba(134,239,172,0.25);
+            border-radius: 8px; padding: 4px 7px; color: #86efac; white-space: nowrap;
+            transition: all 0.15s;
+        }
+        .flockRelease:hover { background: rgba(134,239,172,0.2); border-color: #86efac; color: #fff; }
+        .flockTabs { display: flex; gap: 4px; }
+        .flockTab {
+            font-size: 11px; font-weight: 600; cursor: pointer; border: none; border-radius: 8px;
+            padding: 4px 10px; background: rgba(255,255,255,0.07); color: #94a3b8; transition: all 0.15s;
+        }
+        .flockTab:hover { background: rgba(255,255,255,0.13); color: #e2e8f0; }
+        .flockTab.active { background: rgba(139,92,246,0.3); color: #c4b5fd; border: 1px solid rgba(139,92,246,0.5); }
+        #flockTree { flex: 1; overflow: auto; padding: 10px; min-height: 220px; }
+        #flockTreeCanvas { display: block; }
+        .flockDucksCount { font-size: 11px; color: rgba(255,255,255,0.45); margin-left: 2px; vertical-align: middle; }
+        .flockDanceCount { font-size: 10px; color: #7dd3fc; }
+        .flockOffspringCount { font-size: 10px; color: #86efac; }
+        /* Iron Man ability dock buttons */
+        #ironDock { display: none; }
+        #ironDock.show { display: flex; animation: ironDockIn 0.25s ease; }
+        @keyframes ironDockIn { from { opacity: 0; transform: translateX(-50%) translateY(-12px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+        .ironDockBtn {
+            display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 58px;
+            font-size: 18px; font-weight: 700; line-height: 1; cursor: pointer; color: #fcd34d;
+            background: linear-gradient(180deg, rgba(220,38,38,0.32), rgba(127,29,29,0.32));
+            border: 1.5px solid rgba(251,191,36,0.55); border-radius: 12px; padding: 7px 9px 6px;
+            transition: transform 0.12s, background 0.15s, box-shadow 0.15s;
+        }
+        .ironDockBtn span { font-size: 9.5px; font-weight: 600; letter-spacing: 0.02em; color: rgba(252,211,77,0.85); }
+        .ironDockBtn:hover { background: linear-gradient(180deg, rgba(239,68,68,0.5), rgba(153,27,27,0.5)); box-shadow: 0 0 14px rgba(245,158,11,0.4); }
+        .ironDockBtn:active { transform: scale(0.9); }
+        .ironDockLand { color: #bae6fd; border-color: rgba(56,189,248,0.6); background: linear-gradient(180deg, rgba(14,116,144,0.32), rgba(8,47,73,0.32)); }
+        .ironDockLand span { color: rgba(186,230,253,0.85); }
+        .ironDockLand:hover { background: linear-gradient(180deg, rgba(34,211,238,0.4), rgba(8,47,73,0.5)); box-shadow: 0 0 14px rgba(56,189,248,0.45); }
         .flockSend {
             flex: 0 0 auto; max-width: 104px; font-size: 11px; color: #e2e8f0; cursor: pointer;
             background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.18);
@@ -714,7 +750,8 @@
                     <button class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors border-b border-white/5" id="tractorWeaponBtn">🧲 Tractor Beam</button>
                     <button class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors border-b border-white/5" id="bubbleWeaponBtn">🔵 Bubble Gun</button>
                     <button class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors border-b border-white/5" id="dynamiteWeaponBtn">🧨 Dynamite</button>
-                    <button class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors" id="blackHoleWeaponBtn">🕳️ Black Hole</button>
+                    <button class="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-white/10 transition-colors border-b border-white/5" id="blackHoleWeaponBtn">🕳️ Black Hole</button>
+                    <button class="w-full text-left px-4 py-2.5 text-sm font-bold hover:bg-white/10 transition-colors" id="ironManWeaponBtn" style="background:linear-gradient(90deg,#dc2626,#f59e0b);-webkit-background-clip:text;background-clip:text;color:transparent;">🦾 Iron Man Suit</button>
                 </div>
             </div>
 
@@ -815,10 +852,17 @@
     <div id="flockPanel">
         <div class="flockHead">
             <span class="flockTitle">🦆 The Flock</span>
-            <button id="flockClose" title="Close">✕</button>
+            <div style="display:flex;gap:6px;align-items:center;">
+                <div class="flockTabs">
+                    <button class="flockTab active" data-tab="roster">📋 Roster</button>
+                    <button class="flockTab" data-tab="tree">🌳 Tree</button>
+                </div>
+                <button id="flockClose" title="Close">✕</button>
+            </div>
         </div>
         <div id="flockStats"></div>
         <div id="flockBody"></div>
+        <div id="flockTree" style="display:none;overflow:auto;padding:12px 0;"><canvas id="flockTreeCanvas"></canvas></div>
     </div>
 
     <!-- Home dashboard: live clock + real weather + reminders (top-left glass card) -->
@@ -931,6 +975,15 @@
 
     <!-- SFX mute button (always visible, bottom-left) -->
     <button id="sfxMuteBtn" title="Toggle sound effects" style="position:fixed;bottom:24px;left:24px;z-index:999;background:rgba(255,255,255,0.15);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:2px solid rgba(255,255,255,0.3);color:white;font-size:14px;font-weight:600;padding:8px 16px;border-radius:20px;cursor:pointer;line-height:1;user-select:none;box-shadow:0 4px 12px rgba(0,0,0,0.2);transition:all 0.2s;">🔊 SFX</button>
+
+    <!-- Iron Man ability dock: only visible while a duck is suited. Gives touch users
+         (and anyone who'd rather click) the keyboard abilities + a way to remove the suit. -->
+    <div id="ironDock" style="position:fixed;top:150px;left:50%;transform:translateX(-50%);z-index:998;gap:8px;align-items:center;padding:8px 10px;border-radius:18px;background:rgba(20,12,8,0.82);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1.5px solid rgba(245,158,11,0.55);box-shadow:0 6px 22px rgba(0,0,0,0.35);user-select:none;">
+        <button class="ironDockBtn" data-act="repulsor" title="Repulsor beams (B)">🔫<span>Repulsor</span></button>
+        <button class="ironDockBtn" data-act="rockets" title="Wrist rockets (R)">🚀<span>Rockets</span></button>
+        <button class="ironDockBtn" data-act="punch" title="Super-punch (K)">👊<span>Punch</span></button>
+        <button class="ironDockBtn ironDockLand" data-act="land" title="Take the suit off">🛬<span>Land</span></button>
+    </div>
 
 
     <!-- Gemini Key Modal -->
@@ -1243,14 +1296,68 @@
     // automatically ignores them — no per-loop guards needed. They keep all
     // their data and can be brought home from the Flock panel at any time.
     let awayDucks = [];
+    let releasingDucks = [];   // ducks mid fly-away animation before permanent removal
     const AWAY_PLACES = {
         school: { icon: '🏫', label: 'School',   away: 'At school' },
         sleep:  { icon: '😴', label: 'Bed',      away: 'Sleeping'  },
         park:   { icon: '🛝', label: 'Playground', away: 'At the playground' },
         pond:   { icon: '🦆', label: 'Pond',     away: 'At the pond' }
     };
+    function releaseDuck(duck) {
+        // The OG yellow founder can never be released
+        if (duck.color === DUCK_COLORS.yellow && (duck.parents || []).length === 0) return;
+        // Must always keep at least one duck
+        const remaining = ducks.filter(d => d !== duck).length + awayDucks.filter(d => d !== duck).length;
+        if (remaining === 0) return;
+
+        // Pull out of all live arrays
+        const di = ducks.indexOf(duck);
+        if (di !== -1) ducks.splice(di, 1);
+        const ai = awayDucks.indexOf(duck);
+        if (ai !== -1) awayDucks.splice(ai, 1);
+
+        if (draggedDuck === duck) draggedDuck = null;
+        usedDuckNames.delete(duck.name);
+
+        // Kick off fly-away animation
+        duck._releaseTimer = 0;
+        duck._releaseMaxT  = 1800;
+        duck.physics.vy    = -18;
+        duck.physics.vx    = (Math.random() - 0.5) * 6;
+        releasingDucks.push(duck);
+
+        // Toast
+        const sx = width / 2 + duck.physics.x, sy = height / 2 + 50 + duck.physics.y;
+        growUpFx.push({ x: sx, y: sy - 110, life: 1.0, text: `🌿 ${duck.name || 'Duck'} flew to the wild!`, color: '#86efac' });
+        playSFX && playSFX('score');
+
+        // Undo — cancel animation and restore duck
+        pushUndo(`🌿 Release ${duck.name || 'Duck'}`, () => {
+            // Cancel fly-away if still animating
+            const ri = releasingDucks.indexOf(duck);
+            if (ri !== -1) releasingDucks.splice(ri, 1);
+            // Restore to home flock
+            duck._releaseTimer = 0;
+            duck.physics.x = (Math.random() - 0.5) * 200;
+            duck.physics.y = -180;
+            duck.physics.vx = 0; duck.physics.vy = 0;
+            if (!ducks.includes(duck)) ducks.push(duck);
+            usedDuckNames.add(duck.name);
+            if (typeof updateFriendBtn === 'function') updateFriendBtn();
+            saveFlock();
+            renderFlock(true);
+        });
+
+        if (typeof updateFriendBtn === 'function') updateFriendBtn();
+        saveFlock();
+        renderFlock(true);
+    }
+
     function sendDuckAway(duck, placeKey) {
         if (!AWAY_PLACES[placeKey]) return;
+        // Never send the last duck away — the game loop requires at least one duck
+        const activeDucks = ducks.filter(d => d !== duck);
+        if (activeDucks.length === 0) return;
         const i = ducks.indexOf(duck);
         if (i !== -1) ducks.splice(i, 1);          // pull off the home screen
         duck.away = placeKey;
@@ -1290,7 +1397,8 @@
                     id: d.id, name: d.name, gen: d.gen || 1, breed: d.breed || null,
                     birth: d.birth || null,
                     parents: d.parents || [], parentNames: d.parentNames || [], away: d.away || null,
-                    isBaby: !!d._isBaby, growTimer: d._growTimer || 0, adultScale: d._adultScale || null,
+                    isBaby: !!d._isBaby, growTimer: d._growTimer || 0, ageStage: d._ageStage || null, adultScale: d._adultScale || null,
+                    danceCount: d._danceCount || 0, offspringCount: d._offspringCount || 0,
                     colorKey: ck, color: ck ? null : d.color
                 };
             });
@@ -1310,7 +1418,8 @@
             d.parents = e.parents || []; d.parentNames = e.parentNames || [];
             if (e.colorKey && DUCK_COLORS[e.colorKey]) d.color = DUCK_COLORS[e.colorKey];
             else if (e.color) d.color = e.color;
-            d._isBaby = !!e.isBaby; d._growTimer = e.growTimer || 0;
+            d._isBaby = !!e.isBaby; d._growTimer = e.growTimer || 0; d._ageStage = e.ageStage || (e.isBaby ? 'baby' : null);
+            d._danceCount = e.danceCount || 0; d._offspringCount = e.offspringCount || 0;
             if (e.adultScale) d._adultScale = e.adultScale;
             d.away = e.away || null;
             (d.away ? away : home).push(d);
@@ -1495,6 +1604,7 @@
     function doReset() {
         overdosePhase = null; overdoseCause = null; overdoseTimer = 0; overdoseDuck = null; overdoseFoam = []; overdoseParticles = [];
         deactivateCannon(); cannonSmokeParticles = []; cannonPowTimer = 0;
+        deactivateIronSuit(); ironRockets = []; ironBeams = []; for (const _d of ducks) removeIronSuit(_d);
         balls = []; ballConfetti = []; foods = []; slimes = []; targets = []; duckEggs = []; growUpFx = [];
         const yellowDuck = ducks.find(d => d.color === DUCK_COLORS.yellow) || ducks[0];
         ducks = [createDuck(DUCK_COLORS.yellow, 0, 0)];
@@ -1535,6 +1645,36 @@
     let cannonPowTimer = 0;     // ms since last fire (for POW text)
     let cannonPowX = 0, cannonPowY = 0;
     let cannonSmokeParticles = [];
+
+    // ── Iron Man armor ───────────────────────────────────────────────────────
+    // Works like the cannon: pick the tool, click to place an empty armor stand,
+    // then drag a duck onto it to suit up. A suited duck reuses superHeroActive
+    // for hover-flight + arrow controls, with Iron Man visuals/abilities layered
+    // on via its `ironMan` state. Repulsor beams + wrist rockets are keyboard-fired.
+    let ironSuitActive = false;     // tool selected (placing or stand present, not yet worn)
+    let ironStandPlaced = false;    // an empty stand is sitting on the scene
+    let ironStandX = 0, ironStandY = 0;
+    let ironRockets = [];           // live wrist-rocket projectiles
+    let ironBeams = [];             // transient repulsor beam visuals
+    let ironExplosions = [];        // shockwave rings from rocket impacts
+    function ironSuitedDuck() { return ducks.find(d => d.ironMan); }
+    // Show the on-screen ability dock only while some duck is wearing the suit.
+    function updateIronDock() {
+        const dock = document.getElementById('ironDock');
+        if (dock) dock.classList.toggle('show', !!ironSuitedDuck());
+    }
+    function deactivateIronSuit() {
+        ironSuitActive = false; ironStandPlaced = false;
+        ironManWeaponBtn.textContent = '🦾 Iron Man Suit';
+    }
+    // Drop the suit from a duck (back to a normal duck).
+    function removeIronSuit(d) {
+        if (!d || !d.ironMan) return;
+        d.ironMan = null;
+        d.superHeroActive = false; d.superHeroTimer = 0; d.superHeroTargetY = -110;
+        d.physics.vy = 6;
+        updateIronDock();
+    }
 
     // ── Time Machine ─────────────────────────────────────────────────────────
     const DECADES = [null, '1930s', '1950s', '1970s', '1980s', '2099'];
@@ -1731,6 +1871,59 @@
         deactivateNewWeapons();
     });
 
+    // ── Iron Man Suit tool: place a stand, drag a duck onto it to suit up ──
+    const ironManWeaponBtn = document.getElementById('ironManWeaponBtn');
+    ironManWeaponBtn.addEventListener('click', () => {
+        weaponsDropdown.style.display = 'none';
+        if (ironSuitActive) { deactivateIronSuit(); canvas.style.cursor = 'grab'; return; }
+        deactivateLegacyWeapons(); deactivateNewWeapons();   // turn off every other weapon
+        ironSuitActive = true; ironStandPlaced = false;
+        canvas.style.cursor = 'crosshair';
+        ironManWeaponBtn.textContent = '🦾 Suit: click to place';
+    });
+    // Suit a duck up: swap to flight-capable hero physics and attach Iron Man state.
+    function donIronSuit(duck) {
+        duck.ironMan = { beamTimer: 0, rocketCD: 0, punchT: 0, transformT: 1.0, boost: 0 };
+        duck.superHeroActive = true; duck.superHeroTimer = 0; duck.superHeroTargetY = -60;
+        duck.gemCount = 0; duck.evilMode = false;
+        duck.squash.x = 1; duck.squash.y = 1;
+        duck.physics.isDragging = false; duck.physics.vx = 0; duck.physics.vy = 0;
+        ironStandPlaced = false; ironSuitActive = false;
+        ironManWeaponBtn.textContent = '🦾 Iron Man Suit';
+        canvas.style.cursor = 'grab';
+        // Transformation flash burst to mask the old duck → Iron Duck swap
+        const sx = width / 2 + duck.physics.x, sy = height / 2 + 50 + duck.physics.y;
+        for (let n = 0; n < 40; n++) {
+            const a = Math.random() * Math.PI * 2, sp = 4 + Math.random() * 11;
+            ballConfetti.push({ x: sx, y: sy - 20, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+                color: Math.random() < 0.5 ? '#fde047' : '#ffffff', life: 1.0, size: 3 + Math.random() * 6 });
+        }
+        for (let i = 0; i < 24; i++) rayParticles.push({ x: sx, y: sy - 20, vx: (Math.random()-.5)*16, vy: (Math.random()-.5)*16, life: 1.0 });
+        updateIronDock();   // reveal the on-screen ability buttons
+        playSFX && playSFX('weapon');
+    }
+    // On-screen Iron Man ability dock — taps mirror the B / R / K keys + a Land button.
+    document.getElementById('ironDock').addEventListener('click', (e) => {
+        const btn = e.target.closest('.ironDockBtn');
+        if (!btn) return;
+        const hero = ironSuitedDuck();
+        if (!hero) { updateIronDock(); return; }
+        switch (btn.dataset.act) {
+            case 'repulsor': fireRepulsor(hero); break;
+            case 'rockets':  fireRockets(hero);  break;
+            case 'punch':    ironSuperPunch(hero); break;
+            case 'land':     removeIronSuit(hero); break;
+        }
+    });
+    // 👊 Super-strength punch: shockwave that knocks every nearby duck flying.
+    function ironSuperPunch(hero) {
+        if (!hero.ironMan || hero.ironMan.punchT > 0) return;
+        hero.ironMan.punchT = 1.0;
+        const cx = width / 2, cy = height / 2 + 50;
+        ironBlast(cx + hero.physics.x, cy + hero.physics.y - 10, 30, 210);
+        playSFX && playSFX('weapon');
+    }
+
     // ─────────────────────────────────────────────────────────────────────
     // Extra weapons: 🧲 Tractor Beam · 🫧 Bubble Gun · 🧨 Dynamite · 🕳️ Black Hole
     // Conventions match the other weapons: a world position (x,y) maps to the
@@ -1761,6 +1954,7 @@
         flameWeaponBtn.style.background = '';
         fanActive = false; fanAnchored = false; fanPlacing = false; fanWeaponBtn.textContent = '💨 Giant Fan';
         deactivateCannon();
+        deactivateIronSuit();   // clears a pending armor stand (does NOT unsuit a worn duck)
     }
     // Turn off the four new weapons (called from the built-in handlers and resets).
     function deactivateNewWeapons() {
@@ -2410,17 +2604,17 @@
             ? `🐥 Friends: ${count} <span class="text-[10px]">▼</span>`
             : `🐥 Add Friend <span class="text-[10px]">▼</span>`;
         friendBtn.style.background = count > 0 ? 'rgba(59,130,246,0.25)' : '';
+        // Update flock button badge (total living ducks: home + away)
+        const total = ducks.length + awayDucks.length;
+        const flockBtnEl = document.getElementById('flockBtn');
+        if (flockBtnEl) flockBtnEl.innerHTML = '🦆 Flock <span class="flockDucksCount">(' + total + ')</span>';
     }
 
     function addFriend(colorKey) {
         friendDropdown.style.display = 'none';
-        if (ducks.length >= 5) {
-            // Remove last friend instead
-            if (ducks.length > 1) ducks.pop();
-            updateFriendBtn();
-            saveFlock();
-            return;
-        }
+        // Count only manually-added ducks (not offspring) toward the spawn cap
+        const manualCount = ducks.filter(d => !d.parents || d.parents.length === 0).length;
+        if (manualCount >= 8) return; // silently ignore — flock already has 8 founder ducks
         ducks.push(createDuck(DUCK_COLORS[colorKey], 160, -200));
         pushUndo('🦆 Friend', () => { if (ducks.length > 1) { ducks.pop(); updateFriendBtn(); saveFlock(); } });
         updateFriendBtn();
@@ -2484,7 +2678,7 @@
     // A compact fingerprint of the roster — used to skip re-rendering (and so avoid clobbering an
     // open dropdown) when nothing the panel shows has actually changed.
     function flockSig() {
-        return flockRoster().map(d => d.id + ':' + (d.gen||1) + ':' + (d.away||'home') + ':' + (d._isBaby?'b':'a') + ':' + ((d.color&&d.color.rare)||'') + ':' + d.name).join('|');
+        return flockRoster().map(d => d.id + ':' + (d.gen||1) + ':' + (d.away||'home') + ':' + (d._isBaby?'b':'a') + ':' + ((d.color&&d.color.rare)||'') + ':' + d.name + ':' + (d._danceCount||0) + ':' + (d._offspringCount||0)).join('|');
     }
     let flockLastSig = null;
     function renderFlock(force) {
@@ -2530,8 +2724,16 @@
                       '<div class="flockInfo">' +
                         '<div class="flockName"><span class="flockNameText" data-id="' + d.id + '" title="Click to rename">' + escapeFlock(d.name || 'Duck') + '</span>' + rareBadge + status + '</div>' +
                         '<div class="flockMeta">' + sex + ' · <span class="flockAge" data-id="' + d.id + '">' + ageTxt + '</span> · ' + escapeFlock(flockParentLabel(d)) + '</div>' +
+                        '<div class="flockMeta">' +
+                          (d._danceCount ? '<span class="flockDanceCount">💃 ' + d._danceCount + ' dance' + (d._danceCount !== 1 ? 's' : '') + '</span>' : '') +
+                          (d._danceCount && d._offspringCount ? ' · ' : '') +
+                          (d._offspringCount ? '<span class="flockOffspringCount">🥚 ' + d._offspringCount + ' offspring</span>' : '') +
+                        '</div>' +
                       '</div>' +
                       '<select class="flockSend" data-id="' + d.id + '" title="Send ' + escapeFlock(d.name || 'duck') + ' somewhere">' + optsFor(d.away) + '</select>' +
+                      (d.color === DUCK_COLORS.yellow && !(d.parents && d.parents.length)
+                        ? '<button class="flockRelease" disabled style="opacity:0.25;cursor:not-allowed;" title="The OG duck can never be released">🔒</button>'
+                        : '<button class="flockRelease" data-id="' + d.id + '" title="Release to the wild (permanent)">🌿</button>') +
                     '</div>';
             }
         });
@@ -2566,6 +2768,12 @@
         renderFlock(true);
     }
     document.getElementById('flockBody').addEventListener('click', (e) => {
+        const releaseBtn = e.target.closest('.flockRelease');
+        if (releaseBtn) {
+            const d = flockFindDuck(+releaseBtn.dataset.id);
+            if (d) releaseDuck(d);
+            return;
+        }
         const span = e.target.closest('.flockNameText');
         if (!span || flockEditing) return;
         const d = flockFindDuck(+span.dataset.id);
@@ -2677,6 +2885,105 @@
         flockPanel.classList.contains('open') ? closeFlock() : openFlock();
     });
     document.getElementById('flockClose').addEventListener('click', closeFlock);
+
+    // ── Flock panel tabs (Roster / Tree) ─────────────────────────────────
+    let activeFlockTab = 'roster';
+    function switchFlockTab(tab) {
+        activeFlockTab = tab;
+        document.querySelectorAll('.flockTab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+        const bodyEl = document.getElementById('flockBody');
+        const treeEl = document.getElementById('flockTree');
+        const statsEl = document.getElementById('flockStats');
+        if (tab === 'roster') {
+            bodyEl.style.display = ''; treeEl.style.display = 'none'; statsEl.style.display = '';
+            renderFlock(true);
+        } else {
+            bodyEl.style.display = 'none'; treeEl.style.display = 'block'; statsEl.style.display = 'none';
+            drawFamilyTree();
+        }
+    }
+    document.querySelectorAll('.flockTab').forEach(btn => {
+        btn.addEventListener('click', () => switchFlockTab(btn.dataset.tab));
+    });
+
+    function drawFamilyTree() {
+        const treeEl = document.getElementById('flockTree');
+        const roster = flockRoster();
+        if (!roster.length) { treeEl.innerHTML = '<div style="color:#64748b;text-align:center;padding:24px;font-size:12px;">No ducks yet.</div>'; return; }
+
+        // Group by generation
+        const byGen = {};
+        for (const d of roster) { const g = d.gen || 1; (byGen[g] = byGen[g] || []).push(d); }
+        const gens = Object.keys(byGen).map(Number).sort((a, b) => a - b);
+
+        const NODE_W = 80, NODE_H = 54, GAP_X = 10, GAP_Y = 44, PAD = 14;
+        const maxPerGen = Math.max(...gens.map(g => byGen[g].length));
+        const totalW = Math.max(280, maxPerGen * (NODE_W + GAP_X) - GAP_X + PAD * 2);
+        const totalH = gens.length * (NODE_H + GAP_Y) - GAP_Y + PAD * 2 + 8;
+
+        // Compute node centers
+        const nodePos = {};
+        gens.forEach((g, gi) => {
+            const row = byGen[g];
+            const rowW = row.length * (NODE_W + GAP_X) - GAP_X;
+            const startX = (totalW - rowW) / 2;
+            const cy = PAD + gi * (NODE_H + GAP_Y) + NODE_H / 2;
+            row.forEach((d, i) => {
+                nodePos[d.id] = { x: startX + i * (NODE_W + GAP_X) + NODE_W / 2, y: cy };
+            });
+        });
+
+        // Build SVG lines
+        let lines = '';
+        for (const d of roster) {
+            const cp = nodePos[d.id];
+            if (!cp) continue;
+            for (const pid of (d.parents || [])) {
+                const pp = nodePos[pid];
+                if (!pp) continue;
+                const x1 = pp.x, y1 = pp.y + NODE_H / 2;
+                const x2 = cp.x, y2 = cp.y - NODE_H / 2;
+                const my = (y1 + y2) / 2;
+                lines += `<path d="M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}" fill="none" stroke="rgba(165,180,252,0.45)" stroke-width="1.5"/>`;
+            }
+        }
+
+        // Build HTML nodes
+        let nodes = '';
+        for (const d of roster) {
+            const pos = nodePos[d.id];
+            if (!pos) continue;
+            const c = d.color || {};
+            const base = c.base || '#fde68a';
+            const left = pos.x - NODE_W / 2;
+            const top  = pos.y - NODE_H / 2;
+
+            const stageIcon = !d._isBaby ? '🦆' : (d._ageStage === 'baby' ? '🐣' : d._ageStage === 'toddler' ? '🍼' : '🧒');
+            const danceStr = d._danceCount ? `💃${d._danceCount}` : '';
+            const kidsStr  = d._offspringCount ? `🥚${d._offspringCount}` : '';
+            const statsLine = [stageIcon, danceStr, kidsStr].filter(Boolean).join(' ');
+            const nameShort = escapeFlock((d.name || 'Duck').slice(0, 11));
+
+            nodes += `<div style="position:absolute;left:${left}px;top:${top}px;width:${NODE_W}px;height:${NODE_H}px;
+                box-sizing:border-box;border-radius:10px;padding:5px 7px;
+                background:rgba(30,41,59,0.95);border:2px solid ${base};
+                font-family:system-ui,sans-serif;overflow:hidden;">
+                <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px;">
+                    <div style="width:14px;height:14px;border-radius:50%;background:${base};flex:0 0 auto;border:1px solid rgba(255,255,255,0.3);"></div>
+                    <div style="font-size:11px;font-weight:700;color:#f1f5f9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${nameShort}</div>
+                </div>
+                <div style="font-size:10px;color:#94a3b8;">${statsLine}</div>
+                <div style="font-size:9px;color:#64748b;margin-top:1px;">Gen ${d.gen || 1}${d.away ? ' · away' : ''}</div>
+            </div>`;
+        }
+
+        treeEl.innerHTML = `
+            <div style="position:relative;width:${totalW}px;height:${totalH}px;margin:0 auto;">
+                <svg style="position:absolute;top:0;left:0;width:${totalW}px;height:${totalH}px;overflow:visible;">${lines}</svg>
+                ${nodes}
+            </div>`;
+    }
+
     document.getElementById('hatBtn').addEventListener('click', () => {
         const anyOn = ducks.some(d => d.hatActive);
         for (const d of ducks) d.hatActive = !anyOn;
@@ -3355,9 +3662,28 @@
         ctx.fill(); ctx.restore();
     }
 
+    // ── Life stages (Sims-style) ──────────────────────────────────────────────
+    const AGE_STAGES = [
+        { key: 'baby',    icon: '🐣', label: 'Baby',    end: 15000, sizeStart: 0.35, sizeEnd: 0.50, nextLabel: 'Toddler' },
+        { key: 'toddler', icon: '🍼', label: 'Toddler', end: 35000, sizeStart: 0.50, sizeEnd: 0.67, nextLabel: 'Teen'    },
+        { key: 'teen',    icon: '🧒', label: 'Teen',    end: 60000, sizeStart: 0.67, sizeEnd: null,  nextLabel: 'Adult'   },
+    ];
+    const AGE_TOTAL = 60000; // ms to reach adulthood
+
     // 🎉 Grow-up party — fired when a baby matures into an adult. Throws a colourful
     // confetti burst + sparkle around the duck and queues a floating "grew up!" toast.
     const GROWUP_COLORS = ['#f472b6','#fbbf24','#34d399','#60a5fa','#a78bfa','#fb923c','#f87171','#fde047'];
+    function celebrateStage(d, stage) {
+        const sx = width / 2 + d.physics.x, sy = height / 2 + 50 + d.physics.y;
+        for (let n = 0; n < 20; n++) {
+            const ang = Math.random() * Math.PI * 2, spd = 3 + Math.random() * 6;
+            ballConfetti.push({ x: sx, y: sy - 30, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd - 3,
+                color: GROWUP_COLORS[Math.floor(Math.random() * GROWUP_COLORS.length)], life: 1.0, size: 2 + Math.random() * 4 });
+        }
+        growUpFx.push({ x: sx, y: sy - 110, life: 1.0, text: `${stage.icon} ${d.name || 'Duck'} is now a ${stage.label}!`, color: '#a5f3fc' });
+        playSFX && playSFX('score');
+    }
+
     function celebrateGrowUp(d) {
         const sx = width / 2 + d.physics.x, sy = height / 2 + 50 + d.physics.y;
         for (let n = 0; n < 36; n++) {
@@ -3375,32 +3701,75 @@
     // so the default single-duck scene stays uncluttered. (sx, sy) is the duck's body centre.
     function drawDuckNameTag(d, sx, sy) {
         const scale = (d.color && d.color.sizeScale) || 1;
-        const tagY = sy - 90 - 70 * scale;                 // sit comfortably above the head
+        const tagY = sy - 90 - 70 * scale;
         const rare = d.color && d.color.rare;
-        const sexGlyph = d._isBaby ? ' 🐣' : (d.breed === 'male' ? ' ♂' : d.breed === 'female' ? ' ♀' : '');
+
+        // Determine stage info for babies
+        let stageInfo = null;
+        if (d._isBaby) {
+            const t = d._growTimer || 0;
+            let stageIdx = 0;
+            for (let si = 0; si < AGE_STAGES.length; si++) {
+                if (t >= AGE_STAGES[si].end) stageIdx = si + 1;
+            }
+            stageIdx = Math.min(stageIdx, AGE_STAGES.length - 1);
+            const stage = AGE_STAGES[stageIdx];
+            const stageStart = stageIdx === 0 ? 0 : AGE_STAGES[stageIdx - 1].end;
+            const prog = Math.min(1, (t - stageStart) / (stage.end - stageStart));
+            const secsLeft = Math.ceil((stage.end - t) / 1000);
+            stageInfo = { stage, prog, secsLeft };
+        }
+
+        const sexGlyph = d._isBaby ? ` ${stageInfo.stage.icon}` : (d.breed === 'male' ? ' ♂' : d.breed === 'female' ? ' ♀' : '');
         const text = (rare ? '★ ' : '') + (d.name || 'Duck') + '  ·  G' + (d.gen || 1) + sexGlyph;
+
         ctx.save();
         ctx.font = '600 12px ' + "system-ui, -apple-system, 'Segoe UI', sans-serif";
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         const w = ctx.measureText(text).width + 16, h = 19;
+        const totalH = d._isBaby ? h + 14 : h; // extra room for progress bar
+
         // pill background
+        const bx = sx - w / 2, by = tagY - totalH / 2, r = h / 2;
         ctx.beginPath();
-        const bx = sx - w / 2, by = tagY - h / 2, r = h / 2;
         ctx.moveTo(bx + r, by);
-        ctx.arcTo(bx + w, by, bx + w, by + h, r);
-        ctx.arcTo(bx + w, by + h, bx, by + h, r);
-        ctx.arcTo(bx, by + h, bx, by, r);
+        ctx.arcTo(bx + w, by, bx + w, by + totalH, r);
+        ctx.arcTo(bx + w, by + totalH, bx, by + totalH, r);
+        ctx.arcTo(bx, by + totalH, bx, by, r);
         ctx.arcTo(bx, by, bx + w, by, r);
         ctx.closePath();
-        ctx.fillStyle = 'rgba(17, 12, 30, 0.72)';
+        ctx.fillStyle = 'rgba(17, 12, 30, 0.82)';
         ctx.fill();
         ctx.strokeStyle = rare ? 'rgba(253, 224, 71, 0.8)' : 'rgba(255,255,255,0.18)';
         ctx.lineWidth = 1;
         ctx.stroke();
-        // text
+
+        // name text
         ctx.fillStyle = rare ? '#fde047' : '#f1eefc';
-        ctx.fillText(text, sx, tagY + 0.5);
+        ctx.fillText(text, sx, by + h / 2 + 0.5);
+
+        // Stage progress bar for babies
+        if (d._isBaby && stageInfo) {
+            const { stage, prog, secsLeft } = stageInfo;
+            const barW = w - 12, barH = 5;
+            const barX = sx - barW / 2, barY = by + h + 3;
+
+            // track
+            ctx.fillStyle = 'rgba(255,255,255,0.12)';
+            ctx.beginPath(); ctx.roundRect(barX, barY, barW, barH, 3); ctx.fill();
+
+            // fill — colour changes per stage
+            const barCols = { baby: '#f472b6', toddler: '#fb923c', teen: '#60a5fa' };
+            ctx.fillStyle = barCols[stage.key] || '#a78bfa';
+            ctx.beginPath(); ctx.roundRect(barX, barY, barW * prog, barH, 3); ctx.fill();
+
+            // countdown label
+            ctx.font = '500 9px ' + "system-ui, sans-serif";
+            ctx.fillStyle = 'rgba(255,255,255,0.55)';
+            ctx.fillText(`${stage.label} → ${stage.nextLabel}  ${secsLeft}s`, sx, barY + barH + 6);
+        }
+
         ctx.restore();
     }
 
@@ -3758,6 +4127,7 @@
         fanActive = false; fanAnchored = false; fanPlacing = false;
         fanHoverX = 0; fanHoverY = 0; fanWindParticles = [];
         deactivateCannon(); cannonSmokeParticles = []; cannonPowTimer = 0;
+        deactivateIronSuit(); ironRockets = []; ironBeams = []; for (const _d of ducks) removeIronSuit(_d);
         deactivateNewWeapons(); dynamites = []; bhParticles = []; blastFlash = 0; for (const d of ducks) d.bubbleTime = 0;
         currentDecade = null; currentDecadeIdx = 0; timeMachineTraveling = false; timeMachineTimer = 0;
         timeMachineBtn.textContent = '⏱️ Time Machine';
@@ -4071,6 +4441,14 @@
         if (isSkateMode || isFightingMode || isUltimateMode || isRPSMode) return;   // fighters are keyboard-only; dragging reorders the ducks array and breaks P1/P2
         const p = getPointerPos(e);
         lastPointer = p;
+
+        // Iron Man armor stand placement (click to drop the stand; then drag a duck in)
+        if (ironSuitActive && !ironStandPlaced) {
+            ironStandX = p.x; ironStandY = p.y; ironStandPlaced = true;
+            canvas.style.cursor = 'grab';
+            ironManWeaponBtn.textContent = '🦾 Drag a duck onto the suit';
+            if (e.cancelable) e.preventDefault(); return;
+        }
 
         // Cannon placement / aiming
         if (cannonActive) {
@@ -4433,6 +4811,16 @@
             }
             draggedSlimeIndex = null; canvas.style.cursor = 'grab';
         } else {
+            // Iron Man suiting — duck dropped onto the armor stand
+            if (draggedDuck && ironStandPlaced && !draggedDuck.ironMan) {
+                const dsx = width / 2 + draggedDuck.physics.x;
+                const dsy = height / 2 + 50 + draggedDuck.physics.y;
+                if (Math.hypot(dsx - ironStandX, dsy - ironStandY) < 80) {
+                    const d = draggedDuck; draggedDuck = null;
+                    donIronSuit(d);
+                    return;
+                }
+            }
             // Cannon loading — duck dropped near barrel mouth
             if (draggedDuck && cannonAnchored && !cannonLoadedDuck) {
                 const tip = cannonTipPos();
@@ -5106,6 +5494,10 @@
         spin:      { label: '💫 Spin-Out',    hint: 'L',     duration: 600  },
         headbang:  { label: '🤘 Headbang',    hint: 'H',     duration: 700  },
         worm:      { label: '🪱 The Worm',    hint: 'W',     duration: 900  },
+        floss:     { label: '🤸 Floss',       hint: 'F',     duration: 1200 },
+        splits:    { label: '🦵 Splits',      hint: 'S',     duration: 800  },
+        twerk:     { label: '🍑 Twerk',       hint: 'T',     duration: 1000 },
+        robot:     { label: '🤖 Robot',       hint: 'N',     duration: 1400 },
     };
 
     let activeMoves   = [];
@@ -5117,6 +5509,7 @@
             d.activeMoves = d.activeMoves.filter(m => m.id !== id);
             d.activeMoves.push({ id, startTime: now });
             d.moveHintTimer = 3000;
+            d._danceCount = (d._danceCount || 0) + 1;
         }
     }
 
@@ -5134,6 +5527,14 @@
         if (k === 'p') { e.preventDefault(); fireCannon(); return; }
 
         // Superhero flight controls — arrow keys
+        // Iron Man suited duck: B = repulsor beams, R = wrist rockets (flight uses the shared arrows below)
+        const ironDuck = ducks.find(d => d.ironMan);
+        if (ironDuck) {
+            if (k === 'b') { e.preventDefault(); fireRepulsor(ironDuck); return; }
+            if (k === 'r') { e.preventDefault(); fireRockets(ironDuck); return; }
+            if (k === 'k') { e.preventDefault(); ironSuperPunch(ironDuck); return; }
+        }
+
         const superDuck = ducks.find(d => d.superHeroActive);
         if (superDuck) {
             if (e.key === 'ArrowUp')    { e.preventDefault(); superDuck.superHeroTargetY = Math.max(-280, superDuck.superHeroTargetY - 40); return; }
@@ -5150,6 +5551,10 @@
         else if (k === 'l') triggerMove('spin');
         else if (k === 'h') triggerMove('headbang');
         else if (k === 'w') { e.preventDefault(); triggerMove('worm'); }
+        else if (k === 'f') triggerMove('floss');
+        else if (k === 's') triggerMove('splits');
+        else if (k === 't') triggerMove('twerk');
+        else if (k === 'n') triggerMove('robot');
     });
 
     function applyLaserVision(hero) {
@@ -5191,6 +5596,8 @@
         let scaleYOverride = null;
         // Moonwalk-specific foot overrides (returned separately)
         let moonwalkData   = null;
+        // Generic foot-position overrides for other moves (left/right X and Y offsets)
+        let legData        = null;
 
         for (const mv of duck.activeMoves) {
             const prog = Math.min(1, (now - mv.startTime) / MOVES[mv.id].duration);
@@ -5321,11 +5728,68 @@
                 wingLAngle   = wave * 0.8 - 0.4;
                 wingRAngle   = -wave * 0.8 + 0.4;
             }
+
+            // ── FLOSS ─────────────────────────────────────────────────────
+            else if (mv.id === 'floss') {
+                // Arms (wings) swing hard left/right in opposition while hips sway
+                const cycle = Math.sin(prog * Math.PI * 5);
+                const hipSway = Math.sin(prog * Math.PI * 5 + Math.PI / 2);
+                wingLAngle   = -cycle * 1.6;
+                wingRAngle   =  cycle * 1.6;
+                extraDuckX  += hipSway * 14 * ease;
+                extraBodyRot += hipSway * 0.18 * ease;
+                extraDuckY  -= ease * 8; // slight hop energy
+            }
+
+            // ── SPLITS ────────────────────────────────────────────────────
+            else if (mv.id === 'splits') {
+                // Feet splay wide, body sinks, wings flung out, then bounces back
+                const drop = Math.sin(prog * Math.PI);
+                extraDuckY   += drop * 30;
+                wingLAngle   = -drop * 2.2;
+                wingRAngle   =  drop * 2.2;
+                extraHeadRot += drop * 0.35; // head tilts up proudly
+                // Spread feet apart — left goes left, right goes right
+                const spread = drop * 90;
+                legData = {
+                    footLOx: -spread,
+                    footROx:  spread,
+                    footLOy:  drop * 18,
+                    footROy:  drop * 18,
+                };
+            }
+
+            // ── TWERK ─────────────────────────────────────────────────────
+            else if (mv.id === 'twerk') {
+                // Rapid alternating squash/stretch on the rear with slight lean
+                const shake = Math.sin(prog * Math.PI * 10) * ease;
+                scaleXOverride = 1 + Math.abs(shake) * 0.22;
+                scaleYOverride = 1 - Math.abs(shake) * 0.14;
+                extraBodyRot  += shake * 0.28;
+                extraDuckY    += Math.abs(shake) * 10;
+                extraHeadRot  -= shake * 0.15; // head stays relatively still
+            }
+
+            // ── ROBOT ─────────────────────────────────────────────────────
+            else if (mv.id === 'robot') {
+                // Stiff steppy jerks — quantised to 8 frames of motion
+                const step = Math.floor(prog * 8) / 8;
+                const jerk = Math.floor(prog * 16) % 2 === 0 ? 1 : -1;
+                extraBodyRot  += jerk * 0.12 * ease;
+                extraDuckX    += (step - 0.5) * 40 * ease;
+                extraDuckY    -= (Math.floor(prog * 8) % 2) * 14 * ease;
+                wingLAngle   = jerk > 0 ? -0.9 : -0.1;
+                wingRAngle   = jerk > 0 ?  0.1 :  0.9;
+                extraHeadRot  += jerk * 0.22 * ease;
+                // Snap scale at each beat
+                scaleXOverride = 1 + (Math.floor(prog * 16) % 2 === 0 ? 0.06 : -0.06);
+                scaleYOverride = 1 - (Math.floor(prog * 16) % 2 === 0 ? 0.06 : -0.06);
+            }
         }
 
         return { extraBodyRot, extraDuckY, extraDuckX, extraHeadRot,
                  wingLAngle, wingRAngle, scaleXOverride, scaleYOverride,
-                 moonwalkData };
+                 moonwalkData, legData };
     }
 
     function drawMoveHUD(now) {
@@ -5500,6 +5964,7 @@
         const moveNow = performance.now();
         const mv = applyDanceMoves(duck, t, moveNow, ctx, duckMutations, limbs, bounceSpeed);
         const mw = mv.moonwalkData;
+        const ld = mv.legData;
 
         ctx.save();
         
@@ -5646,7 +6111,12 @@
                 ankX  = s * 20 * fat + (isRight ? mw.rightOffset : mw.leftOffset);
                 toeUp = isRight ? mw.rightToeUp : mw.leftToeUp;
             }
-            const ankY = limbY;
+            // Generic leg overrides (splits, etc.)
+            let ankY = limbY;
+            if (ld) {
+                ankX += isRight ? ld.footROx : ld.footLOx;
+                ankY += isRight ? ld.footROy : ld.footLOy;
+            }
 
             // Perpendicular to the leg axis — for width
             const dx  = ankX - hipX, dy = ankY - hipY;
@@ -5844,7 +6314,7 @@
         }
 
         // --- SUPERHERO CAPE (on top of torso, flows LEFT = duck's back) ---
-        if (duck.superHeroActive) {
+        if (duck.superHeroActive && !duck.ironMan) {
             ctx.save();
             const w1 = Math.sin(t * 0.006) * 14;
             const w2 = Math.sin(t * 0.0055 + 1.1) * 18;
@@ -6299,7 +6769,7 @@
         if (currentDecade) drawDecadeHeadFront(t);
 
         // Superhero bandana/mask — red strip with eye holes
-        if (duck.superHeroActive) {
+        if (duck.superHeroActive && !duck.ironMan) {
             ctx.save();
             ctx.beginPath();
             ctx.roundRect(-35, -27, 76, 22, 5);
@@ -6860,6 +7330,471 @@
             ctx.restore();
 
         } else if (currentDecade === '1980s') {
+        }
+    }
+
+    // Control hint banner shown while a duck is suited up.
+    function drawIronHint() {
+        const txt = '🦾 IRON MAN  ·  ↑↓←→ fly  ·  B repulsor beams  ·  R wrist rockets  ·  K super-punch';
+        ctx.save();
+        ctx.font = "600 13px system-ui, -apple-system, 'Segoe UI', sans-serif";
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        const w = ctx.measureText(txt).width + 28, x = width / 2, y = 126;
+        ctx.beginPath(); ctx.roundRect(x - w / 2, y - 15, w, 30, 15);
+        ctx.fillStyle = 'rgba(20,12,8,0.82)'; ctx.fill();
+        ctx.strokeStyle = 'rgba(245,158,11,0.6)'; ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.fillStyle = '#fcd34d'; ctx.fillText(txt, x, y);
+        ctx.restore();
+    }
+
+    // Empty Iron Man armor stand — shown while placing, then sits waiting for a duck.
+    function drawIronStand() {
+        const placing = ironSuitActive && !ironStandPlaced;
+        const x = ironStandPlaced ? ironStandX : (lastPointer ? lastPointer.x : width / 2);
+        const y = ironStandPlaced ? ironStandY : (lastPointer ? lastPointer.y : height / 2);
+        const now = performance.now();
+        const pulse = 0.5 + 0.5 * Math.sin(now * 0.005);
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.globalAlpha = placing ? 0.8 : 1;
+
+        // shadow + stand pole/base
+        ctx.beginPath(); ctx.ellipse(0, 56, 34, 9, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fill();
+        ctx.fillStyle = '#475569';
+        ctx.fillRect(-4, 18, 8, 38);
+        ctx.beginPath(); ctx.ellipse(0, 56, 22, 6, 0, 0, Math.PI * 2); ctx.fillStyle = '#334155'; ctx.fill();
+
+        // inviting aura ring
+        ctx.beginPath(); ctx.arc(0, -4, 46 + pulse * 6, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(245,158,11,${0.25 + pulse * 0.3})`; ctx.lineWidth = 2; ctx.stroke();
+
+        // torso (red w/ gold trim)
+        const torso = ctx.createLinearGradient(0, -6, 0, 30);
+        torso.addColorStop(0, '#ef4444'); torso.addColorStop(1, '#991b1b');
+        ctx.beginPath(); ctx.roundRect(-22, -6, 44, 38, 9); ctx.fillStyle = torso; ctx.fill();
+        ctx.strokeStyle = '#fcd34d'; ctx.lineWidth = 2; ctx.stroke();
+        // shoulders
+        for (const sx of [-26, 26]) {
+            ctx.beginPath(); ctx.arc(sx, 2, 10, 0, Math.PI * 2);
+            ctx.fillStyle = '#dc2626'; ctx.fill(); ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 1.5; ctx.stroke();
+        }
+        // arc reactor (glowing cyan)
+        ctx.save();
+        ctx.shadowColor = '#67e8f9'; ctx.shadowBlur = 16 + pulse * 10;
+        ctx.beginPath(); ctx.arc(0, 10, 7, 0, Math.PI * 2); ctx.fillStyle = '#cffafe'; ctx.fill();
+        ctx.beginPath(); ctx.arc(0, 10, 4, 0, Math.PI * 2); ctx.fillStyle = '#22d3ee'; ctx.fill();
+        ctx.restore();
+
+        // helmet
+        const helm = ctx.createLinearGradient(0, -34, 0, -8);
+        helm.addColorStop(0, '#f87171'); helm.addColorStop(1, '#b91c1c');
+        ctx.beginPath(); ctx.roundRect(-15, -34, 30, 28, 10); ctx.fillStyle = helm; ctx.fill();
+        ctx.strokeStyle = '#fcd34d'; ctx.lineWidth = 1.5; ctx.stroke();
+        // gold faceplate
+        ctx.beginPath(); ctx.roundRect(-11, -26, 22, 16, 6); ctx.fillStyle = '#facc15'; ctx.fill();
+        // glowing eye slits
+        ctx.save(); ctx.shadowColor = '#bae6fd'; ctx.shadowBlur = 8;
+        ctx.fillStyle = '#e0f2fe';
+        ctx.beginPath(); ctx.roundRect(-8, -20, 6, 3, 1.5); ctx.fill();
+        ctx.beginPath(); ctx.roundRect(2, -20, 6, 3, 1.5); ctx.fill();
+        ctx.restore();
+        ctx.restore();
+    }
+
+    // Shortest signed angle from b to a.
+    function ironAngleDiff(a, b) { let d = a - b; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; }
+    // Knock nearby non-suited ducks away from a blast point + throw confetti.
+    function ironBlast(sx, sy, power, radius) {
+        const cx = width / 2, cy = height / 2 + 50;
+        for (const d of ducks) {
+            if (d.ironMan) continue;
+            const tx = cx + d.physics.x, ty = cy + d.physics.y - 18;
+            const dx = tx - sx, dy = ty - sy, dist = Math.hypot(dx, dy) || 1;
+            if (dist < radius) {
+                const f = power * (1 - dist / radius) + 4;
+                d.physics.vx += (dx / dist) * f * 1.3;
+                d.physics.vy = Math.min(d.physics.vy, -6) + (dy / dist) * f - 4;
+                d.squash.x = 0.6; d.squash.y = 1.5;
+            }
+        }
+        for (const tgt of targets) {
+            if (tgt.broken) continue;
+            const tx = cx + tgt.x, ty = cy + tgt.y - 60;
+            const dist = Math.hypot(tx - sx, ty - sy);
+            if (dist < radius) damageTarget(tgt, power * (1 - dist / radius) * 1.8, 'physical');
+        }
+        for (let n = 0; n < 22; n++) {
+            const a = Math.random() * Math.PI * 2, sp = 3 + Math.random() * 7;
+            ballConfetti.push({ x: sx, y: sy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 2,
+                color: GROWUP_COLORS[Math.floor(Math.random() * GROWUP_COLORS.length)], life: 1.0, size: 3 + Math.random() * 5 });
+        }
+    }
+    // Aim angle from a suited duck toward the nearest other duck (fallback: up-and-out).
+    function ironAimAngle(hero, fallback) {
+        const cx = width / 2, cy = height / 2 + 50, hx = cx + hero.physics.x, hy = cy + hero.physics.y;
+        let aim = fallback, best = Infinity;
+        for (const d of ducks) {
+            if (d === hero || d.ironMan) continue;
+            const tx = cx + d.physics.x, ty = cy + d.physics.y;
+            const dd = Math.hypot(tx - hx, ty - hy);
+            if (dd < best) { best = dd; aim = Math.atan2(ty - hy, tx - hx); }
+        }
+        return aim;
+    }
+    // 🔫 Repulsor beams — fire from both palms + the chest reactor, knocking ducks back.
+    function fireRepulsor(hero) {
+        if (!hero.ironMan || hero.ironMan.beamTimer > 0) return;
+        hero.ironMan.beamTimer = 320;
+        const cx = width / 2, cy = height / 2 + 50, hx = cx + hero.physics.x, hy = cy + hero.physics.y;
+        const aim = ironAimAngle(hero, 0);
+        const origins = [ { x: hx - 60, y: hy + 8, a: aim - 0.13 }, { x: hx + 60, y: hy + 8, a: aim + 0.13 }, { x: hx, y: hy - 2, a: aim, thick: true } ];
+        for (const o of origins) ironBeams.push({ x: o.x, y: o.y, angle: o.a, len: 540, life: 1.0, thick: !!o.thick });
+        for (const d of ducks) {
+            if (d === hero || d.ironMan) continue;
+            const tx = cx + d.physics.x, ty = cy + d.physics.y, dd = Math.hypot(tx - hx, ty - hy);
+            if (dd < 580 && Math.abs(ironAngleDiff(Math.atan2(ty - hy, tx - hx), aim)) < 0.5) {
+                const f = 24 * (1 - dd / 580) + 7;
+                d.physics.vx += Math.cos(aim) * f * 1.4; d.physics.vy += Math.sin(aim) * f - 6;
+                d.squash.x = 0.6; d.squash.y = 1.5;
+            }
+        }
+        for (const tgt of targets) {
+            if (tgt.broken) continue;
+            const tx = cx + tgt.x, ty = cy + tgt.y - 60, dd = Math.hypot(tx - hx, ty - hy);
+            if (dd < 580 && Math.abs(ironAngleDiff(Math.atan2(ty - hy, tx - hx), aim)) < 0.5) {
+                damageTarget(tgt, 30, 'physical');
+            }
+        }
+        playSFX && playSFX('weapon');
+    }
+    // 🚀 Wrist rockets — twin homing-ish projectiles that explode on impact.
+    function fireRockets(hero) {
+        if (!hero.ironMan || hero.ironMan.rocketCD > 0) return;
+        hero.ironMan.rocketCD = 650;
+        const cx = width / 2, cy = height / 2 + 50, hx = cx + hero.physics.x, hy = cy + hero.physics.y;
+        const aim = ironAimAngle(hero, -0.25), spd = 16;
+        for (const side of [-1, 1]) {
+            ironRockets.push({ x: hx + side * 60, y: hy + 8, vx: Math.cos(aim) * spd, vy: Math.sin(aim) * spd, life: 2200 });
+        }
+        playSFX && playSFX('pop');
+    }
+    // Physics update only — must run before drawing so hit detection is current
+    function updateIronProjectiles(dt) {
+        for (let i = ironBeams.length - 1; i >= 0; i--) {
+            const b = ironBeams[i];
+            b.life -= dt / 260;
+            if (b.life <= 0) { ironBeams.splice(i, 1); }
+        }
+        const cx = width / 2, cy = height / 2 + 50;
+        for (let i = ironRockets.length - 1; i >= 0; i--) {
+            const r = ironRockets[i];
+            r.x += r.vx; r.y += r.vy; r.vy += 0.06; r.life -= dt;
+            let hit = false;
+            for (const d of ducks) {
+                if (d.ironMan) continue;
+                const dx = (cx + d.physics.x) - r.x, dy = (cy + d.physics.y - 18) - r.y;
+                if (Math.hypot(dx, dy) < 44) { hit = true; break; }
+            }
+            if (!hit) {
+                for (const tgt of targets) {
+                    if (tgt.broken) continue;
+                    const dx = (cx + tgt.x) - r.x, dy = (cy + tgt.y - 60) - r.y;
+                    if (Math.hypot(dx, dy) < 50) { hit = true; break; }
+                }
+            }
+            const off = r.x < -40 || r.x > width + 40 || r.y > height + 60;
+            if (hit || off || r.life <= 0) {
+                if (!off) {
+                    ironBlast(r.x, r.y, 26, 120);
+                    // Explosion particles — big dramatic fireball
+                    const cols = ['#ffe28a','#ff9d3c','#ff5a2b','#ffffff','#fbbf24','#ef4444','#fed7aa'];
+                    for (let n = 0; n < 55; n++) {
+                        const a = Math.random() * Math.PI * 2, spd = 5 + Math.random() * 16;
+                        bhParticles.push({ x: r.x, y: r.y, vx: Math.cos(a)*spd, vy: Math.sin(a)*spd - 4,
+                            life: 1.0, col: cols[n % cols.length], plain: true, grav: true,
+                            size: 3 + Math.random() * 6 });
+                    }
+                    // Two staggered shockwave rings
+                    ironExplosions.push({ x: r.x, y: r.y, t: 1.0, maxR: 180 });
+                    ironExplosions.push({ x: r.x, y: r.y, t: 0.8, maxR: 110 });
+                    blastFlash = Math.max(blastFlash, 0.6);
+                    playSFX && playSFX('pop');
+                }
+                ironRockets.splice(i, 1);
+            }
+        }
+    }
+    // Visual draw only — called AFTER the duck is drawn so beams render on top
+    function drawIronProjectiles() {
+        // Repulsor beams
+        for (const b of ironBeams) {
+            const ex = b.x + Math.cos(b.angle) * b.len, ey = b.y + Math.sin(b.angle) * b.len;
+            const w = b.thick ? 2.2 : 1;  // chest beam is wider
+            ctx.save();
+            ctx.globalAlpha = Math.min(1, b.life * 1.6); ctx.lineCap = 'round';
+            ctx.shadowColor = '#67e8f9'; ctx.shadowBlur = b.thick ? 34 : 20;
+            ctx.strokeStyle = 'rgba(125,211,252,0.55)'; ctx.lineWidth = (14 * b.life + 4) * w;
+            ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(ex, ey); ctx.stroke();
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = (5 * b.life + 1.5) * w; ctx.shadowBlur = 0;
+            ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(ex, ey); ctx.stroke();
+            ctx.beginPath(); ctx.arc(b.x, b.y, (8 * b.life + 3) * w, 0, Math.PI * 2); ctx.fillStyle = 'rgba(186,230,253,0.85)'; ctx.fill();
+            ctx.restore();
+        }
+        // Rocket shockwave rings
+        for (let i = ironExplosions.length - 1; i >= 0; i--) {
+            const ex = ironExplosions[i];
+            ex.t -= 0.035;
+            if (ex.t <= 0) { ironExplosions.splice(i, 1); continue; }
+            const prog = 1 - ex.t;
+            const radius = prog * (ex.maxR || 180);
+            ctx.save();
+            // outer glow ring
+            ctx.globalAlpha = ex.t * 0.85;
+            ctx.shadowColor = '#ff6a00'; ctx.shadowBlur = 36;
+            ctx.strokeStyle = `rgba(255,140,40,${ex.t * 0.9})`;
+            ctx.lineWidth = 10 * ex.t + 2;
+            ctx.beginPath(); ctx.arc(ex.x, ex.y, radius, 0, Math.PI * 2); ctx.stroke();
+            // bright white core ring
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = ex.t * 0.65;
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 4 * ex.t + 1;
+            ctx.beginPath(); ctx.arc(ex.x, ex.y, radius * 0.6, 0, Math.PI * 2); ctx.stroke();
+            // hot center flash at start
+            if (ex.t > 0.7) {
+                ctx.globalAlpha = (ex.t - 0.7) / 0.3;
+                ctx.fillStyle = 'rgba(255,240,180,0.9)';
+                ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 40;
+                ctx.beginPath(); ctx.arc(ex.x, ex.y, 28 * (ex.t - 0.7) / 0.3, 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.restore();
+        }
+        // Wrist rockets
+        for (const r of ironRockets) {
+            ballConfetti.push({ x: r.x, y: r.y, vx: (Math.random()-.5)*1.2, vy: (Math.random()-.5)*1.2, color: 'rgba(200,200,200,0.5)', life: 0.6, size: 3 + Math.random()*2 });
+            ctx.save();
+            ctx.translate(r.x, r.y); ctx.rotate(Math.atan2(r.vy, r.vx));
+            ctx.fillStyle = 'rgba(251,146,60,0.95)';
+            ctx.beginPath(); ctx.moveTo(-13, -5); ctx.lineTo(-28 - Math.random() * 10, 0); ctx.lineTo(-13, 5); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = '#e5e7eb'; ctx.beginPath(); ctx.roundRect(-13, -6, 22, 12, 4); ctx.fill();
+            ctx.fillStyle = '#dc2626'; ctx.beginPath(); ctx.moveTo(9, -6); ctx.lineTo(19, 0); ctx.lineTo(9, 6); ctx.closePath(); ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    // ── Iron Duck: a fully bespoke armored duck drawn from scratch (replaces drawDuck while
+    //    suited). Runs its own flight physics + ability timers since drawDuck is bypassed. ──
+    function drawIronDuck(duck, t) {
+        const im = duck.ironMan, physics = duck.physics;
+        const cx = width / 2, cy = height / 2 + 50;
+
+        // tick ability timers + booster flare
+        if (im.beamTimer  > 0) im.beamTimer  -= 16;
+        if (im.rocketCD   > 0) im.rocketCD   -= 16;
+        if (im.punchT     > 0) im.punchT     = Math.max(0, im.punchT - 0.07);
+        if (im.transformT > 0) im.transformT = Math.max(0, im.transformT - 0.022);
+        const flying = (duck.superHeroTargetY < -10) || Math.abs(physics.vx) > 1.5;
+        im.boost += ((flying ? 1 : 0.45) - im.boost) * 0.12;
+
+        // flight physics (hover toward target height, glide horizontally, bounce off side walls)
+        if (!physics.isDragging) {
+            const targetY = (duck.superHeroTargetY != null ? duck.superHeroTargetY : -60);
+            physics.vy += -(physics.y - targetY) * 0.04 - physics.vy * 0.12;
+            physics.vx *= 0.92;
+            physics.x += physics.vx; physics.y += physics.vy;
+            const maxX = width / 2 - 70;
+            if (physics.x < -maxX) { physics.x = -maxX; physics.vx = Math.abs(physics.vx) * 0.5; }
+            if (physics.x >  maxX) { physics.x =  maxX; physics.vx = -Math.abs(physics.vx) * 0.5; }
+        }
+
+        const sx = cx + physics.x, sy = cy + physics.y;
+        const bob = Math.sin(t * 0.005) * 4;
+        const tr = im.transformT, lean = Math.max(-0.25, Math.min(0.25, physics.vx * 0.012));
+        // arc-reactor brightness: slow pulse + fast flicker + occasional spark = a living light
+        const reactor = Math.max(0.32, Math.min(1.2, 0.58 + 0.26 * Math.sin(t * 0.013) + 0.16 * Math.sin(t * 0.051 + 1) + (Math.random() < 0.06 ? 0.2 : 0)));
+        const boost = im.boost, punch = im.punchT;
+        const redGrad  = (y0, y1) => { const g = ctx.createLinearGradient(0, y0, 0, y1); g.addColorStop(0, '#fb7185'); g.addColorStop(0.4, '#dc2626'); g.addColorStop(1, '#7f1d1d'); return g; };
+        const goldGrad = (y0, y1) => { const g = ctx.createLinearGradient(0, y0, 0, y1); g.addColorStop(0, '#fef08a'); g.addColorStop(0.5, '#f59e0b'); g.addColorStop(1, '#b45309'); return g; };
+
+        // ground shadow (fades/shrinks as it rises)
+        const lift = Math.min(1, Math.max(0, -physics.y / 200));
+        ctx.save();
+        ctx.beginPath(); ctx.ellipse(sx, cy + 150, 60 * (1 - lift * 0.5), 14 * (1 - lift * 0.4), 0, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(0,0,0,${0.22 * (1 - lift * 0.5)})`; ctx.fill();
+        ctx.restore();
+
+        ctx.save();
+        ctx.translate(sx, sy + bob);
+        ctx.rotate(lean);
+        const morph = tr > 0 ? (0.35 + 0.65 * (1 - tr)) : 1;          // grow in from a spark
+        ctx.scale((duck.squash.x || 1) * morph, (duck.squash.y || 1) * morph);
+        ctx.globalAlpha = tr > 0.6 ? (1 - (tr - 0.6) / 0.4) : 1;       // fade in over the morph
+
+        // legs + webbed flippers, each with its thruster firing straight down from under the foot
+        const tuck = Math.min(1, Math.max(0, -physics.y / 160));
+        const footDX = -tuck * 12;               // feet drift back as it climbs (tuck feel, stays aligned)
+        const legLen = 22 - tuck * 7;
+        for (const side of [-1, 1]) {
+            const hipX = side * 12, hipY = 38;
+            const footX = hipX + footDX, footY = hipY + legLen;
+            // thruster jet — straight down, directly beneath the flipper
+            const jet = 14 + boost * 48 + Math.random() * 8;
+            const jy = footY + 8;
+            const jg = ctx.createLinearGradient(0, jy, 0, jy + jet);
+            jg.addColorStop(0, 'rgba(255,255,255,0.95)'); jg.addColorStop(0.4, 'rgba(56,189,248,0.85)'); jg.addColorStop(1, 'rgba(56,189,248,0)');
+            ctx.beginPath(); ctx.moveTo(footX - 7, jy); ctx.lineTo(footX + 7, jy); ctx.lineTo(footX + 2, jy + jet); ctx.lineTo(footX - 2, jy + jet); ctx.closePath();
+            ctx.fillStyle = jg; ctx.fill();
+            // armored leg (gold) hip → ankle
+            ctx.strokeStyle = goldGrad(hipY, footY); ctx.lineWidth = 12; ctx.lineCap = 'round';
+            ctx.beginPath(); ctx.moveTo(hipX, hipY); ctx.lineTo(footX, footY); ctx.stroke();
+            // webbed flipper (orange), pointing forward
+            ctx.save(); ctx.translate(footX, footY);
+            ctx.beginPath(); ctx.moveTo(-7, 0); ctx.quadraticCurveTo(20, 1, 17, 11); ctx.quadraticCurveTo(6, 15, -7, 11); ctx.closePath();
+            ctx.fillStyle = '#f59e0b'; ctx.fill(); ctx.strokeStyle = '#b45309'; ctx.lineWidth = 1; ctx.stroke();
+            ctx.strokeStyle = 'rgba(180,83,9,0.6)'; ctx.lineWidth = 0.8;
+            ctx.beginPath(); ctx.moveTo(1, 2); ctx.lineTo(3, 12); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(8, 1); ctx.lineTo(8, 13); ctx.stroke();
+            ctx.restore();
+        }
+        // arms + repulsor gauntlets (right arm thrusts on a punch)
+        const hot = im.beamTimer > 0 ? 1 : 0.45;
+        // Recoil: sharp kick inward at fire (beamTimer peaks at 320), springy decay back out
+        const recoil = im.beamTimer > 0 ? Math.pow(im.beamTimer / 320, 0.4) * 12 : 0;
+        // Punch curve: fast-out (first 40% of animation), slow-return (last 60%)
+        const punchCurve = punch > 0.6 ? (1 - punch) / 0.4 : punch / 0.6;
+        for (const side of [-1, 1]) {
+            const isPunchArm = side === 1 && punch > 0;
+            const isBackArm  = side === -1 && punch > 0;
+            // Right arm shoots forward hard; left arm coils back
+            const reach  = isPunchArm ? punchCurve * 95 : (isBackArm ? -punchCurve * 22 : 0);
+            const sX = side * 30 + (isBackArm ? punchCurve * 8 : 0);
+            const sY = -22 + recoil * 0.4;
+            const hX = side * (60 - recoil + reach);
+            const hY = 8 + recoil * 0.6 - (isPunchArm ? punchCurve * 10 : 0);
+            ctx.save();
+            ctx.strokeStyle = redGrad(-22, 14); ctx.lineWidth = 11; ctx.lineCap = 'round';
+            ctx.beginPath(); ctx.moveTo(sX, sY); ctx.lineTo(hX, hY); ctx.stroke();
+            // Speed lines behind fist during extension
+            if (isPunchArm && punch > 0.6 && punchCurve > 0.15) {
+                ctx.save();
+                ctx.globalAlpha = punchCurve * 0.55;
+                ctx.strokeStyle = '#fef08a'; ctx.lineWidth = 2; ctx.setLineDash([10, 7]);
+                for (const dy of [-5, 0, 5]) {
+                    ctx.beginPath(); ctx.moveTo(sX, sY + dy); ctx.lineTo(hX - 18, hY + dy); ctx.stroke();
+                }
+                ctx.setLineDash([]);
+                ctx.restore();
+            }
+            ctx.beginPath(); ctx.arc(hX, hY, 9, 0, Math.PI * 2); ctx.fillStyle = goldGrad(hY - 9, hY + 9); ctx.fill();
+            ctx.strokeStyle = '#92400e'; ctx.lineWidth = 1; ctx.stroke();
+            ctx.shadowColor = '#bae6fd'; ctx.shadowBlur = 8 + hot * 16;
+            ctx.beginPath(); ctx.arc(hX, hY, 5 + hot * 2, 0, Math.PI * 2); ctx.fillStyle = `rgba(224,242,254,${0.7 + hot * 0.3})`; ctx.fill();
+            ctx.beginPath(); ctx.arc(hX, hY, 2.5, 0, Math.PI * 2); ctx.fillStyle = '#22d3ee'; ctx.fill();
+            // Impact flash at peak extension
+            if (isPunchArm && punchCurve > 0.82) {
+                const flash = (punchCurve - 0.82) / 0.18;
+                ctx.save();
+                ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 40;
+                ctx.globalAlpha = flash * 0.9;
+                ctx.fillStyle = '#fef9c3';
+                ctx.beginPath(); ctx.arc(hX, hY, 18 * flash, 0, Math.PI * 2); ctx.fill();
+                ctx.restore();
+            }
+            ctx.restore();
+        }
+        // plump armored duck body + gold breast plate + pauldrons
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(0, -40); ctx.bezierCurveTo(36, -40, 40, 10, 26, 40); ctx.bezierCurveTo(14, 56, -14, 56, -26, 40); ctx.bezierCurveTo(-40, 10, -36, -40, 0, -40); ctx.closePath();
+        ctx.fillStyle = redGrad(-40, 52); ctx.fill(); ctx.strokeStyle = '#7f1d1d'; ctx.lineWidth = 2; ctx.stroke();
+        ctx.globalAlpha = 0.92;
+        ctx.beginPath(); ctx.moveTo(0, -34); ctx.bezierCurveTo(22, -32, 24, 18, 0, 30); ctx.bezierCurveTo(-24, 18, -22, -32, 0, -34); ctx.closePath();
+        ctx.fillStyle = goldGrad(-34, 30); ctx.fill(); ctx.globalAlpha = 1;
+        ctx.strokeStyle = 'rgba(146,64,14,0.5)'; ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.moveTo(-14, 16); ctx.lineTo(14, 16); ctx.stroke();
+        for (const side of [-1, 1]) { ctx.beginPath(); ctx.arc(side * 28, -24, 11, 0, Math.PI * 2); ctx.fillStyle = redGrad(-34, -12); ctx.fill(); ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 1.5; ctx.stroke(); }
+        ctx.restore();
+        // little tail at the back
+        ctx.beginPath(); ctx.moveTo(-26, 22); ctx.lineTo(-44, 12); ctx.lineTo(-28, 36); ctx.closePath(); ctx.fillStyle = redGrad(12, 36); ctx.fill();
+
+        // ── arc reactor — flickering "real light" with spokes ──
+        ctx.save();
+        const rR = 10 + reactor * 2;
+        ctx.shadowColor = '#67e8f9'; ctx.shadowBlur = 14 + reactor * 18;
+        ctx.beginPath(); ctx.arc(0, -2, rR, 0, Math.PI * 2); ctx.fillStyle = `rgba(207,250,254,${0.82 + 0.18 * Math.min(1, reactor)})`; ctx.fill();
+        ctx.beginPath(); ctx.arc(0, -2, rR * 0.62, 0, Math.PI * 2); ctx.fillStyle = '#22d3ee'; ctx.fill();
+        ctx.beginPath(); ctx.arc(0, -2, rR * 0.28, 0, Math.PI * 2); ctx.fillStyle = '#ecfeff'; ctx.fill();
+        ctx.strokeStyle = `rgba(165,243,252,${0.35 + 0.35 * Math.sin(t * 0.05)})`; ctx.lineWidth = 1;
+        for (let a = 0; a < 6; a++) { const ang = a * Math.PI / 3 + t * 0.002; ctx.beginPath(); ctx.moveTo(Math.cos(ang) * rR * 0.42, -2 + Math.sin(ang) * rR * 0.42); ctx.lineTo(Math.cos(ang) * rR * 0.92, -2 + Math.sin(ang) * rR * 0.92); ctx.stroke(); }
+        ctx.restore();
+
+        // ── neck — connects head to torso (red plating + gold collar) ──
+        ctx.beginPath(); ctx.moveTo(-8, -34); ctx.lineTo(8, -34); ctx.lineTo(6, -52); ctx.lineTo(-6, -52); ctx.closePath();
+        ctx.fillStyle = redGrad(-52, -34); ctx.fill(); ctx.strokeStyle = '#7f1d1d'; ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(0, -36, 10, 4.5, 0, 0, Math.PI * 2); ctx.fillStyle = goldGrad(-41, -31); ctx.fill();
+        ctx.strokeStyle = '#92400e'; ctx.lineWidth = 1; ctx.stroke();
+
+        // ── head: DUCK SIDE-PROFILE facing right (helmet shell + gold bill + glowing eye) ──
+        ctx.save();
+        ctx.translate(0, -58 + bob * 0.3); ctx.rotate(Math.cos(t * 0.004) * 0.04);
+        // red helmet shell (profile silhouette)
+        ctx.beginPath();
+        ctx.moveTo(-18, -6);
+        ctx.quadraticCurveTo(-24, -26, -2, -28);
+        ctx.quadraticCurveTo(16, -28, 18, -12);
+        ctx.quadraticCurveTo(19, -2, 12, 6);
+        ctx.quadraticCurveTo(2, 12, -10, 10);
+        ctx.quadraticCurveTo(-18, 6, -18, -6);
+        ctx.closePath();
+        ctx.fillStyle = redGrad(-28, 12); ctx.fill(); ctx.strokeStyle = '#7f1d1d'; ctx.lineWidth = 2; ctx.stroke();
+        // swept-back crest fin
+        ctx.beginPath(); ctx.moveTo(-2, -26); ctx.lineTo(-16, -38); ctx.lineTo(1, -22); ctx.closePath();
+        ctx.fillStyle = redGrad(-38, -22); ctx.fill(); ctx.strokeStyle = '#7f1d1d'; ctx.lineWidth = 1; ctx.stroke();
+        // gold faceplate (front cheek)
+        ctx.beginPath(); ctx.moveTo(-2, -20); ctx.quadraticCurveTo(16, -18, 17, -8); ctx.quadraticCurveTo(17, 3, 8, 6); ctx.lineTo(-2, 6); ctx.closePath();
+        ctx.fillStyle = goldGrad(-20, 6); ctx.fill(); ctx.strokeStyle = '#92400e'; ctx.lineWidth = 1; ctx.stroke();
+        // ear vent disc
+        ctx.beginPath(); ctx.arc(-8, -6, 4, 0, Math.PI * 2); ctx.fillStyle = goldGrad(-10, -2); ctx.fill(); ctx.strokeStyle = '#92400e'; ctx.lineWidth = 0.8; ctx.stroke();
+        // glowing eye slit (angled, flickers with the reactor)
+        const eg = Math.max(0.5, reactor);
+        ctx.save(); ctx.shadowColor = '#bae6fd'; ctx.shadowBlur = 8 + eg * 8; ctx.fillStyle = 'rgba(224,242,254,0.95)';
+        ctx.beginPath(); ctx.moveTo(2, -12); ctx.lineTo(13, -9); ctx.lineTo(12, -4); ctx.lineTo(2, -6); ctx.closePath(); ctx.fill();
+        ctx.restore();
+        // gold duck bill (two mandibles) pointing right
+        ctx.fillStyle = '#f59e0b'; ctx.strokeStyle = '#b45309'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(13, -3); ctx.quadraticCurveTo(34, -3, 38, 1); ctx.quadraticCurveTo(30, 3, 13, 4); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(13, 4); ctx.quadraticCurveTo(30, 5, 34, 7); ctx.quadraticCurveTo(26, 10, 13, 9); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.restore(); // head
+        ctx.restore(); // body transform
+
+        // super-punch shockwave — emanates from the fist tip
+        if (punch > 0) {
+            const pCurve = punch > 0.6 ? (1 - punch) / 0.4 : punch / 0.6;
+            const fistX = sx + (60 + pCurve * 95);
+            const fistY = sy + 8 - pCurve * 10;
+            const wave = 1 - punch;
+            ctx.save();
+            // outer ring
+            ctx.beginPath(); ctx.arc(fistX, fistY, wave * 200, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(186,230,253,${punch * 0.8})`; ctx.lineWidth = 8 * punch + 2;
+            ctx.shadowColor = '#67e8f9'; ctx.shadowBlur = 22; ctx.stroke();
+            // inner tight ring
+            ctx.beginPath(); ctx.arc(fistX, fistY, wave * 100, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(255,255,255,${punch * 0.6})`; ctx.lineWidth = 4 * punch;
+            ctx.shadowBlur = 0; ctx.stroke();
+            ctx.restore();
+        }
+        // transformation flash (covers the swap)
+        if (tr > 0) {
+            ctx.save();
+            const fr = 30 + (1 - tr) * 130;
+            const fg = ctx.createRadialGradient(sx, sy - 20, 0, sx, sy - 20, fr);
+            fg.addColorStop(0, `rgba(255,255,255,${tr})`); fg.addColorStop(0.5, `rgba(253,224,71,${tr * 0.8})`); fg.addColorStop(1, 'rgba(253,224,71,0)');
+            ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(sx, sy - 20, fr, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(sx, sy - 20, (1 - tr) * 150, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(255,255,255,${tr})`; ctx.lineWidth = 5 * tr + 1; ctx.stroke();
+            ctx.restore();
         }
     }
 
@@ -17603,17 +18538,43 @@
         // ── Love / Breeding system update ─────────────────────────────────
         const gcx = width / 2, gcy = height / 2 + 50;
         for (const d of ducks) {
-            // Babies grow up over ~30s, then mature into breeding adults with a random sex.
+            // Babies grow through Baby → Toddler → Teen → Adult (Sims-style stages).
             if (d._isBaby) {
                 d._growTimer = (d._growTimer || 0) + dt;
-                const gp = Math.min(1, d._growTimer / 30000);
+                const t = d._growTimer;
                 const adult = d._adultScale || 0.92;
-                d.color.sizeScale = 0.55 + (adult - 0.55) * gp;   // safe: a baby's colour is its own object
-                if (gp >= 1) {
+
+                // Determine current stage
+                let stageIdx = 0;
+                for (let si = 0; si < AGE_STAGES.length; si++) {
+                    if (t >= AGE_STAGES[si].end) stageIdx = si + 1;
+                }
+                stageIdx = Math.min(stageIdx, AGE_STAGES.length - 1);
+                const stage = AGE_STAGES[stageIdx];
+
+                // Fire stage-transition celebration when stage changes
+                const prevStage = d._ageStage || 'baby';
+                if (stage.key !== prevStage) {
+                    d._ageStage = stage.key;
+                    celebrateStage(d, stage);
+                    saveFlock();
+                }
+
+                // Interpolate size within the current stage
+                const stageStart = stageIdx === 0 ? 0 : AGE_STAGES[stageIdx - 1].end;
+                const stageEnd   = stage.end;
+                const stageProg  = Math.min(1, (t - stageStart) / (stageEnd - stageStart));
+                const sizeFrom   = stage.sizeStart;
+                const sizeTo     = stage.sizeEnd !== null ? stage.sizeEnd : adult;
+                d.color.sizeScale = sizeFrom + (sizeTo - sizeFrom) * stageProg;
+
+                if (t >= AGE_TOTAL) {
                     d._isBaby = false;
-                    d.breed = Math.random() < 0.5 ? 'male' : 'female';   // now eligible (but never with kin)
-                    celebrateGrowUp(d);   // 🎉 confetti + sparkle + "grew up!" toast
-                    saveFlock();          // grown into a breeding adult — persist the new sex/size
+                    d._ageStage = 'adult';
+                    d.color.sizeScale = adult;
+                    d.breed = Math.random() < 0.5 ? 'male' : 'female';
+                    celebrateGrowUp(d);
+                    saveFlock();
                 }
             }
             // Tick breadTimer
@@ -17637,6 +18598,8 @@
                     d._eggSpawned = true;
                     const ex = (d.physics.x + d.loveTarget.physics.x) / 2;
                     const childGen = Math.max(d.gen || 1, d.loveTarget.gen || 1) + 1;
+                    d._offspringCount = (d._offspringCount || 0) + 1;
+                    d.loveTarget._offspringCount = (d.loveTarget._offspringCount || 0) + 1;
                     spawnEgg(ex, 0, makeChildColor(d, d.loveTarget), [d.id, d.loveTarget.id], childGen, [d.name, d.loveTarget.name]);
                 }
             }
@@ -17665,16 +18628,43 @@
             const fx = growUpFx[i];
             fx.y -= 0.45; fx.life -= dt / 2600;
             if (fx.life <= 0) { growUpFx.splice(i, 1); continue; }
-            const pop = Math.min(1, (1 - fx.life) * 6);          // quick scale-in at the start
+            const pop = Math.min(1, (1 - fx.life) * 6);
             ctx.save();
             ctx.globalAlpha = Math.min(1, fx.life * 1.6);
             ctx.translate(fx.x, fx.y);
             ctx.scale(0.6 + 0.4 * pop, 0.6 + 0.4 * pop);
             ctx.font = "700 17px system-ui, -apple-system, 'Segoe UI', sans-serif";
             ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            const txt = '🎉 ' + fx.name + ' grew up!';
+            // fx.text = fully custom string; fx.name = legacy "X grew up!" format
+            const txt = fx.text || ('🎉 ' + fx.name + ' grew up!');
             ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(20,12,40,0.85)'; ctx.strokeText(txt, 0, 0);
-            ctx.fillStyle = '#fde047'; ctx.fillText(txt, 0, 0);
+            ctx.fillStyle = fx.color || '#fde047'; ctx.fillText(txt, 0, 0);
+            ctx.restore();
+        }
+
+        // Fly-away animation for released ducks
+        for (let i = releasingDucks.length - 1; i >= 0; i--) {
+            const d = releasingDucks[i];
+            d._releaseTimer += dt;
+            const prog = Math.min(1, d._releaseTimer / d._releaseMaxT);
+            d.physics.x += d.physics.vx;
+            d.physics.y += d.physics.vy;
+            d.physics.vy -= 0.22;   // accelerate upward
+            d.physics.vx *= 0.98;
+            if (prog >= 1) { releasingDucks.splice(i, 1); continue; }
+            const alpha = 1 - prog;
+            const scale = (d.color.sizeScale || 0.92) * (1 - prog * 0.4);
+            const sx = width / 2 + d.physics.x, sy = height / 2 + 50 + d.physics.y;
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.translate(sx, sy);
+            ctx.scale(scale * 0.6, scale * 0.6);
+            // feather trail
+            if (Math.random() < 0.35) {
+                ballConfetti.push({ x: sx, y: sy, vx: (Math.random()-0.5)*3, vy: Math.random()*2,
+                    color: d.color.base || '#fbbf24', life: 0.7, size: 4 + Math.random()*4 });
+            }
+            drawDuck(d, duckTime);
             ctx.restore();
         }
 
@@ -17698,6 +18688,11 @@
 
         // Draw cannon widget
         if (cannonActive) drawCannon();
+
+        // Iron Man: empty armor stand (while placing / awaiting a duck) + live projectiles
+        if (ironSuitActive || ironStandPlaced) drawIronStand();
+        updateIronProjectiles(dt);
+        if (ironSuitedDuck()) drawIronHint();
 
         // Draw Giant Fan widget (after background so it's always visible)
         if (fanActive) {
@@ -17892,6 +18887,11 @@
                         const flicker = 0.7 + 0.3 * Math.sin(duckTime * 0.03 + ring * 2.1);
                         ctx.strokeStyle = `rgba(${180 + ring*20},0,${60 + ring*30},${alpha * flicker * 1.4})`;
                         ctx.shadowColor = '#cc0033';
+                    } else if (d.ironMan) {
+                        // Hot-rod aura: alternating gold / repulsor-cyan rings
+                        const goldRing = ring % 2 === 0;
+                        ctx.strokeStyle = goldRing ? `rgba(251,191,36,${alpha})` : `rgba(56,189,248,${alpha})`;
+                        ctx.shadowColor = goldRing ? '#fbbf24' : '#38bdf8';
                     } else {
                         ctx.strokeStyle = `rgba(0,255,80,${alpha})`;
                         ctx.shadowColor = '#00ff50';
@@ -17906,7 +18906,8 @@
             ctx.save();
             ctx.translate(shakeX + offsetX, shakeY);
             if (currentDecade === '1930s') ctx.filter = 'grayscale(1) contrast(1.15)';
-            drawDuck(d, (!d.superHeroActive && d.frozenTimeRemaining > 0) ? d.frozenAtTime : duckTime, dFrozen, dTased, dOnFire);
+            if (d.ironMan) drawIronDuck(d, duckTime);   // bespoke Iron Duck replaces the normal duck
+            else drawDuck(d, (!d.superHeroActive && d.frozenTimeRemaining > 0) ? d.frozenAtTime : duckTime, dFrozen, dTased, dOnFire);
             ctx.filter = 'none';
             ctx.restore();
 
@@ -18006,6 +19007,7 @@
             }
         }
         
+        drawIronProjectiles();
         drawNewWeapons(now);
         drawAllSlimes();
         drawFreezeRayEffects(dt, duckScreenX, duckScreenY);
